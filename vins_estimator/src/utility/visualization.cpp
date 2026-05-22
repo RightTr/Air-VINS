@@ -24,6 +24,7 @@ ros::Publisher pub_keyframe_point;
 ros::Publisher pub_extrinsic;
 
 ros::Publisher pub_image_track;
+ros::Publisher pub_deep_match;
 
 CameraPoseVisualization cameraposevisual(1, 0, 0, 1);
 static double sum_of_path = 0;
@@ -45,6 +46,7 @@ void registerPub(ros::NodeHandle &n)
     pub_keyframe_point = n.advertise<sensor_msgs::PointCloud>("keyframe_point", 1000);
     pub_extrinsic = n.advertise<nav_msgs::Odometry>("extrinsic", 1000);
     pub_image_track = n.advertise<sensor_msgs::Image>("image_track", 1000);
+    pub_deep_match = n.advertise<sensor_msgs::Image>("/deep_match", 1000);
 
     cameraposevisual.setScale(0.1);
     cameraposevisual.setLineWidth(0.01);
@@ -75,6 +77,17 @@ void pubTrackImage(const cv::Mat &imgTrack, const double t)
     header.stamp = ros::Time(t);
     sensor_msgs::ImagePtr imgTrackMsg = cv_bridge::CvImage(header, "bgr8", imgTrack).toImageMsg();
     pub_image_track.publish(imgTrackMsg);
+}
+
+void pubDeepMatchImage(const cv::Mat &imgMatch, const double t)
+{
+    if (imgMatch.empty())
+        return;
+    std_msgs::Header header;
+    header.frame_id = "world";
+    header.stamp = ros::Time(t);
+    sensor_msgs::ImagePtr imgMatchMsg = cv_bridge::CvImage(header, "bgr8", imgMatch).toImageMsg();
+    pub_deep_match.publish(imgMatchMsg);
 }
 
 

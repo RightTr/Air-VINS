@@ -86,6 +86,7 @@ void Estimator::clearState()
     last_marginalization_parameter_blocks.clear();
 
     f_manager.clearState();
+    featureTracker.clearState();
 
     failure_occur = 0;
 

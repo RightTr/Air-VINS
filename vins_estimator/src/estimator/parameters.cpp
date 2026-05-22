@@ -9,6 +9,8 @@
 
 #include "parameters.h"
 
+#include <sys/stat.h>
+
 double INIT_DEPTH;
 double MIN_PARALLAX;
 double ACC_N, ACC_W;
@@ -45,6 +47,39 @@ int MIN_DIST;
 double F_THRESHOLD;
 int SHOW_TRACK;
 int FLOW_BACK;
+int DEEP_FEATURE;
+std::string DEEP_FEATURE_MODEL_DIR;
+int DEEP_FEATURE_MATCHER;
+int DEEP_FEATURE_MAX_KEYPOINTS;
+double DEEP_FEATURE_KEYPOINT_THRESHOLD;
+int DEEP_FEATURE_REMOVE_BORDERS;
+int DEEP_FEATURE_STEREO_RANSAC;
+
+namespace
+{
+bool directoryExists(const std::string &path)
+{
+    struct stat info;
+    return stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
+}
+
+std::string joinPath(const std::string &folder, const std::string &name)
+{
+    if (folder.empty())
+        return name;
+    if (folder.back() == '/')
+        return folder + name;
+    return folder + "/" + name;
+}
+
+template <typename T>
+void readOptionalParam(cv::FileStorage &fsSettings, const std::string &name, T &value)
+{
+    cv::FileNode node = fsSettings[name];
+    if (!node.empty())
+        node >> value;
+}
+} // namespace
 
 
 template <typename T>
@@ -86,6 +121,33 @@ void readParameters(std::string config_file)
     F_THRESHOLD = fsSettings["F_threshold"];
     SHOW_TRACK = fsSettings["show_track"];
     FLOW_BACK = fsSettings["flow_back"];
+    int pn = config_file.find_last_of('/');
+    std::string configPath = config_file.substr(0, pn);
+
+    DEEP_FEATURE = 0;
+    DEEP_FEATURE_MODEL_DIR = joinPath(configPath, "../../output");
+    DEEP_FEATURE_MATCHER = 1;
+    DEEP_FEATURE_MAX_KEYPOINTS = MAX_CNT;
+    DEEP_FEATURE_KEYPOINT_THRESHOLD = 0.004;
+    DEEP_FEATURE_REMOVE_BORDERS = 4;
+    DEEP_FEATURE_STEREO_RANSAC = 0;
+    readOptionalParam(fsSettings, "deep_feature", DEEP_FEATURE);
+    readOptionalParam(fsSettings, "deep_feature_model_dir", DEEP_FEATURE_MODEL_DIR);
+    readOptionalParam(fsSettings, "deep_feature_matcher", DEEP_FEATURE_MATCHER);
+    readOptionalParam(fsSettings, "deep_feature_max_keypoints", DEEP_FEATURE_MAX_KEYPOINTS);
+    readOptionalParam(fsSettings, "deep_feature_keypoint_threshold", DEEP_FEATURE_KEYPOINT_THRESHOLD);
+    readOptionalParam(fsSettings, "deep_feature_remove_borders", DEEP_FEATURE_REMOVE_BORDERS);
+    readOptionalParam(fsSettings, "deep_feature_stereo_ransac", DEEP_FEATURE_STEREO_RANSAC);
+    if (DEEP_FEATURE_MATCHER != 0 && DEEP_FEATURE_MATCHER != 1)
+    {
+        ROS_WARN_STREAM("deep_feature_matcher must be 0 or 1; fallback to 1");
+        DEEP_FEATURE_MATCHER = 1;
+    }
+    if (DEEP_FEATURE && !directoryExists(DEEP_FEATURE_MODEL_DIR))
+    {
+        ROS_WARN_STREAM("deep_feature_model_dir does not exist: " << DEEP_FEATURE_MODEL_DIR
+                        << ", continue and expect model files under the fallback path");
+    }
 
     MULTIPLE_THREAD = fsSettings["multiple_thread"];
 
@@ -147,11 +209,6 @@ void readParameters(std::string config_file)
         printf("num_of_cam should be 1 or 2\n");
         assert(0);
     }
-
-
-    int pn = config_file.find_last_of('/');
-    std::string configPath = config_file.substr(0, pn);
-    
     std::string cam0Calib;
     fsSettings["cam0_calib"] >> cam0Calib;
     std::string cam0Path = configPath + "/" + cam0Calib;

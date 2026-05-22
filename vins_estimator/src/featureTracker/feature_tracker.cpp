@@ -11,6 +11,74 @@
 
 #include "feature_tracker.h"
 
+#include "../utility/visualization.h"
+#include "point_matcher.h"
+#include "super_point.h"
+#include <sys/stat.h>
+
+namespace
+{
+std::string joinPath(const std::string &folder, const std::string &name)
+{
+    if (folder.empty())
+        return name;
+    if (folder.back() == '/')
+        return folder + name;
+    return folder + "/" + name;
+}
+
+bool fileExists(const std::string &path)
+{
+    struct stat info;
+    return stat(path.c_str(), &info) == 0 && S_ISREG(info.st_mode);
+}
+
+cv::Mat makeDeepMatchImage(const cv::Mat &prev_img,
+                           const cv::Mat &cur_img,
+                           const Eigen::Matrix<float, 259, Eigen::Dynamic> &prev_features,
+                           const Eigen::Matrix<float, 259, Eigen::Dynamic> &cur_features,
+                           const std::vector<int> &current_prev_index,
+                           const std::vector<int> &kept_indexes)
+{
+    if (prev_img.empty() || cur_img.empty())
+        return cv::Mat();
+
+    cv::Mat prev_bgr, cur_bgr;
+    if (prev_img.channels() == 1)
+        cv::cvtColor(prev_img, prev_bgr, cv::COLOR_GRAY2BGR);
+    else
+        prev_bgr = prev_img.clone();
+    if (cur_img.channels() == 1)
+        cv::cvtColor(cur_img, cur_bgr, cv::COLOR_GRAY2BGR);
+    else
+        cur_bgr = cur_img.clone();
+
+    std::vector<cv::KeyPoint> prev_kpts;
+    std::vector<cv::KeyPoint> cur_kpts;
+    std::vector<cv::DMatch> matches;
+    prev_kpts.reserve(kept_indexes.size());
+    cur_kpts.reserve(kept_indexes.size());
+    matches.reserve(kept_indexes.size());
+
+    for (int idx : kept_indexes)
+    {
+        int prev_idx = current_prev_index[idx];
+        if (prev_idx < 0 || prev_idx >= prev_features.cols())
+            continue;
+
+        prev_kpts.emplace_back(cv::Point2f(prev_features(1, prev_idx), prev_features(2, prev_idx)), 1.f);
+        cur_kpts.emplace_back(cv::Point2f(cur_features(1, idx), cur_features(2, idx)), 1.f);
+        matches.emplace_back(static_cast<int>(prev_kpts.size() - 1), static_cast<int>(cur_kpts.size() - 1), 0.f);
+    }
+
+    cv::Mat out;
+    cv::drawMatches(prev_bgr, prev_kpts, cur_bgr, cur_kpts, matches, out,
+                    cv::Scalar::all(-1), cv::Scalar::all(-1),
+                    std::vector<char>(), cv::DrawMatchesFlags::NOT_DRAW_SINGLE_POINTS);
+    return out;
+}
+} // namespace
+
 bool FeatureTracker::inBorder(const cv::Point2f &pt)
 {
     const int BORDER_SIZE = 1;
@@ -50,6 +118,110 @@ FeatureTracker::FeatureTracker()
     stereo_cam = 0;
     n_id = 0;
     hasPrediction = false;
+    deep_feature_ready = false;
+    prev_deep_features.resize(259, 0);
+}
+
+void FeatureTracker::clearState()
+{
+    imTrack.release();
+    mask.release();
+    fisheye_mask.release();
+    prev_img.release();
+    cur_img.release();
+
+    n_pts.clear();
+    predict_pts.clear();
+    predict_pts_debug.clear();
+    prev_pts.clear();
+    cur_pts.clear();
+    cur_right_pts.clear();
+    prev_un_pts.clear();
+    cur_un_pts.clear();
+    cur_un_right_pts.clear();
+    pts_velocity.clear();
+    right_pts_velocity.clear();
+    ids.clear();
+    ids_right.clear();
+    track_cnt.clear();
+    cur_un_pts_map.clear();
+    prev_un_pts_map.clear();
+    cur_un_right_pts_map.clear();
+    prev_un_right_pts_map.clear();
+    prevLeftPtsMap.clear();
+    prev_deep_features.resize(259, 0);
+    cur_time = 0;
+    prev_time = 0;
+    stereo_cam = 0;
+    n_id = 0;
+    hasPrediction = false;
+    m_camera.clear();
+}
+
+void FeatureTracker::initDeepFrontend()
+{
+    if (deep_feature_ready)
+        return;
+
+    SuperPointConfig superpoint_config;
+    superpoint_config.max_keypoints = DEEP_FEATURE_MAX_KEYPOINTS;
+    superpoint_config.keypoint_threshold = static_cast<float>(DEEP_FEATURE_KEYPOINT_THRESHOLD);
+    superpoint_config.remove_borders = DEEP_FEATURE_REMOVE_BORDERS;
+    superpoint_config.dla_core = -1;
+    superpoint_config.input_tensor_names.push_back("input");
+    superpoint_config.output_tensor_names.push_back("scores");
+    superpoint_config.output_tensor_names.push_back("descriptors");
+    superpoint_config.onnx_file = joinPath(DEEP_FEATURE_MODEL_DIR, "superpoint_v1_sim_int32.onnx");
+    superpoint_config.engine_file = joinPath(DEEP_FEATURE_MODEL_DIR, "superpoint_v1_sim_int32.engine");
+
+    PointMatcherConfig matcher_config;
+    matcher_config.matcher = DEEP_FEATURE_MATCHER;
+    matcher_config.image_width = COL;
+    matcher_config.image_height = ROW;
+    matcher_config.dla_core = -1;
+    if (matcher_config.matcher == 0)
+    {
+        matcher_config.onnx_file = joinPath(DEEP_FEATURE_MODEL_DIR, "superpoint_lightglue.onnx");
+        matcher_config.engine_file = joinPath(DEEP_FEATURE_MODEL_DIR, "superpoint_lightglue.engine");
+    }
+    else
+    {
+        const std::string indoor_onnx = joinPath(DEEP_FEATURE_MODEL_DIR, "superglue_indoor_sim_int32.onnx");
+        const std::string indoor_engine = joinPath(DEEP_FEATURE_MODEL_DIR, "superglue_indoor_sim_int32.engine");
+        const std::string outdoor_onnx = joinPath(DEEP_FEATURE_MODEL_DIR, "superglue_outdoor_sim_int32.onnx");
+        const std::string outdoor_engine = joinPath(DEEP_FEATURE_MODEL_DIR, "superglue_outdoor_sim_int32.engine");
+        if (fileExists(indoor_onnx) || fileExists(indoor_engine))
+        {
+            matcher_config.onnx_file = indoor_onnx;
+            matcher_config.engine_file = indoor_engine;
+        }
+        else
+        {
+            matcher_config.onnx_file = outdoor_onnx;
+            matcher_config.engine_file = outdoor_engine;
+        }
+    }
+
+    deep_superpoint.reset(new SuperPoint(superpoint_config));
+    deep_point_matcher.reset(new PointMatcher(matcher_config));
+
+    if (!deep_superpoint->build())
+    {
+        ROS_WARN("deep frontend superpoint build failed, fallback to KLT");
+        deep_superpoint.reset();
+        deep_point_matcher.reset();
+        deep_feature_ready = false;
+        return;
+    }
+    if (!deep_point_matcher || !deep_point_matcher->ready())
+    {
+        ROS_WARN("deep frontend matcher build failed, fallback to KLT");
+        deep_superpoint.reset();
+        deep_point_matcher.reset();
+        deep_feature_ready = false;
+        return;
+    }
+    deep_feature_ready = true;
 }
 
 void FeatureTracker::setMask()
@@ -93,6 +265,11 @@ double FeatureTracker::distance(cv::Point2f &pt1, cv::Point2f &pt2)
 
 map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1)
 {
+    if (DEEP_FEATURE && deep_feature_ready)
+    {
+        return trackImageDeep(_cur_time, _img, _img1);
+    }
+
     TicToc t_r;
     cur_time = _cur_time;
     cur_img = _img;
@@ -305,6 +482,179 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     return featureFrame;
 }
 
+map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1)
+{
+    cur_time = _cur_time;
+    cur_img = _img;
+    row = cur_img.rows;
+    col = cur_img.cols;
+    cv::Mat rightImg = _img1;
+
+    vector<int> prev_ids = ids;
+    vector<int> prev_track_cnt = track_cnt;
+
+    cur_pts.clear();
+    ids.clear();
+    track_cnt.clear();
+    cur_right_pts.clear();
+    ids_right.clear();
+    cur_un_right_pts.clear();
+    right_pts_velocity.clear();
+    cur_un_right_pts_map.clear();
+
+    Eigen::Matrix<float, 259, Eigen::Dynamic> current_features;
+    if (!deep_superpoint || !deep_superpoint->infer(cur_img, current_features))
+    {
+        ROS_WARN("deep frontend feature extraction failed");
+        return map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>>();
+    }
+
+    vector<int> current_prev_index(current_features.cols(), -1);
+    Eigen::Matrix<float, 259, Eigen::Dynamic> matched_features;
+    matched_features.resize(259, 0);
+
+    if (prev_deep_features.cols() > 0 && prev_deep_features.cols() == static_cast<int>(prev_ids.size()))
+    {
+        vector<cv::DMatch> matches;
+        if (deep_point_matcher && deep_point_matcher->ready())
+            deep_point_matcher->MatchingPoints(prev_deep_features, current_features, matches, true);
+
+        for (const auto &match : matches)
+        {
+            if (match.queryIdx < 0 || match.queryIdx >= static_cast<int>(prev_ids.size()))
+                continue;
+            if (match.trainIdx < 0 || match.trainIdx >= current_features.cols())
+                continue;
+            current_prev_index[match.trainIdx] = match.queryIdx;
+        }
+    }
+
+    vector<int> kept_indexes;
+    kept_indexes.reserve(current_features.cols());
+    for (int i = 0; i < current_features.cols(); ++i)
+    {
+        cv::Point2f pt(current_features(1, i), current_features(2, i));
+        if (!inBorder(pt))
+            continue;
+        kept_indexes.push_back(i);
+    }
+
+    matched_features.resize(259, kept_indexes.size());
+    for (size_t i = 0; i < kept_indexes.size(); ++i)
+    {
+        int idx = kept_indexes[i];
+        cv::Point2f pt(current_features(1, idx), current_features(2, idx));
+        cur_pts.push_back(pt);
+        matched_features.col(i) = current_features.col(idx);
+        if (current_prev_index[idx] >= 0)
+        {
+            ids.push_back(prev_ids[current_prev_index[idx]]);
+            track_cnt.push_back(prev_track_cnt[current_prev_index[idx]] + 1);
+        }
+        else
+        {
+            ids.push_back(n_id++);
+            track_cnt.push_back(1);
+        }
+    }
+
+    cur_un_pts = undistortedPts(cur_pts, m_camera[0]);
+    pts_velocity = ptsVelocity(ids, cur_un_pts, cur_un_pts_map, prev_un_pts_map);
+
+    if (!_img1.empty() && stereo_cam)
+    {
+        Eigen::Matrix<float, 259, Eigen::Dynamic> right_features;
+        if (deep_superpoint && deep_superpoint->infer(rightImg, right_features) && right_features.cols() > 0)
+        {
+            vector<cv::DMatch> stereo_matches;
+            if (deep_point_matcher && deep_point_matcher->ready())
+                deep_point_matcher->MatchingPoints(matched_features, right_features, stereo_matches, DEEP_FEATURE_STEREO_RANSAC != 0);
+
+            ids_right.clear();
+            cur_right_pts.clear();
+            cur_un_right_pts.clear();
+            right_pts_velocity.clear();
+            cur_un_right_pts_map.clear();
+
+            for (const auto &match : stereo_matches)
+            {
+                if (match.queryIdx < 0 || match.queryIdx >= static_cast<int>(cur_pts.size()))
+                    continue;
+                if (match.trainIdx < 0 || match.trainIdx >= right_features.cols())
+                    continue;
+                ids_right.push_back(ids[match.queryIdx]);
+                cur_right_pts.push_back(cv::Point2f(right_features(1, match.trainIdx), right_features(2, match.trainIdx)));
+            }
+
+            cur_un_right_pts = undistortedPts(cur_right_pts, m_camera[1]);
+            right_pts_velocity = ptsVelocity(ids_right, cur_un_right_pts, cur_un_right_pts_map, prev_un_right_pts_map);
+        }
+        prev_un_right_pts_map = cur_un_right_pts_map;
+    }
+
+    if (SHOW_TRACK)
+        drawTrack(cur_img, rightImg, ids, cur_pts, cur_right_pts, prevLeftPtsMap);
+
+    if (DEEP_FEATURE)
+    {
+        cv::Mat deep_match_img = makeDeepMatchImage(prev_img, cur_img, prev_deep_features, current_features, current_prev_index, kept_indexes);
+        if (!deep_match_img.empty())
+            pubDeepMatchImage(deep_match_img, cur_time);
+    }
+
+    prev_img = cur_img;
+    prev_pts = cur_pts;
+    prev_deep_features = matched_features;
+    prev_un_pts = cur_un_pts;
+    prev_un_pts_map = cur_un_pts_map;
+    prev_time = cur_time;
+    hasPrediction = false;
+
+    prevLeftPtsMap.clear();
+    for (size_t i = 0; i < cur_pts.size(); i++)
+        prevLeftPtsMap[ids[i]] = cur_pts[i];
+
+    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> featureFrame;
+    for (size_t i = 0; i < ids.size(); i++)
+    {
+        int feature_id = ids[i];
+        double x = cur_un_pts[i].x;
+        double y = cur_un_pts[i].y;
+        double z = 1;
+        double p_u = cur_pts[i].x;
+        double p_v = cur_pts[i].y;
+        int camera_id = 0;
+        double velocity_x = pts_velocity[i].x;
+        double velocity_y = pts_velocity[i].y;
+
+        Eigen::Matrix<double, 7, 1> xyz_uv_velocity;
+        xyz_uv_velocity << x, y, z, p_u, p_v, velocity_x, velocity_y;
+        featureFrame[feature_id].emplace_back(camera_id, xyz_uv_velocity);
+    }
+
+    if (!_img1.empty() && stereo_cam)
+    {
+        for (size_t i = 0; i < ids_right.size(); i++)
+        {
+            int feature_id = ids_right[i];
+            double x = cur_un_right_pts[i].x;
+            double y = cur_un_right_pts[i].y;
+            double z = 1;
+            double p_u = cur_right_pts[i].x;
+            double p_v = cur_right_pts[i].y;
+            int camera_id = 1;
+            double velocity_x = right_pts_velocity[i].x;
+            double velocity_y = right_pts_velocity[i].y;
+
+            Eigen::Matrix<double, 7, 1> xyz_uv_velocity;
+            xyz_uv_velocity << x, y, z, p_u, p_v, velocity_x, velocity_y;
+            featureFrame[feature_id].emplace_back(camera_id, xyz_uv_velocity);
+        }
+    }
+
+    return featureFrame;
+}
+
 void FeatureTracker::rejectWithF()
 {
     if (cur_pts.size() >= 8)
@@ -341,6 +691,7 @@ void FeatureTracker::rejectWithF()
 
 void FeatureTracker::readIntrinsicParameter(const vector<string> &calib_file)
 {
+    m_camera.clear();
     for (size_t i = 0; i < calib_file.size(); i++)
     {
         ROS_INFO("reading paramerter of camera %s", calib_file[i].c_str());
@@ -349,6 +700,11 @@ void FeatureTracker::readIntrinsicParameter(const vector<string> &calib_file)
     }
     if (calib_file.size() == 2)
         stereo_cam = 1;
+    else
+        stereo_cam = 0;
+
+    if (DEEP_FEATURE && !deep_feature_ready)
+        initDeepFrontend();
 }
 
 void FeatureTracker::showUndistortion(const string &name)
@@ -453,7 +809,7 @@ void FeatureTracker::drawTrack(const cv::Mat &imLeft, const cv::Mat &imRight,
         cv::hconcat(imLeft, imRight, imTrack);
     else
         imTrack = imLeft.clone();
-    cv::cvtColor(imTrack, imTrack, CV_GRAY2RGB);
+    cv::cvtColor(imTrack, imTrack, cv::COLOR_GRAY2RGB);
 
     for (size_t j = 0; j < curLeftPts.size(); j++)
     {
@@ -499,6 +855,11 @@ void FeatureTracker::drawTrack(const cv::Mat &imLeft, const cv::Mat &imRight,
 
 void FeatureTracker::setPrediction(map<int, Eigen::Vector3d> &predictPts)
 {
+    if (DEEP_FEATURE)
+    {
+        hasPrediction = false;
+        return;
+    }
     hasPrediction = true;
     predict_pts.clear();
     predict_pts_debug.clear();
@@ -537,6 +898,24 @@ void FeatureTracker::removeOutliers(set<int> &removePtsIds)
     reduceVector(prev_pts, status);
     reduceVector(ids, status);
     reduceVector(track_cnt, status);
+    if (prev_deep_features.cols() == static_cast<int>(status.size()))
+    {
+        Eigen::Matrix<float, 259, Eigen::Dynamic> filtered_features(259, 0);
+        vector<int> filtered_prev_index;
+        for (size_t i = 0; i < status.size(); i++)
+        {
+            if (status[i])
+                filtered_prev_index.push_back(static_cast<int>(i));
+        }
+        filtered_features.resize(259, filtered_prev_index.size());
+        for (size_t i = 0; i < filtered_prev_index.size(); i++)
+            filtered_features.col(i) = prev_deep_features.col(filtered_prev_index[i]);
+        prev_deep_features = filtered_features;
+    }
+    if (predict_pts.size() == status.size())
+        reduceVector(predict_pts, status);
+    if (predict_pts_debug.size() == status.size())
+        reduceVector(predict_pts_debug, status);
 }
 
 

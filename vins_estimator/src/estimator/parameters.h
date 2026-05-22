@@ -63,6 +63,13 @@ extern int MIN_DIST;
 extern double F_THRESHOLD;
 extern int SHOW_TRACK;
 extern int FLOW_BACK;
+extern int DEEP_FEATURE;
+extern std::string DEEP_FEATURE_MODEL_DIR;
+extern int DEEP_FEATURE_MATCHER;
+extern int DEEP_FEATURE_MAX_KEYPOINTS;
+extern double DEEP_FEATURE_KEYPOINT_THRESHOLD;
+extern int DEEP_FEATURE_REMOVE_BORDERS;
+extern int DEEP_FEATURE_STEREO_RANSAC;
 
 void readParameters(std::string config_file);
 

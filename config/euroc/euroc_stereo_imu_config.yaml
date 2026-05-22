@@ -48,6 +48,13 @@ freq: 10                # frequence (Hz) of publish tracking result. At least 10
 F_threshold: 1.0        # ransac threshold (pixel)
 show_track: 1           # publish tracking image as topic
 flow_back: 1            # perform forward and backward optical flow to improve feature tracking accuracy
+deep_feature: 1        # 0 keep KLT, 1 use SuperPoint + matcher
+deep_feature_model_dir: "/workspace/src/VINS-Fusion/output"
+deep_feature_matcher: 0        # 0 use LightGlue, 1 use SuperGlue
+deep_feature_max_keypoints: 150
+deep_feature_keypoint_threshold: 0.004
+deep_feature_remove_borders: 4
+deep_feature_stereo_ransac: 0
 
 #optimization parameters
 max_solver_time: 0.04  # max solver itration time (ms), to guarantee real time

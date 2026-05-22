@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <iostream>
 #include <queue>
+#include <memory>
 #include <execinfo.h>
 #include <csignal>
 #include <opencv2/opencv.hpp>
@@ -29,6 +30,9 @@ using namespace std;
 using namespace camodocal;
 using namespace Eigen;
 
+class PointMatcher;
+class SuperPoint;
+
 bool inBorder(const cv::Point2f &pt);
 void reduceVector(vector<cv::Point2f> &v, vector<uchar> status);
 void reduceVector(vector<int> &v, vector<uchar> status);
@@ -38,6 +42,7 @@ class FeatureTracker
 public:
     FeatureTracker();
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat());
+    void clearState();
     void setMask();
     void readIntrinsicParameter(const vector<string> &calib_file);
     void showUndistortion(const string &name);
@@ -72,6 +77,7 @@ public:
     vector<cv::Point2f> pts_velocity, right_pts_velocity;
     vector<int> ids, ids_right;
     vector<int> track_cnt;
+    Eigen::Matrix<float, 259, Eigen::Dynamic> prev_deep_features;
     map<int, cv::Point2f> cur_un_pts_map, prev_un_pts_map;
     map<int, cv::Point2f> cur_un_right_pts_map, prev_un_right_pts_map;
     map<int, cv::Point2f> prevLeftPtsMap;
@@ -81,4 +87,11 @@ public:
     bool stereo_cam;
     int n_id;
     bool hasPrediction;
+    bool deep_feature_ready;
+    std::shared_ptr<PointMatcher> deep_point_matcher;
+    std::shared_ptr<SuperPoint> deep_superpoint;
+
+private:
+    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat());
+    void initDeepFrontend();
 };

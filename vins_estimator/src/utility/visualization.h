@@ -37,6 +37,7 @@ extern ros::Publisher pub_ref_pose, pub_cur_pose;
 extern ros::Publisher pub_key;
 extern nav_msgs::Path path;
 extern ros::Publisher pub_pose_graph;
+extern ros::Publisher pub_deep_match;
 extern int IMAGE_ROW, IMAGE_COL;
 
 void registerPub(ros::NodeHandle &n);
@@ -44,6 +45,7 @@ void registerPub(ros::NodeHandle &n);
 void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, const Eigen::Vector3d &V, double t);
 
 void pubTrackImage(const cv::Mat &imgTrack, const double t);
+void pubDeepMatchImage(const cv::Mat &imgMatch, const double t);
 
 void printStatistics(const Estimator &estimator, double t);
 
