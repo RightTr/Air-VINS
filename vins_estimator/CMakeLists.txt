@@ -97,6 +97,9 @@ target_link_libraries(vins_lib ${catkin_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRAR
 add_executable(vins_node src/rosNodeTest.cpp)
 target_link_libraries(vins_node vins_lib) 
 
+add_executable(nus_thermal_publisher src/nus_thermal_publisher.cpp)
+target_link_libraries(nus_thermal_publisher ${catkin_LIBRARIES} ${OpenCV_LIBS})
+
 add_executable(kitti_odom_test src/KITTIOdomTest.cpp)
 target_link_libraries(kitti_odom_test vins_lib) 
 

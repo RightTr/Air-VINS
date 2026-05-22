@@ -1,0 +1,31 @@
+<launch>
+  <arg name="data_root" default="/mnt/Data/homebrew_thermal/Nus/run_20250912_180927" />
+  <arg name="config_file" default="$(find vins)/../config/nus_thermal/nus_thermal_stereo_config.yaml" />
+  <arg name="playback_rate" default="1.0" />
+  <arg name="start_index" default="0" />
+  <arg name="max_frames" default="0" />
+  <arg name="loop" default="false" />
+  <arg name="rectify_images" default="true" />
+  <arg name="rectify_alpha" default="0.0" />
+  <arg name="visualization" default="true" />
+
+  <node name="nus_thermal_publisher" pkg="vins" type="nus_thermal_publisher" output="screen">
+    <param name="data_root" type="string" value="$(arg data_root)" />
+    <param name="left_dir" type="string" value="left_thermal/left_motion" />
+    <param name="right_dir" type="string" value="right_thermal/right_motion" />
+    <param name="image0_topic" type="string" value="/cam0/image_raw" />
+    <param name="image1_topic" type="string" value="/cam1/image_raw" />
+    <param name="playback_rate" type="double" value="$(arg playback_rate)" />
+    <param name="start_index" type="int" value="$(arg start_index)" />
+    <param name="max_frames" type="int" value="$(arg max_frames)" />
+    <param name="loop" type="bool" value="$(arg loop)" />
+    <param name="rectify_images" type="bool" value="$(arg rectify_images)" />
+    <param name="rectify_alpha" type="double" value="$(arg rectify_alpha)" />
+  </node>
+
+  <node name="vins_estimator" pkg="vins" type="vins_node" output="screen" args="$(arg config_file)" />
+
+  <group if="$(arg visualization)">
+    <include file="$(find vins)/launch/vins_rviz.launch" />
+  </group>
+</launch>
