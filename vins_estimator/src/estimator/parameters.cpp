@@ -54,6 +54,7 @@ int DEEP_FEATURE_MAX_KEYPOINTS;
 double DEEP_FEATURE_KEYPOINT_THRESHOLD;
 int DEEP_FEATURE_REMOVE_BORDERS;
 int DEEP_FEATURE_STEREO_RANSAC;
+int ENABLE_NUC_HANDLE;
 
 namespace
 {
@@ -131,6 +132,7 @@ void readParameters(std::string config_file)
     DEEP_FEATURE_KEYPOINT_THRESHOLD = 0.004;
     DEEP_FEATURE_REMOVE_BORDERS = 4;
     DEEP_FEATURE_STEREO_RANSAC = 0;
+    ENABLE_NUC_HANDLE = 0;
     readOptionalParam(fsSettings, "deep_feature", DEEP_FEATURE);
     readOptionalParam(fsSettings, "deep_feature_model_dir", DEEP_FEATURE_MODEL_DIR);
     readOptionalParam(fsSettings, "deep_feature_matcher", DEEP_FEATURE_MATCHER);
@@ -138,6 +140,7 @@ void readParameters(std::string config_file)
     readOptionalParam(fsSettings, "deep_feature_keypoint_threshold", DEEP_FEATURE_KEYPOINT_THRESHOLD);
     readOptionalParam(fsSettings, "deep_feature_remove_borders", DEEP_FEATURE_REMOVE_BORDERS);
     readOptionalParam(fsSettings, "deep_feature_stereo_ransac", DEEP_FEATURE_STEREO_RANSAC);
+    readOptionalParam(fsSettings, "enable_nuc_handle", ENABLE_NUC_HANDLE);
     if (DEEP_FEATURE_MATCHER != 0 && DEEP_FEATURE_MATCHER != 1)
     {
         ROS_WARN_STREAM("deep_feature_matcher must be 0 or 1; fallback to 1");

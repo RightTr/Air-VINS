@@ -118,11 +118,12 @@ FeatureTracker::FeatureTracker()
     stereo_cam = 0;
     n_id = 0;
     hasPrediction = false;
+    primary_camera_id = 0;
     deep_feature_ready = false;
     prev_deep_features.resize(259, 0);
 }
 
-void FeatureTracker::clearState()
+void FeatureTracker::resetTrackingState()
 {
     imTrack.release();
     mask.release();
@@ -153,8 +154,14 @@ void FeatureTracker::clearState()
     cur_time = 0;
     prev_time = 0;
     stereo_cam = 0;
-    n_id = 0;
     hasPrediction = false;
+}
+
+void FeatureTracker::clearState()
+{
+    resetTrackingState();
+    n_id = 0;
+    primary_camera_id = 0;
     m_camera.clear();
 }
 
@@ -263,11 +270,21 @@ double FeatureTracker::distance(cv::Point2f &pt1, cv::Point2f &pt2)
     return sqrt(dx * dx + dy * dy);
 }
 
-map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1)
+map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id_)
 {
+    if (primary_camera_id_ < 0 || primary_camera_id_ >= static_cast<int>(m_camera.size()))
+    {
+        ROS_WARN_STREAM("invalid primary camera id " << primary_camera_id_ << ", fallback to 0");
+        primary_camera_id_ = 0;
+    }
+    if (primary_camera_id_ != primary_camera_id)
+    {
+        resetTrackingState();
+        primary_camera_id = primary_camera_id_;
+    }
     if (DEEP_FEATURE && deep_feature_ready)
     {
-        return trackImageDeep(_cur_time, _img, _img1);
+        return trackImageDeep(_cur_time, _img, _img1, primary_camera_id);
     }
 
     TicToc t_r;
@@ -373,10 +390,10 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         //printf("feature cnt after add %d\n", (int)ids.size());
     }
 
-    cur_un_pts = undistortedPts(cur_pts, m_camera[0]);
+    cur_un_pts = undistortedPts(cur_pts, m_camera[primary_camera_id]);
     pts_velocity = ptsVelocity(ids, cur_un_pts, cur_un_pts_map, prev_un_pts_map);
 
-    if(!_img1.empty() && stereo_cam)
+    if(!_img1.empty() && stereo_cam && primary_camera_id == 0)
     {
         ids_right.clear();
         cur_right_pts.clear();
@@ -445,7 +462,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         double p_u, p_v;
         p_u = cur_pts[i].x;
         p_v = cur_pts[i].y;
-        int camera_id = 0;
+        int camera_id = primary_camera_id;
         double velocity_x, velocity_y;
         velocity_x = pts_velocity[i].x;
         velocity_y = pts_velocity[i].y;
@@ -455,7 +472,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         featureFrame[feature_id].emplace_back(camera_id,  xyz_uv_velocity);
     }
 
-    if (!_img1.empty() && stereo_cam)
+    if (!_img1.empty() && stereo_cam && primary_camera_id == 0)
     {
         for (size_t i = 0; i < ids_right.size(); i++)
         {
@@ -482,8 +499,10 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     return featureFrame;
 }
 
-map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1)
+map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id_)
 {
+    if (primary_camera_id_ < 0 || primary_camera_id_ >= static_cast<int>(m_camera.size()))
+        primary_camera_id_ = 0;
     cur_time = _cur_time;
     cur_img = _img;
     row = cur_img.rows;
@@ -558,10 +577,10 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         }
     }
 
-    cur_un_pts = undistortedPts(cur_pts, m_camera[0]);
+    cur_un_pts = undistortedPts(cur_pts, m_camera[primary_camera_id_]);
     pts_velocity = ptsVelocity(ids, cur_un_pts, cur_un_pts_map, prev_un_pts_map);
 
-    if (!_img1.empty() && stereo_cam)
+    if (!_img1.empty() && stereo_cam && primary_camera_id_ == 0)
     {
         Eigen::Matrix<float, 259, Eigen::Dynamic> right_features;
         if (deep_superpoint && deep_superpoint->infer(rightImg, right_features) && right_features.cols() > 0)
@@ -623,7 +642,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         double z = 1;
         double p_u = cur_pts[i].x;
         double p_v = cur_pts[i].y;
-        int camera_id = 0;
+        int camera_id = primary_camera_id_;
         double velocity_x = pts_velocity[i].x;
         double velocity_y = pts_velocity[i].y;
 
@@ -632,7 +651,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         featureFrame[feature_id].emplace_back(camera_id, xyz_uv_velocity);
     }
 
-    if (!_img1.empty() && stereo_cam)
+    if (!_img1.empty() && stereo_cam && primary_camera_id_ == 0)
     {
         for (size_t i = 0; i < ids_right.size(); i++)
         {

@@ -41,8 +41,9 @@ class FeatureTracker
 {
 public:
     FeatureTracker();
-    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat());
+    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0);
     void clearState();
+    void resetTrackingState();
     void setMask();
     void readIntrinsicParameter(const vector<string> &calib_file);
     void showUndistortion(const string &name);
@@ -87,11 +88,12 @@ public:
     bool stereo_cam;
     int n_id;
     bool hasPrediction;
+    int primary_camera_id;
     bool deep_feature_ready;
     std::shared_ptr<PointMatcher> deep_point_matcher;
     std::shared_ptr<SuperPoint> deep_superpoint;
 
 private:
-    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat());
+    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0);
     void initDeepFrontend();
 };

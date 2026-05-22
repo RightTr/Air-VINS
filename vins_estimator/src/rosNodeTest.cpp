@@ -67,9 +67,20 @@ cv::Mat getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg)
     return img;
 }
 
+bool sameImageExact(const cv::Mat &a, const cv::Mat &b)
+{
+    if (a.empty() || b.empty())
+        return false;
+    if (a.size() != b.size() || a.type() != b.type())
+        return false;
+    return cv::countNonZero(a != b) == 0;
+}
+
 // extract images with same timestamp from two topics
 void sync_process()
 {
+    cv::Mat prev_image0, prev_image1;
+    bool skipped_visual_update = false;
     while(1)
     {
         if(STEREO)
@@ -106,7 +117,45 @@ void sync_process()
             }
             m_buf.unlock();
             if(!image0.empty())
-                estimator.inputImage(time, image0, image1);
+            {
+                bool left_frozen = false;
+                bool right_frozen = false;
+                if (ENABLE_NUC_HANDLE)
+                {
+                    left_frozen = sameImageExact(image0, prev_image0);
+                    right_frozen = sameImageExact(image1, prev_image1);
+                }
+
+                if (ENABLE_NUC_HANDLE && left_frozen && right_frozen)
+                {
+                    if (!skipped_visual_update)
+                    {
+                        ROS_WARN("NUC: both thermal cameras frozen, skip visual update");
+                        estimator.resetFeatureTracker();
+                        skipped_visual_update = true;
+                    }
+                }
+                else if (ENABLE_NUC_HANDLE && left_frozen)
+                {
+                    ROS_WARN_THROTTLE(1.0, "NUC: left thermal camera frozen, use right camera as monocular input");
+                    estimator.inputImage(time, image1, cv::Mat(), 1);
+                    skipped_visual_update = false;
+                }
+                else if (ENABLE_NUC_HANDLE && right_frozen)
+                {
+                    ROS_WARN_THROTTLE(1.0, "NUC: right thermal camera frozen, use left camera as monocular input");
+                    estimator.inputImage(time, image0, cv::Mat(), 0);
+                    skipped_visual_update = false;
+                }
+                else
+                {
+                    estimator.inputImage(time, image0, image1, 0);
+                    skipped_visual_update = false;
+                }
+
+                prev_image0 = image0.clone();
+                prev_image1 = image1.clone();
+            }
         }
         else
         {

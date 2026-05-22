@@ -70,6 +70,7 @@ extern int DEEP_FEATURE_MAX_KEYPOINTS;
 extern double DEEP_FEATURE_KEYPOINT_THRESHOLD;
 extern int DEEP_FEATURE_REMOVE_BORDERS;
 extern int DEEP_FEATURE_STEREO_RANSAC;
+extern int ENABLE_NUC_HANDLE;
 
 void readParameters(std::string config_file);
 

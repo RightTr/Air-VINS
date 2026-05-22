@@ -28,7 +28,7 @@ using namespace Eigen;
 class FeaturePerFrame
 {
   public:
-    FeaturePerFrame(const Eigen::Matrix<double, 7, 1> &_point, double td)
+    FeaturePerFrame(const Eigen::Matrix<double, 7, 1> &_point, double td, int _camera_id)
     {
         point.x() = _point(0);
         point.y() = _point(1);
@@ -38,6 +38,7 @@ class FeaturePerFrame
         velocity.x() = _point(5); 
         velocity.y() = _point(6); 
         cur_td = td;
+        camera_id = _camera_id;
         is_stereo = false;
     }
     void rightObservation(const Eigen::Matrix<double, 7, 1> &_point)
@@ -52,6 +53,7 @@ class FeaturePerFrame
         is_stereo = true;
     }
     double cur_td;
+    int camera_id;
     Vector3d point, pointRight;
     Vector2d uv, uvRight;
     Vector2d velocity, velocityRight;
@@ -98,7 +100,9 @@ class FeatureManager
     void initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[]);
     bool solvePoseByPnP(Eigen::Matrix3d &R_initial, Eigen::Vector3d &P_initial, 
                             vector<cv::Point2f> &pts2D, vector<cv::Point3f> &pts3D);
-    void removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3d marg_P, Eigen::Matrix3d new_R, Eigen::Vector3d new_P);
+    void removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::Vector3d back_P0,
+                              Eigen::Matrix3d new_R0, Eigen::Vector3d new_P0,
+                              Vector3d tic[], Matrix3d ric[]);
     void removeBack();
     void removeFront(int frame_count);
     void removeOutlier(set<int> &outlierIndex);

@@ -158,16 +158,21 @@ void Estimator::changeSensorType(int use_imu, int use_stereo)
     }
 }
 
-void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1)
+void Estimator::resetFeatureTracker()
+{
+    featureTracker.resetTrackingState();
+}
+
+void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id)
 {
     inputImageCnt++;
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> featureFrame;
     TicToc featureTrackerTime;
 
     if(_img1.empty())
-        featureFrame = featureTracker.trackImage(t, _img);
+        featureFrame = featureTracker.trackImage(t, _img, cv::Mat(), primary_camera_id);
     else
-        featureFrame = featureTracker.trackImage(t, _img, _img1);
+        featureFrame = featureTracker.trackImage(t, _img, _img1, primary_camera_id);
     //printf("featureTracker time: %f\n", featureTrackerTime.toc());
 
     if (SHOW_TRACK)
@@ -1075,6 +1080,7 @@ void Estimator::optimization()
         int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
         
         Vector3d pts_i = it_per_id.feature_per_frame[0].point;
+        int camera_id_i = it_per_id.feature_per_frame[0].camera_id;
 
         for (auto &it_per_frame : it_per_id.feature_per_frame)
         {
@@ -1082,12 +1088,22 @@ void Estimator::optimization()
             if (imu_i != imu_j)
             {
                 Vector3d pts_j = it_per_frame.point;
-                ProjectionTwoFrameOneCamFactor *f_td = new ProjectionTwoFrameOneCamFactor(pts_i, pts_j, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocity,
-                                                                 it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
-                problem.AddResidualBlock(f_td, loss_function, para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Feature[feature_index], para_Td[0]);
+                int camera_id_j = it_per_frame.camera_id;
+                if (camera_id_i == camera_id_j)
+                {
+                    ProjectionTwoFrameOneCamFactor *f_td = new ProjectionTwoFrameOneCamFactor(pts_i, pts_j, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocity,
+                                                                     it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
+                    problem.AddResidualBlock(f_td, loss_function, para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[camera_id_i], para_Feature[feature_index], para_Td[0]);
+                }
+                else
+                {
+                    ProjectionTwoFrameTwoCamFactor *f = new ProjectionTwoFrameTwoCamFactor(pts_i, pts_j, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocity,
+                                                                     it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
+                    problem.AddResidualBlock(f, loss_function, para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[camera_id_i], para_Ex_Pose[camera_id_j], para_Feature[feature_index], para_Td[0]);
+                }
             }
 
-            if(STEREO && it_per_frame.is_stereo)
+            if(STEREO && camera_id_i == 0 && it_per_frame.is_stereo)
             {                
                 Vector3d pts_j_right = it_per_frame.pointRight;
                 if(imu_i != imu_j)
@@ -1187,6 +1203,7 @@ void Estimator::optimization()
                     continue;
 
                 Vector3d pts_i = it_per_id.feature_per_frame[0].point;
+                int camera_id_i = it_per_id.feature_per_frame[0].camera_id;
 
                 for (auto &it_per_frame : it_per_id.feature_per_frame)
                 {
@@ -1194,14 +1211,27 @@ void Estimator::optimization()
                     if(imu_i != imu_j)
                     {
                         Vector3d pts_j = it_per_frame.point;
-                        ProjectionTwoFrameOneCamFactor *f_td = new ProjectionTwoFrameOneCamFactor(pts_i, pts_j, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocity,
-                                                                          it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
-                        ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(f_td, loss_function,
-                                                                                        vector<double *>{para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[0], para_Feature[feature_index], para_Td[0]},
-                                                                                        vector<int>{0, 3});
-                        marginalization_info->addResidualBlockInfo(residual_block_info);
+                        int camera_id_j = it_per_frame.camera_id;
+                        if (camera_id_i == camera_id_j)
+                        {
+                            ProjectionTwoFrameOneCamFactor *f_td = new ProjectionTwoFrameOneCamFactor(pts_i, pts_j, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocity,
+                                                                              it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
+                            ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(f_td, loss_function,
+                                                                                            vector<double *>{para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[camera_id_i], para_Feature[feature_index], para_Td[0]},
+                                                                                            vector<int>{0, 3});
+                            marginalization_info->addResidualBlockInfo(residual_block_info);
+                        }
+                        else
+                        {
+                            ProjectionTwoFrameTwoCamFactor *f = new ProjectionTwoFrameTwoCamFactor(pts_i, pts_j, it_per_id.feature_per_frame[0].velocity, it_per_frame.velocity,
+                                                                              it_per_id.feature_per_frame[0].cur_td, it_per_frame.cur_td);
+                            ResidualBlockInfo *residual_block_info = new ResidualBlockInfo(f, loss_function,
+                                                                                            vector<double *>{para_Pose[imu_i], para_Pose[imu_j], para_Ex_Pose[camera_id_i], para_Ex_Pose[camera_id_j], para_Feature[feature_index], para_Td[0]},
+                                                                                            vector<int>{0, 4});
+                            marginalization_info->addResidualBlockInfo(residual_block_info);
+                        }
                     }
-                    if(STEREO && it_per_frame.is_stereo)
+                    if(STEREO && camera_id_i == 0 && it_per_frame.is_stereo)
                     {
                         Vector3d pts_j_right = it_per_frame.pointRight;
                         if(imu_i != imu_j)
@@ -1435,13 +1465,7 @@ void Estimator::slideWindowOld()
     bool shift_depth = solver_flag == NON_LINEAR ? true : false;
     if (shift_depth)
     {
-        Matrix3d R0, R1;
-        Vector3d P0, P1;
-        R0 = back_R0 * ric[0];
-        R1 = Rs[0] * ric[0];
-        P0 = back_P0 + back_R0 * tic[0];
-        P1 = Ps[0] + Rs[0] * tic[0];
-        f_manager.removeBackShiftDepth(R0, P0, R1, P1);
+        f_manager.removeBackShiftDepth(back_R0, back_P0, Rs[0], Ps[0], tic, ric);
     }
     else
         f_manager.removeBack();
@@ -1484,10 +1508,12 @@ void Estimator::predictPtsInNextFrame()
             if((int)it_per_id.feature_per_frame.size() >= 2 && lastIndex == frame_count)
             {
                 double depth = it_per_id.estimated_depth;
-                Vector3d pts_j = ric[0] * (depth * it_per_id.feature_per_frame[0].point) + tic[0];
+                const int anchor_camera_id = it_per_id.feature_per_frame[0].camera_id;
+                const int current_camera_id = it_per_id.feature_per_frame.back().camera_id;
+                Vector3d pts_j = ric[anchor_camera_id] * (depth * it_per_id.feature_per_frame[0].point) + tic[anchor_camera_id];
                 Vector3d pts_w = Rs[firstIndex] * pts_j + Ps[firstIndex];
                 Vector3d pts_local = nextT.block<3, 3>(0, 0).transpose() * (pts_w - nextT.block<3, 1>(0, 3));
-                Vector3d pts_cam = ric[0].transpose() * (pts_local - tic[0]);
+                Vector3d pts_cam = ric[current_camera_id].transpose() * (pts_local - tic[current_camera_id]);
                 int ptsIndex = it_per_id.feature_id;
                 predictPts[ptsIndex] = pts_cam;
             }
@@ -1530,15 +1556,17 @@ void Estimator::outliersRejection(set<int> &removeIndex)
             if (imu_i != imu_j)
             {
                 Vector3d pts_j = it_per_frame.point;             
-                double tmp_error = reprojectionError(Rs[imu_i], Ps[imu_i], ric[0], tic[0], 
-                                                    Rs[imu_j], Ps[imu_j], ric[0], tic[0],
+                int camera_id_i = it_per_id.feature_per_frame[0].camera_id;
+                int camera_id_j = it_per_frame.camera_id;
+                double tmp_error = reprojectionError(Rs[imu_i], Ps[imu_i], ric[camera_id_i], tic[camera_id_i], 
+                                                    Rs[imu_j], Ps[imu_j], ric[camera_id_j], tic[camera_id_j],
                                                     depth, pts_i, pts_j);
                 err += tmp_error;
                 errCnt++;
                 //printf("tmp_error %f\n", FOCAL_LENGTH / 1.5 * tmp_error);
             }
             // need to rewrite projecton factor.........
-            if(STEREO && it_per_frame.is_stereo)
+            if(STEREO && it_per_id.feature_per_frame[0].camera_id == 0 && it_per_frame.is_stereo)
             {
                 
                 Vector3d pts_j_right = it_per_frame.pointRight;

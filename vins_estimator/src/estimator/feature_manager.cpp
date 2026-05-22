@@ -61,12 +61,10 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     long_track_num = 0;
     for (auto &id_pts : image)
     {
-        FeaturePerFrame f_per_fra(id_pts.second[0].second, td);
-        assert(id_pts.second[0].first == 0);
-        if(id_pts.second.size() == 2)
+        FeaturePerFrame f_per_fra(id_pts.second[0].second, td, id_pts.second[0].first);
+        if(id_pts.second.size() == 2 && id_pts.second[0].first == 0 && id_pts.second[1].first == 1)
         {
             f_per_fra.rightObservation(id_pts.second[1].second);
-            assert(id_pts.second[1].first == 1);
         }
 
         int feature_id = id_pts.first;
@@ -129,8 +127,10 @@ vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_coun
             int idx_l = frame_count_l - it.start_frame;
             int idx_r = frame_count_r - it.start_frame;
 
-            a = it.feature_per_frame[idx_l].point;
+            if (it.feature_per_frame[idx_l].camera_id != it.feature_per_frame[idx_r].camera_id)
+                continue;
 
+            a = it.feature_per_frame[idx_l].point;
             b = it.feature_per_frame[idx_r].point;
             
             corres.push_back(make_pair(a, b));
@@ -263,6 +263,7 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
     {
         vector<cv::Point2f> pts2D;
         vector<cv::Point3f> pts3D;
+        int current_camera_id = -1;
         for (auto &it_per_id : feature)
         {
             if (it_per_id.estimated_depth > 0)
@@ -270,7 +271,14 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
                 int index = frameCnt - it_per_id.start_frame;
                 if((int)it_per_id.feature_per_frame.size() >= index + 1)
                 {
-                    Vector3d ptsInCam = ric[0] * (it_per_id.feature_per_frame[0].point * it_per_id.estimated_depth) + tic[0];
+                    int anchor_camera_id = it_per_id.feature_per_frame[0].camera_id;
+                    int obs_camera_id = it_per_id.feature_per_frame[index].camera_id;
+                    if (current_camera_id < 0)
+                        current_camera_id = obs_camera_id;
+                    if (obs_camera_id != current_camera_id)
+                        continue;
+
+                    Vector3d ptsInCam = ric[anchor_camera_id] * (it_per_id.feature_per_frame[0].point * it_per_id.estimated_depth) + tic[anchor_camera_id];
                     Vector3d ptsInWorld = Rs[it_per_id.start_frame] * ptsInCam + Ps[it_per_id.start_frame];
 
                     cv::Point3f point3d(ptsInWorld.x(), ptsInWorld.y(), ptsInWorld.z());
@@ -280,17 +288,19 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
                 }
             }
         }
+        if (current_camera_id < 0)
+            current_camera_id = 0;
         Eigen::Matrix3d RCam;
         Eigen::Vector3d PCam;
         // trans to w_T_cam
-        RCam = Rs[frameCnt - 1] * ric[0];
-        PCam = Rs[frameCnt - 1] * tic[0] + Ps[frameCnt - 1];
+        RCam = Rs[frameCnt - 1] * ric[current_camera_id];
+        PCam = Rs[frameCnt - 1] * tic[current_camera_id] + Ps[frameCnt - 1];
 
         if(solvePoseByPnP(RCam, PCam, pts2D, pts3D))
         {
             // trans to w_T_imu
-            Rs[frameCnt] = RCam * ric[0].transpose(); 
-            Ps[frameCnt] = -RCam * ric[0].transpose() * tic[0] + PCam;
+            Rs[frameCnt] = RCam * ric[current_camera_id].transpose(); 
+            Ps[frameCnt] = -RCam * ric[current_camera_id].transpose() * tic[current_camera_id] + PCam;
 
             Eigen::Quaterniond Q(Rs[frameCnt]);
             //cout << "frameCnt: " << frameCnt <<  " pnp Q " << Q.w() << " " << Q.vec().transpose() << endl;
@@ -306,7 +316,9 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
         if (it_per_id.estimated_depth > 0)
             continue;
 
-        if(STEREO && it_per_id.feature_per_frame[0].is_stereo)
+        const int anchor_camera_id = it_per_id.feature_per_frame[0].camera_id;
+
+        if(STEREO && anchor_camera_id == 0 && it_per_id.feature_per_frame[0].is_stereo)
         {
             int imu_i = it_per_id.start_frame;
             Eigen::Matrix<double, 3, 4> leftPose;
@@ -349,15 +361,16 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
         {
             int imu_i = it_per_id.start_frame;
             Eigen::Matrix<double, 3, 4> leftPose;
-            Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[0];
-            Eigen::Matrix3d R0 = Rs[imu_i] * ric[0];
+            Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[anchor_camera_id];
+            Eigen::Matrix3d R0 = Rs[imu_i] * ric[anchor_camera_id];
             leftPose.leftCols<3>() = R0.transpose();
             leftPose.rightCols<1>() = -R0.transpose() * t0;
 
             imu_i++;
             Eigen::Matrix<double, 3, 4> rightPose;
-            Eigen::Vector3d t1 = Ps[imu_i] + Rs[imu_i] * tic[0];
-            Eigen::Matrix3d R1 = Rs[imu_i] * ric[0];
+            const int camera_id_1 = it_per_id.feature_per_frame[1].camera_id;
+            Eigen::Vector3d t1 = Ps[imu_i] + Rs[imu_i] * tic[camera_id_1];
+            Eigen::Matrix3d R1 = Rs[imu_i] * ric[camera_id_1];
             rightPose.leftCols<3>() = R1.transpose();
             rightPose.rightCols<1>() = -R1.transpose() * t1;
 
@@ -390,8 +403,8 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
         int svd_idx = 0;
 
         Eigen::Matrix<double, 3, 4> P0;
-        Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[0];
-        Eigen::Matrix3d R0 = Rs[imu_i] * ric[0];
+        Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[anchor_camera_id];
+        Eigen::Matrix3d R0 = Rs[imu_i] * ric[anchor_camera_id];
         P0.leftCols<3>() = Eigen::Matrix3d::Identity();
         P0.rightCols<1>() = Eigen::Vector3d::Zero();
 
@@ -399,8 +412,9 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
         {
             imu_j++;
 
-            Eigen::Vector3d t1 = Ps[imu_j] + Rs[imu_j] * tic[0];
-            Eigen::Matrix3d R1 = Rs[imu_j] * ric[0];
+            const int camera_id_j = it_per_frame.camera_id;
+            Eigen::Vector3d t1 = Ps[imu_j] + Rs[imu_j] * tic[camera_id_j];
+            Eigen::Matrix3d R1 = Rs[imu_j] * ric[camera_id_j];
             Eigen::Vector3d t = R0.transpose() * (t1 - t0);
             Eigen::Matrix3d R = R0.transpose() * R1;
             Eigen::Matrix<double, 3, 4> P;
@@ -447,7 +461,9 @@ void FeatureManager::removeOutlier(set<int> &outlierIndex)
     }
 }
 
-void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3d marg_P, Eigen::Matrix3d new_R, Eigen::Vector3d new_P)
+void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::Vector3d back_P0,
+                                          Eigen::Matrix3d new_R0, Eigen::Vector3d new_P0,
+                                          Vector3d tic[], Matrix3d ric[])
 {
     for (auto it = feature.begin(), it_next = feature.begin();
          it != feature.end(); it = it_next)
@@ -458,6 +474,7 @@ void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3
             it->start_frame--;
         else
         {
+            const int old_camera_id = it->feature_per_frame[0].camera_id;
             Eigen::Vector3d uv_i = it->feature_per_frame[0].point;  
             it->feature_per_frame.erase(it->feature_per_frame.begin());
             if (it->feature_per_frame.size() < 2)
@@ -467,6 +484,11 @@ void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d marg_R, Eigen::Vector3
             }
             else
             {
+                const int new_camera_id = it->feature_per_frame[0].camera_id;
+                Eigen::Matrix3d marg_R = back_R0 * ric[old_camera_id];
+                Eigen::Vector3d marg_P = back_P0 + back_R0 * tic[old_camera_id];
+                Eigen::Matrix3d new_R = new_R0 * ric[new_camera_id];
+                Eigen::Vector3d new_P = new_P0 + new_R0 * tic[new_camera_id];
                 Eigen::Vector3d pts_i = uv_i * it->estimated_depth;
                 Eigen::Vector3d w_pts_i = marg_R * pts_i + marg_P;
                 Eigen::Vector3d pts_j = new_R.transpose() * (w_pts_i - new_P);

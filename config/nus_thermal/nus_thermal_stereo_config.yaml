@@ -49,6 +49,7 @@ deep_feature_max_keypoints: 150
 deep_feature_keypoint_threshold: 0.004
 deep_feature_remove_borders: 4
 deep_feature_stereo_ransac: 0
+enable_nuc_handle: 1
 
 max_solver_time: 0.04
 max_num_iterations: 8
