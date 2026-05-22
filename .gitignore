@@ -14,3 +14,9 @@ result_gps.txt
 2*.txt
 camera_camera_calib.yaml
 camera_chessboard_data.dat
+
+output/plnet_s0.engine
+output/plnet_s1.engine
+output/superglue_indoor_sim_int32.engine
+output/superpoint_lightglue.engine
+output/superpoint_v1_sim_int32.engine
