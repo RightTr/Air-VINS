@@ -25,6 +25,13 @@ using namespace Eigen;
 #include "parameters.h"
 #include "../utility/tic_toc.h"
 
+enum VisualTrackingMode
+{
+    TRACKING_MODE_STEREO = 0,
+    TRACKING_MODE_NUC_LEFT_ONLY = 1,
+    TRACKING_MODE_NUC_RIGHT_ONLY = 2
+};
+
 class FeaturePerFrame
 {
   public:
@@ -68,11 +75,12 @@ class FeaturePerId
     vector<FeaturePerFrame> feature_per_frame;
     int used_num;
     double estimated_depth;
+    bool reliable_depth;
     int solve_flag; // 0 haven't solve yet; 1 solve succ; 2 solve fail;
 
     FeaturePerId(int _feature_id, int _start_frame)
         : feature_id(_feature_id), start_frame(_start_frame),
-          used_num(0), estimated_depth(-1.0), solve_flag(0)
+          used_num(0), estimated_depth(-1.0), reliable_depth(false), solve_flag(0)
     {
     }
 
@@ -85,6 +93,11 @@ class FeatureManager
     FeatureManager(Matrix3d _Rs[]);
 
     void setRic(Matrix3d _ric[]);
+    void setVisualTrackingMode(VisualTrackingMode mode);
+    bool knownLandmarksOnly() const;
+    bool allowDepthInitialization() const;
+    bool hasReliableDepth(const FeaturePerId &feature_per_id) const;
+    bool useFeatureForOptimization(const FeaturePerId &feature_per_id) const;
     void clearState();
     int getFeatureCount();
     bool addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td);
@@ -116,6 +129,7 @@ class FeatureManager
     double compensatedParallax2(const FeaturePerId &it_per_id, int frame_count);
     const Matrix3d *Rs;
     Matrix3d ric[2];
+    VisualTrackingMode visual_tracking_mode;
 };
 
 #endif

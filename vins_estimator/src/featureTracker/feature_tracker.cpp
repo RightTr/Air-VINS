@@ -14,6 +14,7 @@
 #include "../utility/visualization.h"
 #include "point_matcher.h"
 #include "super_point.h"
+#include <algorithm>
 #include <sys/stat.h>
 
 namespace
@@ -121,6 +122,8 @@ FeatureTracker::FeatureTracker()
     primary_camera_id = 0;
     deep_feature_ready = false;
     prev_deep_features.resize(259, 0);
+    left_deep_features.resize(259, 0);
+    right_deep_features.resize(259, 0);
 }
 
 void FeatureTracker::resetTrackingState()
@@ -130,6 +133,8 @@ void FeatureTracker::resetTrackingState()
     fisheye_mask.release();
     prev_img.release();
     cur_img.release();
+    left_prev_img.release();
+    right_prev_img.release();
 
     n_pts.clear();
     predict_pts.clear();
@@ -145,12 +150,17 @@ void FeatureTracker::resetTrackingState()
     ids.clear();
     ids_right.clear();
     track_cnt.clear();
+    left_ids.clear();
+    left_track_cnt.clear();
+    right_track_cnt.clear();
     cur_un_pts_map.clear();
     prev_un_pts_map.clear();
     cur_un_right_pts_map.clear();
     prev_un_right_pts_map.clear();
     prevLeftPtsMap.clear();
     prev_deep_features.resize(259, 0);
+    left_deep_features.resize(259, 0);
+    right_deep_features.resize(259, 0);
     cur_time = 0;
     prev_time = 0;
     stereo_cam = 0;
@@ -214,7 +224,7 @@ void FeatureTracker::initDeepFrontend()
 
     if (!deep_superpoint->build())
     {
-        ROS_WARN("deep frontend superpoint build failed, fallback to KLT");
+        ROS_ERROR("deep frontend superpoint build failed, deep feature tracking disabled");
         deep_superpoint.reset();
         deep_point_matcher.reset();
         deep_feature_ready = false;
@@ -222,7 +232,7 @@ void FeatureTracker::initDeepFrontend()
     }
     if (!deep_point_matcher || !deep_point_matcher->ready())
     {
-        ROS_WARN("deep frontend matcher build failed, fallback to KLT");
+        ROS_ERROR("deep frontend matcher build failed, deep feature tracking disabled");
         deep_superpoint.reset();
         deep_point_matcher.reset();
         deep_feature_ready = false;
@@ -270,21 +280,31 @@ double FeatureTracker::distance(cv::Point2f &pt1, cv::Point2f &pt2)
     return sqrt(dx * dx + dy * dy);
 }
 
-map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id_)
+map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id_, bool allow_new_features)
 {
     if (primary_camera_id_ < 0 || primary_camera_id_ >= static_cast<int>(m_camera.size()))
     {
         ROS_WARN_STREAM("invalid primary camera id " << primary_camera_id_ << ", fallback to 0");
         primary_camera_id_ = 0;
     }
-    if (primary_camera_id_ != primary_camera_id)
+    if (primary_camera_id_ != primary_camera_id && allow_new_features)
     {
         resetTrackingState();
         primary_camera_id = primary_camera_id_;
     }
-    if (DEEP_FEATURE && deep_feature_ready)
+    if (DEEP_FEATURE)
     {
-        return trackImageDeep(_cur_time, _img, _img1, primary_camera_id);
+        if (!deep_feature_ready)
+        {
+            ROS_ERROR_THROTTLE(1.0, "deep feature is enabled but frontend is not ready; skip image tracking instead of using KLT");
+            return map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>>();
+        }
+        return trackImageDeep(_cur_time, _img, _img1, primary_camera_id_, allow_new_features);
+    }
+    if (primary_camera_id_ != primary_camera_id)
+    {
+        resetTrackingState();
+        primary_camera_id = primary_camera_id_;
     }
 
     TicToc t_r;
@@ -358,7 +378,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     for (auto &n : track_cnt)
         n++;
 
-    if (1)
+    if (allow_new_features)
     {
         //rejectWithF();
         ROS_DEBUG("set mask begins");
@@ -499,7 +519,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     return featureFrame;
 }
 
-map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id_)
+map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id_, bool allow_new_features)
 {
     if (primary_camera_id_ < 0 || primary_camera_id_ >= static_cast<int>(m_camera.size()))
         primary_camera_id_ = 0;
@@ -509,8 +529,60 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     col = cur_img.cols;
     cv::Mat rightImg = _img1;
 
-    vector<int> prev_ids = ids;
-    vector<int> prev_track_cnt = track_cnt;
+    vector<int> prev_ids;
+    vector<int> prev_track_cnt;
+    Eigen::Matrix<float, 259, Eigen::Dynamic> history_features(259, 0);
+    cv::Mat history_img;
+    bool mixed_history_sources = false;
+
+    auto appendHistory = [&](const vector<int> &candidate_ids,
+                             const vector<int> &candidate_track_cnt,
+                             const Eigen::Matrix<float, 259, Eigen::Dynamic> &candidate_features,
+                             const cv::Mat &candidate_img)
+    {
+        if (candidate_ids.empty())
+            return;
+        if (candidate_features.cols() != static_cast<int>(candidate_ids.size()))
+            return;
+        if (history_img.empty() && !candidate_img.empty())
+            history_img = candidate_img;
+        else if (!candidate_img.empty() && !history_img.empty() && candidate_img.data != history_img.data)
+            mixed_history_sources = true;
+
+        for (int col = 0; col < static_cast<int>(candidate_ids.size()); ++col)
+        {
+            const int feature_id = candidate_ids[col];
+            if (std::find(prev_ids.begin(), prev_ids.end(), feature_id) != prev_ids.end())
+                continue;
+
+            const int next_col = history_features.cols();
+            history_features.conservativeResize(259, next_col + 1);
+            history_features.col(next_col) = candidate_features.col(col);
+            prev_ids.push_back(feature_id);
+            if (col < static_cast<int>(candidate_track_cnt.size()))
+                prev_track_cnt.push_back(candidate_track_cnt[col]);
+            else
+                prev_track_cnt.push_back(1);
+        }
+    };
+
+    if (allow_new_features)
+    {
+        if (primary_camera_id_ == 1)
+            appendHistory(ids_right, right_track_cnt, right_deep_features, right_prev_img);
+        else
+            appendHistory(left_ids, left_track_cnt, left_deep_features, left_prev_img);
+    }
+    else if (primary_camera_id_ == 1)
+    {
+        appendHistory(ids_right, right_track_cnt, right_deep_features, right_prev_img);
+        appendHistory(left_ids, left_track_cnt, left_deep_features, left_prev_img);
+    }
+    else
+    {
+        appendHistory(left_ids, left_track_cnt, left_deep_features, left_prev_img);
+        appendHistory(ids_right, right_track_cnt, right_deep_features, right_prev_img);
+    }
 
     cur_pts.clear();
     ids.clear();
@@ -532,11 +604,11 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     Eigen::Matrix<float, 259, Eigen::Dynamic> matched_features;
     matched_features.resize(259, 0);
 
-    if (prev_deep_features.cols() > 0 && prev_deep_features.cols() == static_cast<int>(prev_ids.size()))
+    if (history_features.cols() > 0 && history_features.cols() == static_cast<int>(prev_ids.size()))
     {
         vector<cv::DMatch> matches;
         if (deep_point_matcher && deep_point_matcher->ready())
-            deep_point_matcher->MatchingPoints(prev_deep_features, current_features, matches, true);
+            deep_point_matcher->MatchingPoints(history_features, current_features, matches, true);
 
         for (const auto &match : matches)
         {
@@ -559,26 +631,33 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     }
 
     matched_features.resize(259, kept_indexes.size());
+    int kept_feature_count = 0;
     for (size_t i = 0; i < kept_indexes.size(); ++i)
     {
         int idx = kept_indexes[i];
         cv::Point2f pt(current_features(1, idx), current_features(2, idx));
-        cur_pts.push_back(pt);
-        matched_features.col(i) = current_features.col(idx);
         if (current_prev_index[idx] >= 0)
         {
+            cur_pts.push_back(pt);
+            matched_features.col(kept_feature_count++) = current_features.col(idx);
             ids.push_back(prev_ids[current_prev_index[idx]]);
             track_cnt.push_back(prev_track_cnt[current_prev_index[idx]] + 1);
         }
-        else
+        else if (allow_new_features)
         {
+            cur_pts.push_back(pt);
+            matched_features.col(kept_feature_count++) = current_features.col(idx);
             ids.push_back(n_id++);
             track_cnt.push_back(1);
         }
     }
+    matched_features.conservativeResize(259, kept_feature_count);
 
     cur_un_pts = undistortedPts(cur_pts, m_camera[primary_camera_id_]);
-    pts_velocity = ptsVelocity(ids, cur_un_pts, cur_un_pts_map, prev_un_pts_map);
+    if (primary_camera_id_ == 1)
+        pts_velocity = ptsVelocity(ids, cur_un_pts, cur_un_pts_map, prev_un_right_pts_map);
+    else
+        pts_velocity = ptsVelocity(ids, cur_un_pts, cur_un_pts_map, prev_un_pts_map);
 
     if (!_img1.empty() && stereo_cam && primary_camera_id_ == 0)
     {
@@ -594,6 +673,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             cur_un_right_pts.clear();
             right_pts_velocity.clear();
             cur_un_right_pts_map.clear();
+            vector<int> accepted_right_feature_indexes;
 
             for (const auto &match : stereo_matches)
             {
@@ -603,10 +683,20 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
                     continue;
                 ids_right.push_back(ids[match.queryIdx]);
                 cur_right_pts.push_back(cv::Point2f(right_features(1, match.trainIdx), right_features(2, match.trainIdx)));
+                accepted_right_feature_indexes.push_back(match.trainIdx);
             }
 
             cur_un_right_pts = undistortedPts(cur_right_pts, m_camera[1]);
             right_pts_velocity = ptsVelocity(ids_right, cur_un_right_pts, cur_un_right_pts_map, prev_un_right_pts_map);
+            right_deep_features.resize(259, accepted_right_feature_indexes.size());
+            right_track_cnt.clear();
+            right_track_cnt.reserve(ids_right.size());
+            for (size_t i = 0; i < accepted_right_feature_indexes.size(); ++i)
+            {
+                right_deep_features.col(i) = right_features.col(accepted_right_feature_indexes[i]);
+                auto it = std::find(ids.begin(), ids.end(), ids_right[i]);
+                right_track_cnt.push_back(it == ids.end() ? 1 : track_cnt[it - ids.begin()]);
+            }
         }
         prev_un_right_pts_map = cur_un_right_pts_map;
     }
@@ -614,16 +704,15 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     if (SHOW_TRACK)
         drawTrack(cur_img, rightImg, ids, cur_pts, cur_right_pts, prevLeftPtsMap);
 
-    if (DEEP_FEATURE)
+    if (DEEP_FEATURE && !mixed_history_sources)
     {
-        cv::Mat deep_match_img = makeDeepMatchImage(prev_img, cur_img, prev_deep_features, current_features, current_prev_index, kept_indexes);
+        cv::Mat deep_match_img = makeDeepMatchImage(history_img, cur_img, history_features, current_features, current_prev_index, kept_indexes);
         if (!deep_match_img.empty())
             pubDeepMatchImage(deep_match_img, cur_time);
     }
 
     prev_img = cur_img;
     prev_pts = cur_pts;
-    prev_deep_features = matched_features;
     prev_un_pts = cur_un_pts;
     prev_un_pts_map = cur_un_pts_map;
     prev_time = cur_time;
@@ -632,6 +721,28 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     prevLeftPtsMap.clear();
     for (size_t i = 0; i < cur_pts.size(); i++)
         prevLeftPtsMap[ids[i]] = cur_pts[i];
+
+    if (primary_camera_id_ == 1)
+    {
+        ids_right = ids;
+        cur_right_pts = cur_pts;
+        cur_un_right_pts = cur_un_pts;
+        right_pts_velocity = pts_velocity;
+        right_deep_features = matched_features;
+        right_track_cnt = track_cnt;
+        right_prev_img = cur_img;
+        prev_un_right_pts_map = cur_un_pts_map;
+    }
+    else
+    {
+        left_ids = ids;
+        left_track_cnt = track_cnt;
+        left_deep_features = matched_features;
+        left_prev_img = cur_img;
+    }
+
+    if (primary_camera_id_ == 0)
+        prev_un_right_pts_map = cur_un_right_pts_map;
 
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> featureFrame;
     for (size_t i = 0; i < ids.size(); i++)
@@ -903,6 +1014,53 @@ void FeatureTracker::setPrediction(map<int, Eigen::Vector3d> &predictPts)
 
 void FeatureTracker::removeOutliers(set<int> &removePtsIds)
 {
+    auto filterHistoryById = [&removePtsIds](vector<int> &history_ids,
+                                             vector<int> &history_track_cnt,
+                                             Eigen::Matrix<float, 259, Eigen::Dynamic> &history_features)
+    {
+        const int old_size = static_cast<int>(history_ids.size());
+        if (old_size == 0)
+        {
+            history_track_cnt.clear();
+            history_features.resize(259, 0);
+            return;
+        }
+
+        vector<int> keep_indexes;
+        vector<int> kept_ids;
+        vector<int> kept_track_cnt;
+        keep_indexes.reserve(old_size);
+        kept_ids.reserve(old_size);
+        kept_track_cnt.reserve(old_size);
+
+        for (int i = 0; i < old_size; i++)
+        {
+            if (removePtsIds.find(history_ids[i]) != removePtsIds.end())
+                continue;
+            keep_indexes.push_back(i);
+            kept_ids.push_back(history_ids[i]);
+            if (i < static_cast<int>(history_track_cnt.size()))
+                kept_track_cnt.push_back(history_track_cnt[i]);
+            else
+                kept_track_cnt.push_back(1);
+        }
+
+        history_ids.swap(kept_ids);
+        history_track_cnt.swap(kept_track_cnt);
+
+        if (history_features.cols() == old_size)
+        {
+            Eigen::Matrix<float, 259, Eigen::Dynamic> filtered_features(259, keep_indexes.size());
+            for (size_t i = 0; i < keep_indexes.size(); i++)
+                filtered_features.col(i) = history_features.col(keep_indexes[i]);
+            history_features = filtered_features;
+        }
+        else if (history_features.cols() != static_cast<int>(history_ids.size()))
+        {
+            history_features.resize(259, 0);
+        }
+    };
+
     std::set<int>::iterator itSet;
     vector<uchar> status;
     for (size_t i = 0; i < ids.size(); i++)
@@ -935,6 +1093,10 @@ void FeatureTracker::removeOutliers(set<int> &removePtsIds)
         reduceVector(predict_pts, status);
     if (predict_pts_debug.size() == status.size())
         reduceVector(predict_pts_debug, status);
+
+    // Keep deep-feature histories consistent with backend outlier rejection.
+    filterHistoryById(left_ids, left_track_cnt, left_deep_features);
+    filterHistoryById(ids_right, right_track_cnt, right_deep_features);
 }
 
 

@@ -19,6 +19,7 @@ FeatureManager::FeatureManager(Matrix3d _Rs[])
 {
     for (int i = 0; i < NUM_OF_CAM; i++)
         ric[i].setIdentity();
+    visual_tracking_mode = TRACKING_MODE_STEREO;
 }
 
 void FeatureManager::setRic(Matrix3d _ric[])
@@ -29,9 +30,39 @@ void FeatureManager::setRic(Matrix3d _ric[])
     }
 }
 
+void FeatureManager::setVisualTrackingMode(VisualTrackingMode mode)
+{
+    visual_tracking_mode = mode;
+}
+
+bool FeatureManager::knownLandmarksOnly() const
+{
+    return visual_tracking_mode != TRACKING_MODE_STEREO;
+}
+
+bool FeatureManager::allowDepthInitialization() const
+{
+    return !knownLandmarksOnly();
+}
+
+bool FeatureManager::hasReliableDepth(const FeaturePerId &feature_per_id) const
+{
+    return feature_per_id.estimated_depth > 0 && feature_per_id.reliable_depth;
+}
+
+bool FeatureManager::useFeatureForOptimization(const FeaturePerId &feature_per_id) const
+{
+    if (feature_per_id.used_num < 4)
+        return false;
+    if (knownLandmarksOnly() && !hasReliableDepth(feature_per_id))
+        return false;
+    return true;
+}
+
 void FeatureManager::clearState()
 {
     feature.clear();
+    visual_tracking_mode = TRACKING_MODE_STEREO;
 }
 
 int FeatureManager::getFeatureCount()
@@ -40,7 +71,7 @@ int FeatureManager::getFeatureCount()
     for (auto &it : feature)
     {
         it.used_num = it.feature_per_frame.size();
-        if (it.used_num >= 4)
+        if (useFeatureForOptimization(it))
         {
             cnt++;
         }
@@ -75,6 +106,8 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
 
         if (it == feature.end())
         {
+            if (knownLandmarksOnly())
+                continue;
             feature.push_back(FeaturePerId(feature_id, frame_count));
             feature.back().feature_per_frame.push_back(f_per_fra);
             new_feature_num++;
@@ -145,7 +178,7 @@ void FeatureManager::setDepth(const VectorXd &x)
     for (auto &it_per_id : feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();
-        if (it_per_id.used_num < 4)
+        if (!useFeatureForOptimization(it_per_id))
             continue;
 
         it_per_id.estimated_depth = 1.0 / x(++feature_index);
@@ -153,6 +186,7 @@ void FeatureManager::setDepth(const VectorXd &x)
         if (it_per_id.estimated_depth < 0)
         {
             it_per_id.solve_flag = 2;
+            it_per_id.reliable_depth = false;
         }
         else
             it_per_id.solve_flag = 1;
@@ -173,7 +207,10 @@ void FeatureManager::removeFailures()
 void FeatureManager::clearDepth()
 {
     for (auto &it_per_id : feature)
+    {
         it_per_id.estimated_depth = -1;
+        it_per_id.reliable_depth = false;
+    }
 }
 
 VectorXd FeatureManager::getDepthVector()
@@ -183,7 +220,7 @@ VectorXd FeatureManager::getDepthVector()
     for (auto &it_per_id : feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();
-        if (it_per_id.used_num < 4)
+        if (!useFeatureForOptimization(it_per_id))
             continue;
 #if 1
         dep_vec(++feature_index) = 1. / it_per_id.estimated_depth;
@@ -266,7 +303,8 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
         int current_camera_id = -1;
         for (auto &it_per_id : feature)
         {
-            if (it_per_id.estimated_depth > 0)
+            const bool usable_depth = knownLandmarksOnly() ? hasReliableDepth(it_per_id) : it_per_id.estimated_depth > 0;
+            if (usable_depth)
             {
                 int index = frameCnt - it_per_id.start_frame;
                 if((int)it_per_id.feature_per_frame.size() >= index + 1)
@@ -311,6 +349,9 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
 
 void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[])
 {
+    if (!allowDepthInitialization())
+        return;
+
     for (auto &it_per_id : feature)
     {
         if (it_per_id.estimated_depth > 0)
@@ -347,9 +388,15 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
             localPoint = leftPose.leftCols<3>() * point3d + leftPose.rightCols<1>();
             double depth = localPoint.z();
             if (depth > 0)
+            {
                 it_per_id.estimated_depth = depth;
+                it_per_id.reliable_depth = true;
+            }
             else
+            {
                 it_per_id.estimated_depth = INIT_DEPTH;
+                it_per_id.reliable_depth = false;
+            }
             /*
             Vector3d ptsGt = pts_gt[it_per_id.feature_id];
             printf("stereo %d pts: %f %f %f gt: %f %f %f \n",it_per_id.feature_id, point3d.x(), point3d.y(), point3d.z(),
@@ -383,9 +430,15 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
             localPoint = leftPose.leftCols<3>() * point3d + leftPose.rightCols<1>();
             double depth = localPoint.z();
             if (depth > 0)
+            {
                 it_per_id.estimated_depth = depth;
+                it_per_id.reliable_depth = true;
+            }
             else
+            {
                 it_per_id.estimated_depth = INIT_DEPTH;
+                it_per_id.reliable_depth = false;
+            }
             /*
             Vector3d ptsGt = pts_gt[it_per_id.feature_id];
             printf("motion  %d pts: %f %f %f gt: %f %f %f \n",it_per_id.feature_id, point3d.x(), point3d.y(), point3d.z(),
@@ -439,6 +492,11 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
         if (it_per_id.estimated_depth < 0.1)
         {
             it_per_id.estimated_depth = INIT_DEPTH;
+            it_per_id.reliable_depth = false;
+        }
+        else
+        {
+            it_per_id.reliable_depth = true;
         }
 
     }
@@ -494,9 +552,14 @@ void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::Vector
                 Eigen::Vector3d pts_j = new_R.transpose() * (w_pts_i - new_P);
                 double dep_j = pts_j(2);
                 if (dep_j > 0)
+                {
                     it->estimated_depth = dep_j;
+                }
                 else
+                {
                     it->estimated_depth = INIT_DEPTH;
+                    it->reliable_depth = false;
+                }
             }
         }
         // remove tracking-lost feature after marginalize

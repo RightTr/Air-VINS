@@ -36,6 +36,25 @@
 #include "../factor/projectionOneFrameTwoCamFactor.h"
 #include "../featureTracker/feature_tracker.h"
 
+typedef map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureFrameMap;
+
+struct VisualMeasurement
+{
+    double header;
+    FeatureFrameMap feature_frame;
+    VisualTrackingMode tracking_mode;
+
+    VisualMeasurement()
+        : header(0.0), tracking_mode(TRACKING_MODE_STEREO)
+    {
+    }
+
+    VisualMeasurement(double _header, const FeatureFrameMap &_feature_frame, VisualTrackingMode _tracking_mode)
+        : header(_header), feature_frame(_feature_frame), tracking_mode(_tracking_mode)
+    {
+    }
+};
+
 
 class Estimator
 {
@@ -47,8 +66,8 @@ class Estimator
     // interface
     void initFirstPose(Eigen::Vector3d p, Eigen::Matrix3d r);
     void inputIMU(double t, const Vector3d &linearAcceleration, const Vector3d &angularVelocity);
-    void inputFeature(double t, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &featureFrame);
-    void inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0);
+    void inputFeature(double t, const FeatureFrameMap &featureFrame, VisualTrackingMode tracking_mode = TRACKING_MODE_STEREO);
+    void inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0, bool allow_new_features = true, VisualTrackingMode tracking_mode = TRACKING_MODE_STEREO);
     void resetFeatureTracker();
     void processIMU(double t, double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
     void processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const double header);
@@ -98,7 +117,7 @@ class Estimator
     std::mutex mPropagate;
     queue<pair<double, Eigen::Vector3d>> accBuf;
     queue<pair<double, Eigen::Vector3d>> gyrBuf;
-    queue<pair<double, map<int, vector<pair<int, Eigen::Matrix<double, 7, 1> > > > > > featureBuf;
+    queue<VisualMeasurement> featureBuf;
     double prevTime, curTime;
     bool openExEstimation;
 

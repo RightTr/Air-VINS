@@ -41,7 +41,7 @@ class FeatureTracker
 {
 public:
     FeatureTracker();
-    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0);
+    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0, bool allow_new_features = true);
     void clearState();
     void resetTrackingState();
     void setMask();
@@ -70,6 +70,7 @@ public:
     cv::Mat mask;
     cv::Mat fisheye_mask;
     cv::Mat prev_img, cur_img;
+    cv::Mat left_prev_img, right_prev_img;
     vector<cv::Point2f> n_pts;
     vector<cv::Point2f> predict_pts;
     vector<cv::Point2f> predict_pts_debug;
@@ -77,8 +78,9 @@ public:
     vector<cv::Point2f> prev_un_pts, cur_un_pts, cur_un_right_pts;
     vector<cv::Point2f> pts_velocity, right_pts_velocity;
     vector<int> ids, ids_right;
-    vector<int> track_cnt;
-    Eigen::Matrix<float, 259, Eigen::Dynamic> prev_deep_features;
+    vector<int> track_cnt, left_track_cnt, right_track_cnt;
+    vector<int> left_ids;
+    Eigen::Matrix<float, 259, Eigen::Dynamic> prev_deep_features, left_deep_features, right_deep_features;
     map<int, cv::Point2f> cur_un_pts_map, prev_un_pts_map;
     map<int, cv::Point2f> cur_un_right_pts_map, prev_un_right_pts_map;
     map<int, cv::Point2f> prevLeftPtsMap;
@@ -94,6 +96,6 @@ public:
     std::shared_ptr<SuperPoint> deep_superpoint;
 
 private:
-    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0);
+    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0, bool allow_new_features = true);
     void initDeepFrontend();
 };

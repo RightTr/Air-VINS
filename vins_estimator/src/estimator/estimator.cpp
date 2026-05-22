@@ -163,16 +163,16 @@ void Estimator::resetFeatureTracker()
     featureTracker.resetTrackingState();
 }
 
-void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id)
+void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id, bool allow_new_features, VisualTrackingMode tracking_mode)
 {
     inputImageCnt++;
-    map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> featureFrame;
+    FeatureFrameMap featureFrame;
     TicToc featureTrackerTime;
 
     if(_img1.empty())
-        featureFrame = featureTracker.trackImage(t, _img, cv::Mat(), primary_camera_id);
+        featureFrame = featureTracker.trackImage(t, _img, cv::Mat(), primary_camera_id, allow_new_features);
     else
-        featureFrame = featureTracker.trackImage(t, _img, _img1, primary_camera_id);
+        featureFrame = featureTracker.trackImage(t, _img, _img1, primary_camera_id, allow_new_features);
     //printf("featureTracker time: %f\n", featureTrackerTime.toc());
 
     if (SHOW_TRACK)
@@ -186,14 +186,14 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1, 
         if(inputImageCnt % 2 == 0)
         {
             mBuf.lock();
-            featureBuf.push(make_pair(t, featureFrame));
+            featureBuf.push(VisualMeasurement(t, featureFrame, tracking_mode));
             mBuf.unlock();
         }
     }
     else
     {
         mBuf.lock();
-        featureBuf.push(make_pair(t, featureFrame));
+        featureBuf.push(VisualMeasurement(t, featureFrame, tracking_mode));
         mBuf.unlock();
         TicToc processTime;
         processMeasurements();
@@ -219,10 +219,10 @@ void Estimator::inputIMU(double t, const Vector3d &linearAcceleration, const Vec
     }
 }
 
-void Estimator::inputFeature(double t, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &featureFrame)
+void Estimator::inputFeature(double t, const FeatureFrameMap &featureFrame, VisualTrackingMode tracking_mode)
 {
     mBuf.lock();
-    featureBuf.push(make_pair(t, featureFrame));
+    featureBuf.push(VisualMeasurement(t, featureFrame, tracking_mode));
     mBuf.unlock();
 
     if(!MULTIPLE_THREAD)
@@ -278,15 +278,15 @@ void Estimator::processMeasurements()
     while (1)
     {
         //printf("process measurments\n");
-        pair<double, map<int, vector<pair<int, Eigen::Matrix<double, 7, 1> > > > > feature;
+        VisualMeasurement feature;
         vector<pair<double, Eigen::Vector3d>> accVector, gyrVector;
         if(!featureBuf.empty())
         {
             feature = featureBuf.front();
-            curTime = feature.first + td;
+            curTime = feature.header + td;
             while(1)
             {
-                if ((!USE_IMU  || IMUAvailable(feature.first + td)))
+                if ((!USE_IMU  || IMUAvailable(feature.header + td)))
                     break;
                 else
                 {
@@ -321,14 +321,15 @@ void Estimator::processMeasurements()
                 }
             }
             mProcess.lock();
-            processImage(feature.second, feature.first);
+            f_manager.setVisualTrackingMode(feature.tracking_mode);
+            processImage(feature.feature_frame, feature.header);
             prevTime = curTime;
 
             printStatistics(*this, 0);
 
             std_msgs::Header header;
             header.frame_id = "world";
-            header.stamp = ros::Time(feature.first);
+            header.stamp = ros::Time(feature.header);
 
             pubOdometry(*this, header);
             pubKeyPoses(*this, header);
@@ -1072,7 +1073,7 @@ void Estimator::optimization()
     for (auto &it_per_id : f_manager.feature)
     {
         it_per_id.used_num = it_per_id.feature_per_frame.size();
-        if (it_per_id.used_num < 4)
+        if (!f_manager.useFeatureForOptimization(it_per_id))
             continue;
  
         ++feature_index;
@@ -1193,7 +1194,7 @@ void Estimator::optimization()
             for (auto &it_per_id : f_manager.feature)
             {
                 it_per_id.used_num = it_per_id.feature_per_frame.size();
-                if (it_per_id.used_num < 4)
+                if (!f_manager.useFeatureForOptimization(it_per_id))
                     continue;
 
                 ++feature_index;
@@ -1544,7 +1545,7 @@ void Estimator::outliersRejection(set<int> &removeIndex)
         double err = 0;
         int errCnt = 0;
         it_per_id.used_num = it_per_id.feature_per_frame.size();
-        if (it_per_id.used_num < 4)
+        if (!f_manager.useFeatureForOptimization(it_per_id))
             continue;
         feature_index ++;
         int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;

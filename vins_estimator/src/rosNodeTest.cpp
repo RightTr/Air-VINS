@@ -81,6 +81,7 @@ void sync_process()
 {
     cv::Mat prev_image0, prev_image1;
     bool skipped_visual_update = false;
+    bool nuc_mono_fallback = false;
     while(1)
     {
         if(STEREO)
@@ -131,25 +132,29 @@ void sync_process()
                     if (!skipped_visual_update)
                     {
                         ROS_WARN("NUC: both thermal cameras frozen, skip visual update");
-                        estimator.resetFeatureTracker();
                         skipped_visual_update = true;
                     }
                 }
                 else if (ENABLE_NUC_HANDLE && left_frozen)
                 {
                     ROS_WARN_THROTTLE(1.0, "NUC: left thermal camera frozen, use right camera as monocular input");
-                    estimator.inputImage(time, image1, cv::Mat(), 1);
+                    estimator.inputImage(time, image1, cv::Mat(), 1, false, TRACKING_MODE_NUC_LEFT_ONLY);
+                    nuc_mono_fallback = true;
                     skipped_visual_update = false;
                 }
                 else if (ENABLE_NUC_HANDLE && right_frozen)
                 {
                     ROS_WARN_THROTTLE(1.0, "NUC: right thermal camera frozen, use left camera as monocular input");
-                    estimator.inputImage(time, image0, cv::Mat(), 0);
+                    estimator.inputImage(time, image0, cv::Mat(), 0, false, TRACKING_MODE_NUC_RIGHT_ONLY);
+                    nuc_mono_fallback = true;
                     skipped_visual_update = false;
                 }
                 else
                 {
-                    estimator.inputImage(time, image0, image1, 0);
+                    if (nuc_mono_fallback)
+                        ROS_WARN("NUC: stereo recovered, keep tracked landmarks and resume stereo updates");
+                    estimator.inputImage(time, image0, image1, 0, true, TRACKING_MODE_STEREO);
+                    nuc_mono_fallback = false;
                     skipped_visual_update = false;
                 }
 
