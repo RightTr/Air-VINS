@@ -94,6 +94,7 @@ class FeatureManager
 
     void setRic(Matrix3d _ric[]);
     void setVisualTrackingMode(VisualTrackingMode mode);
+    void setActiveCameraId(int camera_id);
     bool knownLandmarksOnly() const;
     bool allowDepthInitialization() const;
     bool hasReliableDepth(const FeaturePerId &feature_per_id) const;
@@ -110,7 +111,7 @@ class FeatureManager
     void triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[]);
     void triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matrix<double, 3, 4> &Pose1,
                             Eigen::Vector2d &point0, Eigen::Vector2d &point1, Eigen::Vector3d &point_3d);
-    void initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[]);
+    void initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[], int active_camera_id);
     bool solvePoseByPnP(Eigen::Matrix3d &R_initial, Eigen::Vector3d &P_initial, 
                             vector<cv::Point2f> &pts2D, vector<cv::Point3f> &pts3D);
     void removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::Vector3d back_P0,
@@ -130,6 +131,7 @@ class FeatureManager
     const Matrix3d *Rs;
     Matrix3d ric[2];
     VisualTrackingMode visual_tracking_mode;
+    int active_camera_id;
 };
 
 #endif

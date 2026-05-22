@@ -82,6 +82,9 @@ void sync_process()
     cv::Mat prev_image0, prev_image1;
     bool skipped_visual_update = false;
     bool nuc_mono_fallback = false;
+    int nuc_recovery_streak = 0;
+    int nuc_active_camera_id = 0;
+    const int nuc_recovery_required = 3;
     while(1)
     {
         if(STEREO)
@@ -134,27 +137,53 @@ void sync_process()
                         ROS_WARN("NUC: both thermal cameras frozen, skip visual update");
                         skipped_visual_update = true;
                     }
+                    nuc_recovery_streak = 0;
                 }
                 else if (ENABLE_NUC_HANDLE && left_frozen)
                 {
                     ROS_WARN_THROTTLE(1.0, "NUC: left thermal camera frozen, use right camera as monocular input");
+                    nuc_active_camera_id = 1;
                     estimator.inputImage(time, image1, cv::Mat(), 1, false, TRACKING_MODE_NUC_LEFT_ONLY);
                     nuc_mono_fallback = true;
+                    nuc_recovery_streak = 0;
                     skipped_visual_update = false;
                 }
                 else if (ENABLE_NUC_HANDLE && right_frozen)
                 {
                     ROS_WARN_THROTTLE(1.0, "NUC: right thermal camera frozen, use left camera as monocular input");
+                    nuc_active_camera_id = 0;
                     estimator.inputImage(time, image0, cv::Mat(), 0, false, TRACKING_MODE_NUC_RIGHT_ONLY);
                     nuc_mono_fallback = true;
+                    nuc_recovery_streak = 0;
                     skipped_visual_update = false;
                 }
                 else
                 {
                     if (nuc_mono_fallback)
-                        ROS_WARN("NUC: stereo recovered, keep tracked landmarks and resume stereo updates");
-                    estimator.inputImage(time, image0, image1, 0, true, TRACKING_MODE_STEREO);
-                    nuc_mono_fallback = false;
+                    {
+                        nuc_recovery_streak++;
+                        if (nuc_recovery_streak < nuc_recovery_required)
+                        {
+                            ROS_WARN_THROTTLE(1.0, "NUC: waiting for stable stereo recovery (%d/%d)", nuc_recovery_streak, nuc_recovery_required);
+                            if (nuc_active_camera_id == 1)
+                                estimator.inputImage(time, image1, cv::Mat(), 1, false, TRACKING_MODE_NUC_LEFT_ONLY);
+                            else
+                                estimator.inputImage(time, image0, cv::Mat(), 0, false, TRACKING_MODE_NUC_RIGHT_ONLY);
+                        }
+                        else
+                        {
+                            ROS_WARN("NUC: stereo recovered, keep tracked landmarks and resume stereo updates");
+                            estimator.inputImage(time, image0, image1, 0, true, TRACKING_MODE_STEREO);
+                            nuc_mono_fallback = false;
+                            nuc_recovery_streak = 0;
+                        }
+                    }
+                    else
+                    {
+                        estimator.inputImage(time, image0, image1, 0, true, TRACKING_MODE_STEREO);
+                    }
+                    if (!nuc_mono_fallback)
+                        nuc_recovery_streak = 0;
                     skipped_visual_update = false;
                 }
 

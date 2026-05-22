@@ -20,6 +20,7 @@ FeatureManager::FeatureManager(Matrix3d _Rs[])
     for (int i = 0; i < NUM_OF_CAM; i++)
         ric[i].setIdentity();
     visual_tracking_mode = TRACKING_MODE_STEREO;
+    active_camera_id = 0;
 }
 
 void FeatureManager::setRic(Matrix3d _ric[])
@@ -33,6 +34,15 @@ void FeatureManager::setRic(Matrix3d _ric[])
 void FeatureManager::setVisualTrackingMode(VisualTrackingMode mode)
 {
     visual_tracking_mode = mode;
+}
+
+void FeatureManager::setActiveCameraId(int camera_id)
+{
+    if (camera_id < 0)
+        camera_id = 0;
+    if (camera_id >= NUM_OF_CAM)
+        camera_id = NUM_OF_CAM - 1;
+    active_camera_id = camera_id;
 }
 
 bool FeatureManager::knownLandmarksOnly() const
@@ -63,6 +73,7 @@ void FeatureManager::clearState()
 {
     feature.clear();
     visual_tracking_mode = TRACKING_MODE_STEREO;
+    active_camera_id = 0;
 }
 
 int FeatureManager::getFeatureCount()
@@ -293,14 +304,13 @@ bool FeatureManager::solvePoseByPnP(Eigen::Matrix3d &R, Eigen::Vector3d &P,
     return true;
 }
 
-void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[])
+void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[], int active_camera_id_)
 {
 
     if(frameCnt > 0)
     {
         vector<cv::Point2f> pts2D;
         vector<cv::Point3f> pts3D;
-        int current_camera_id = -1;
         for (auto &it_per_id : feature)
         {
             const bool usable_depth = knownLandmarksOnly() ? hasReliableDepth(it_per_id) : it_per_id.estimated_depth > 0;
@@ -311,9 +321,7 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
                 {
                     int anchor_camera_id = it_per_id.feature_per_frame[0].camera_id;
                     int obs_camera_id = it_per_id.feature_per_frame[index].camera_id;
-                    if (current_camera_id < 0)
-                        current_camera_id = obs_camera_id;
-                    if (obs_camera_id != current_camera_id)
+                    if (obs_camera_id != active_camera_id_)
                         continue;
 
                     Vector3d ptsInCam = ric[anchor_camera_id] * (it_per_id.feature_per_frame[0].point * it_per_id.estimated_depth) + tic[anchor_camera_id];
@@ -326,19 +334,17 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
                 }
             }
         }
-        if (current_camera_id < 0)
-            current_camera_id = 0;
         Eigen::Matrix3d RCam;
         Eigen::Vector3d PCam;
         // trans to w_T_cam
-        RCam = Rs[frameCnt - 1] * ric[current_camera_id];
-        PCam = Rs[frameCnt - 1] * tic[current_camera_id] + Ps[frameCnt - 1];
+        RCam = Rs[frameCnt - 1] * ric[active_camera_id_];
+        PCam = Rs[frameCnt - 1] * tic[active_camera_id_] + Ps[frameCnt - 1];
 
         if(solvePoseByPnP(RCam, PCam, pts2D, pts3D))
         {
             // trans to w_T_imu
-            Rs[frameCnt] = RCam * ric[current_camera_id].transpose(); 
-            Ps[frameCnt] = -RCam * ric[current_camera_id].transpose() * tic[current_camera_id] + PCam;
+            Rs[frameCnt] = RCam * ric[active_camera_id_].transpose(); 
+            Ps[frameCnt] = -RCam * ric[active_camera_id_].transpose() * tic[active_camera_id_] + PCam;
 
             Eigen::Quaterniond Q(Rs[frameCnt]);
             //cout << "frameCnt: " << frameCnt <<  " pnp Q " << Q.w() << " " << Q.vec().transpose() << endl;

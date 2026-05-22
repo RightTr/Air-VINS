@@ -186,14 +186,14 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1, 
         if(inputImageCnt % 2 == 0)
         {
             mBuf.lock();
-            featureBuf.push(VisualMeasurement(t, featureFrame, tracking_mode));
+            featureBuf.push(VisualMeasurement(t, featureFrame, tracking_mode, primary_camera_id));
             mBuf.unlock();
         }
     }
     else
     {
         mBuf.lock();
-        featureBuf.push(VisualMeasurement(t, featureFrame, tracking_mode));
+        featureBuf.push(VisualMeasurement(t, featureFrame, tracking_mode, primary_camera_id));
         mBuf.unlock();
         TicToc processTime;
         processMeasurements();
@@ -219,10 +219,10 @@ void Estimator::inputIMU(double t, const Vector3d &linearAcceleration, const Vec
     }
 }
 
-void Estimator::inputFeature(double t, const FeatureFrameMap &featureFrame, VisualTrackingMode tracking_mode)
+void Estimator::inputFeature(double t, const FeatureFrameMap &featureFrame, VisualTrackingMode tracking_mode, int active_camera_id)
 {
     mBuf.lock();
-    featureBuf.push(VisualMeasurement(t, featureFrame, tracking_mode));
+    featureBuf.push(VisualMeasurement(t, featureFrame, tracking_mode, active_camera_id));
     mBuf.unlock();
 
     if(!MULTIPLE_THREAD)
@@ -322,7 +322,8 @@ void Estimator::processMeasurements()
             }
             mProcess.lock();
             f_manager.setVisualTrackingMode(feature.tracking_mode);
-            processImage(feature.feature_frame, feature.header);
+            f_manager.setActiveCameraId(feature.active_camera_id);
+            processImage(feature.feature_frame, feature.header, feature.active_camera_id);
             prevTime = curTime;
 
             printStatistics(*this, 0);
@@ -415,7 +416,7 @@ void Estimator::processIMU(double t, double dt, const Vector3d &linear_accelerat
     gyr_0 = angular_velocity; 
 }
 
-void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const double header)
+void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const double header, int active_camera_id)
 {
     ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
@@ -487,7 +488,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         // stereo + IMU initilization
         if(STEREO && USE_IMU)
         {
-            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric);
+            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
             f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
             if (frame_count == WINDOW_SIZE)
             {
@@ -515,7 +516,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         // stereo only initilization
         if(STEREO && !USE_IMU)
         {
-            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric);
+            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
             f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
             optimization();
 
@@ -545,7 +546,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     {
         TicToc t_solve;
         if(!USE_IMU)
-            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric);
+            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
         f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
         optimization();
         set<int> removeIndex;

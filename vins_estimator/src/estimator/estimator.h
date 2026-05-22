@@ -43,14 +43,15 @@ struct VisualMeasurement
     double header;
     FeatureFrameMap feature_frame;
     VisualTrackingMode tracking_mode;
+    int active_camera_id;
 
     VisualMeasurement()
-        : header(0.0), tracking_mode(TRACKING_MODE_STEREO)
+        : header(0.0), tracking_mode(TRACKING_MODE_STEREO), active_camera_id(0)
     {
     }
 
-    VisualMeasurement(double _header, const FeatureFrameMap &_feature_frame, VisualTrackingMode _tracking_mode)
-        : header(_header), feature_frame(_feature_frame), tracking_mode(_tracking_mode)
+    VisualMeasurement(double _header, const FeatureFrameMap &_feature_frame, VisualTrackingMode _tracking_mode, int _active_camera_id)
+        : header(_header), feature_frame(_feature_frame), tracking_mode(_tracking_mode), active_camera_id(_active_camera_id)
     {
     }
 };
@@ -66,11 +67,11 @@ class Estimator
     // interface
     void initFirstPose(Eigen::Vector3d p, Eigen::Matrix3d r);
     void inputIMU(double t, const Vector3d &linearAcceleration, const Vector3d &angularVelocity);
-    void inputFeature(double t, const FeatureFrameMap &featureFrame, VisualTrackingMode tracking_mode = TRACKING_MODE_STEREO);
+    void inputFeature(double t, const FeatureFrameMap &featureFrame, VisualTrackingMode tracking_mode = TRACKING_MODE_STEREO, int active_camera_id = 0);
     void inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0, bool allow_new_features = true, VisualTrackingMode tracking_mode = TRACKING_MODE_STEREO);
     void resetFeatureTracker();
     void processIMU(double t, double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
-    void processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const double header);
+    void processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, const double header, int active_camera_id);
     void processMeasurements();
     void changeSensorType(int use_imu, int use_stereo);
 
