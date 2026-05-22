@@ -1,0 +1,64 @@
+%YAML:1.0
+
+# NUS thermal stereo with Realsense D455f IMU.
+imu: 1
+num_of_cam: 2
+
+imu_topic: "/imu0"
+image0_topic: "/cam0/image_raw"
+image1_topic: "/cam1/image_raw"
+output_path: "/workspace/src/VINS-Fusion/output/"
+
+cam0_calib: "left.yaml"
+cam1_calib: "right.yaml"
+image_width: 640
+image_height: 512
+
+# body is the raw D455f IMU/accelerometer frame.
+estimate_extrinsic: 0
+body_T_cam0: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.999651434095, 0.004713792743, -0.025975714936, -0.043945602795,
+          -0.004532603359, 0.999965012079, 0.007029808085, 0.069428185645,
+          0.026007944584, -0.006909620444, 0.999637877441, 0.038427399748,
+          0.0, 0.0, 0.0, 1.0]
+
+body_T_cam1: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [0.999651434095, 0.004713792743, -0.025975714936, 0.077675086956,
+          -0.004532603359, 0.999965012079, 0.007029808085, 0.068876735081,
+          0.026007944584, -0.006909620444, 0.999637877441, 0.041591606842,
+          0.0, 0.0, 0.0, 1.0]
+
+multiple_thread: 1
+
+max_cnt: 150
+min_dist: 30
+freq: 10
+F_threshold: 1.0
+show_track: 1
+flow_back: 1
+deep_feature: 1
+deep_feature_model_dir: "/workspace/src/VINS-Fusion/output"
+deep_feature_matcher: 0
+deep_feature_max_keypoints: 150
+deep_feature_keypoint_threshold: 0.004
+deep_feature_remove_borders: 4
+deep_feature_stereo_ransac: 0
+
+max_solver_time: 0.04
+max_num_iterations: 8
+keyframe_parallax: 10.0
+
+acc_n: 0.1
+gyr_n: 0.01
+acc_w: 0.001
+gyr_w: 0.0001
+g_norm: 9.6514
+
+estimate_td: 0
+td: 0.0

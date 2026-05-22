@@ -1,6 +1,7 @@
 <launch>
   <arg name="data_root" default="/mnt/Data/homebrew_thermal/Nus/run_20250912_180927" />
-  <arg name="config_file" default="$(find vins)/../config/nus_thermal/nus_thermal_stereo_config.yaml" />
+  <arg name="config_file" default="$(find vins)/../config/nus_thermal/nus_thermal_stereo_imu_config.yaml" />
+  <arg name="imu_file" default="realsense/imu/imu_synced.txt" />
   <arg name="playback_rate" default="1.0" />
   <arg name="start_index" default="0" />
   <arg name="max_frames" default="0" />
@@ -13,9 +14,11 @@
     <param name="data_root" type="string" value="$(arg data_root)" />
     <param name="left_dir" type="string" value="left_thermal/left_motion" />
     <param name="right_dir" type="string" value="right_thermal/right_motion" />
+    <param name="imu_file" type="string" value="$(arg imu_file)" />
     <param name="image0_topic" type="string" value="/cam0/image_raw" />
     <param name="image1_topic" type="string" value="/cam1/image_raw" />
-    <param name="publish_imu" type="bool" value="false" />
+    <param name="imu_topic" type="string" value="/imu0" />
+    <param name="publish_imu" type="bool" value="true" />
     <param name="playback_rate" type="double" value="$(arg playback_rate)" />
     <param name="start_index" type="int" value="$(arg start_index)" />
     <param name="max_frames" type="int" value="$(arg max_frames)" />
