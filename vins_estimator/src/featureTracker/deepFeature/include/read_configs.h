@@ -90,6 +90,8 @@ struct PointMatcherConfig {
     image_height = point_matcher_node["image_height"].as<int>();
     onnx_file = point_matcher_node["onnx_file"].as<std::string>();
     engine_file = point_matcher_node["engine_file"].as<std::string>();
+    YAML::Node ransac_node = point_matcher_node["ransac_threshold"];
+    ransac_threshold = ransac_node ? ransac_node.as<float>() : 3.0f;
   }
 
   int matcher;
@@ -100,6 +102,7 @@ struct PointMatcherConfig {
   std::vector<std::string> output_tensor_names;
   std::string onnx_file;
   std::string engine_file;
+  float ransac_threshold{3.0f};
 };
 
 struct LineDetectorConfig{

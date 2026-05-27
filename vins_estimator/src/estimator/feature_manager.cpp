@@ -9,6 +9,14 @@
 
 #include "feature_manager.h"
 
+namespace
+{
+bool isReliableTriangulatedDepth(double depth)
+{
+    return depth >= FEATURE_MIN_DEPTH && depth <= FEATURE_MAX_DEPTH;
+}
+} // namespace
+
 int FeaturePerId::endFrame()
 {
     return start_frame + feature_per_frame.size() - 1;
@@ -393,7 +401,7 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
             Eigen::Vector3d localPoint;
             localPoint = leftPose.leftCols<3>() * point3d + leftPose.rightCols<1>();
             double depth = localPoint.z();
-            if (depth > 0)
+            if (isReliableTriangulatedDepth(depth))
             {
                 it_per_id.estimated_depth = depth;
                 it_per_id.reliable_depth = true;
@@ -435,7 +443,7 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
             Eigen::Vector3d localPoint;
             localPoint = leftPose.leftCols<3>() * point3d + leftPose.rightCols<1>();
             double depth = localPoint.z();
-            if (depth > 0)
+            if (isReliableTriangulatedDepth(depth))
             {
                 it_per_id.estimated_depth = depth;
                 it_per_id.reliable_depth = true;
@@ -495,7 +503,7 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
         it_per_id.estimated_depth = svd_method;
         //it_per_id->estimated_depth = INIT_DEPTH;
 
-        if (it_per_id.estimated_depth < 0.1)
+        if (!isReliableTriangulatedDepth(it_per_id.estimated_depth))
         {
             it_per_id.estimated_depth = INIT_DEPTH;
             it_per_id.reliable_depth = false;

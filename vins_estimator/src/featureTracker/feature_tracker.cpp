@@ -14,6 +14,7 @@
 #include "../utility/visualization.h"
 #include "deep_feature.h"
 #include <algorithm>
+#include <cmath>
 #include <sys/stat.h>
 
 namespace
@@ -187,6 +188,7 @@ void FeatureTracker::initDeepFeatureFrontend()
     options.keypoint_threshold = static_cast<float>(DEEP_FEATURE_KEYPOINT_THRESHOLD);
     options.remove_borders = DEEP_FEATURE_REMOVE_BORDERS;
     options.stereo_ransac = DEEP_FEATURE_STEREO_RANSAC;
+    options.ransac_threshold = static_cast<float>(DEEP_FEATURE_RANSAC_THRESHOLD);
 
     deep_feature = std::make_shared<DeepFeature>();
     deep_feature->init(DEEP_FEATURE, options);
@@ -567,6 +569,11 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
                 continue;
             if (match.trainIdx < 0 || match.trainIdx >= current_features.cols())
                 continue;
+            cv::Point2f prev_pt(history_features(1, match.queryIdx), history_features(2, match.queryIdx));
+            cv::Point2f cur_pt(current_features(1, match.trainIdx), current_features(2, match.trainIdx));
+            double displacement = cv::norm(cur_pt - prev_pt);
+            if (displacement < DEEP_FEATURE_MIN_TEMPORAL_PARALLAX ||
+                displacement > DEEP_FEATURE_MAX_TEMPORAL_PARALLAX) continue;
             current_prev_index[match.trainIdx] = match.queryIdx;
         }
     }
@@ -632,8 +639,14 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
                     continue;
                 if (match.trainIdx < 0 || match.trainIdx >= right_features.cols())
                     continue;
+                const cv::Point2f left_pt = cur_pts[match.queryIdx];
+                const cv::Point2f right_pt(right_features(1, match.trainIdx), right_features(2, match.trainIdx));
+                const double y_error = std::abs(left_pt.y - right_pt.y);
+                const double disparity = left_pt.x - right_pt.x;
+                if (y_error > DEEP_FEATURE_STEREO_Y_THRESHOLD || disparity < DEEP_FEATURE_MIN_STEREO_DISPARITY ||
+                    disparity > DEEP_FEATURE_MAX_STEREO_DISPARITY) continue;
                 ids_right.push_back(ids[match.queryIdx]);
-                cur_right_pts.push_back(cv::Point2f(right_features(1, match.trainIdx), right_features(2, match.trainIdx)));
+                cur_right_pts.push_back(right_pt);
                 accepted_right_feature_indexes.push_back(match.trainIdx);
             }
 

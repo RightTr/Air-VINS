@@ -1,5 +1,5 @@
 <launch>
-  <arg name="data_root" default="/mnt/Data/homebrew_thermal/Nus/run_20250912_180927" />
+  <arg name="data_root" default="/mnt/Data/homebrew_thermal/Nus/run_20250910_153427" />
   <arg name="config_file" default="$(find vins)/../config/nus_thermal/nus_thermal_stereo_imu_config.yaml" />
   <arg name="imu_file" default="realsense/imu/imu_synced.txt" />
   <arg name="playback_rate" default="1.0" />
@@ -8,6 +8,8 @@
   <arg name="loop" default="false" />
   <arg name="rectify_images" default="true" />
   <arg name="rectify_alpha" default="0.0" />
+  <arg name="stereo_stamp_tolerance" default="0.005" />
+  <arg name="subscriber_wait_timeout" default="10.0" />
   <arg name="visualization" default="true" />
 
   <node name="nus_thermal_publisher" pkg="vins" type="nus_thermal_publisher" output="screen">
@@ -25,6 +27,8 @@
     <param name="loop" type="bool" value="$(arg loop)" />
     <param name="rectify_images" type="bool" value="$(arg rectify_images)" />
     <param name="rectify_alpha" type="double" value="$(arg rectify_alpha)" />
+    <param name="stereo_stamp_tolerance" type="double" value="$(arg stereo_stamp_tolerance)" />
+    <param name="subscriber_wait_timeout" type="double" value="$(arg subscriber_wait_timeout)" />
   </node>
 
   <node name="vins_estimator" pkg="vins" type="vins_node" output="screen" args="$(arg config_file)" />

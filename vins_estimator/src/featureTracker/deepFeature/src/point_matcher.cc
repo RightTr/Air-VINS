@@ -102,7 +102,7 @@ int PointMatcher::MatchingPoints(const Eigen::Matrix<float, 259, Eigen::Dynamic>
   // reject outliers
   if(outlier_rejection && matches.size() > 8){
     std::vector<uchar> inliers;
-    cv::findFundamentalMat(points0, points1, cv::FM_RANSAC, 20, 0.99, inliers);
+    cv::findFundamentalMat(points0, points1, cv::FM_RANSAC, _config.ransac_threshold, 0.99, inliers);
     int j = 0;
     for(int i = 0; i < matches.size(); i++){
       if(inliers[i]){

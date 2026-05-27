@@ -52,6 +52,14 @@ deep_feature_keypoint_threshold: 0.004
 deep_feature_remove_borders: 4
 # deep_feature_stereo_ransac: 0=no, 1=enable RANSAC stereo
 deep_feature_stereo_ransac: 0
+deep_feature_min_temporal_parallax: 1.0
+deep_feature_max_temporal_parallax: 120.0
+deep_feature_stereo_y_threshold: 2.0
+deep_feature_min_stereo_disparity: 1.0
+deep_feature_max_stereo_disparity: 96.0
+deep_feature_ransac_threshold: 3.0
+feature_min_depth: 0.3
+feature_max_depth: 40.0
 enable_nuc_handle: 1
 
 max_solver_time: 0.04

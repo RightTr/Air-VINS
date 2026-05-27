@@ -37,6 +37,7 @@ static PointMatcherConfig buildPointMatcherConfig(const DeepFeatureOptions &opti
     config.matcher = options.matcher;
     config.image_width = options.image_width;
     config.image_height = options.image_height;
+    config.ransac_threshold = options.ransac_threshold;
 
     config.dla_core = -1;
 
@@ -105,9 +106,6 @@ bool DeepFeature::init(int mode, const DeepFeatureOptions &options)
         }
 
         ready_ = true;
-        ROS_INFO("DeepFeature: Initialized mode=%d (SuperPoint + %s), image=%dx%d, max_kpts=%d",
-                 mode, options.matcher == 1 ? "SuperGlue" : "LightGlue",
-                 options.image_width, options.image_height, options.max_keypoints);
         return true;
     }
 
@@ -140,9 +138,6 @@ bool DeepFeature::init(int mode, const DeepFeatureOptions &options)
         }
 
         ready_ = true;
-        ROS_INFO("DeepFeature: Initialized mode=%d (PLNET + %s), image=%dx%d, max_kpts=%d",
-                 mode, options.matcher == 1 ? "SuperGlue" : "LightGlue",
-                 options.image_width, options.image_height, options.max_keypoints);
         return true;
     }
 
