@@ -87,9 +87,11 @@ add_library(vins_lib
     src/initial/initial_sfm.cpp
     src/initial/initial_ex_rotation.cpp
     src/featureTracker/feature_tracker.cpp
+    src/featureTracker/deep_feature.cpp
     src/featureTracker/deepFeature/src/super_point.cpp
     src/featureTracker/deepFeature/src/super_glue.cpp
     src/featureTracker/deepFeature/src/light_glue.cpp
+    src/featureTracker/deepFeature/src/plnet.cpp
     src/featureTracker/deepFeature/src/point_matcher.cc
     src/featureTracker/deepFeature/src/utils.cc)
 target_link_libraries(vins_lib ${catkin_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES} ${CUDA_LIBRARIES} ${NVINFER_LIBRARY} ${NVONNXPARSER_LIBRARY} tensorrtbuffer)
@@ -105,4 +107,4 @@ add_executable(kitti_odom_test src/KITTIOdomTest.cpp)
 target_link_libraries(kitti_odom_test vins_lib) 
 
 add_executable(kitti_gps_test src/KITTIGPSTest.cpp)
-target_link_libraries(kitti_gps_test vins_lib) 
+target_link_libraries(kitti_gps_test vins_lib)

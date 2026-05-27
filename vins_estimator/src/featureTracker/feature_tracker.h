@@ -30,8 +30,7 @@ using namespace std;
 using namespace camodocal;
 using namespace Eigen;
 
-class PointMatcher;
-class SuperPoint;
+class DeepFeature;
 
 bool inBorder(const cv::Point2f &pt);
 void reduceVector(vector<cv::Point2f> &v, vector<uchar> status);
@@ -91,11 +90,9 @@ public:
     int n_id;
     bool hasPrediction;
     int primary_camera_id;
-    bool deep_feature_ready;
-    std::shared_ptr<PointMatcher> deep_point_matcher;
-    std::shared_ptr<SuperPoint> deep_superpoint;
+    std::shared_ptr<DeepFeature> deep_feature;
 
 private:
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0, bool allow_new_features = true);
-    void initDeepFrontend();
+    void initDeepFeatureFrontend();
 };

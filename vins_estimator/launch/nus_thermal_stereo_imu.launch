@@ -1,5 +1,5 @@
 <launch>
-  <arg name="data_root" default="/mnt/Data/homebrew_thermal/Nus/run_20250911_200532" />
+  <arg name="data_root" default="/mnt/Data/homebrew_thermal/Nus/run_20250912_180927" />
   <arg name="config_file" default="$(find vins)/../config/nus_thermal/nus_thermal_stereo_imu_config.yaml" />
   <arg name="imu_file" default="realsense/imu/imu_synced.txt" />
   <arg name="playback_rate" default="1.0" />

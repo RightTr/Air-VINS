@@ -9,8 +9,6 @@
 
 #include "parameters.h"
 
-#include <sys/stat.h>
-
 double INIT_DEPTH;
 double MIN_PARALLAX;
 double ACC_N, ACC_W;
@@ -58,12 +56,6 @@ int ENABLE_NUC_HANDLE;
 
 namespace
 {
-bool directoryExists(const std::string &path)
-{
-    struct stat info;
-    return stat(path.c_str(), &info) == 0 && S_ISDIR(info.st_mode);
-}
-
 std::string joinPath(const std::string &folder, const std::string &name)
 {
     if (folder.empty())
@@ -141,17 +133,6 @@ void readParameters(std::string config_file)
     readOptionalParam(fsSettings, "deep_feature_remove_borders", DEEP_FEATURE_REMOVE_BORDERS);
     readOptionalParam(fsSettings, "deep_feature_stereo_ransac", DEEP_FEATURE_STEREO_RANSAC);
     readOptionalParam(fsSettings, "enable_nuc_handle", ENABLE_NUC_HANDLE);
-    if (DEEP_FEATURE_MATCHER != 0 && DEEP_FEATURE_MATCHER != 1)
-    {
-        ROS_WARN_STREAM("deep_feature_matcher must be 0 or 1; fallback to 1");
-        DEEP_FEATURE_MATCHER = 1;
-    }
-    if (DEEP_FEATURE && !directoryExists(DEEP_FEATURE_MODEL_DIR))
-    {
-        ROS_WARN_STREAM("deep_feature_model_dir does not exist: " << DEEP_FEATURE_MODEL_DIR
-                        << ", continue and expect model files under the fallback path");
-    }
-
     MULTIPLE_THREAD = fsSettings["multiple_thread"];
 
     USE_IMU = fsSettings["imu"];

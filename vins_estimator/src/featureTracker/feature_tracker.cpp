@@ -12,8 +12,7 @@
 #include "feature_tracker.h"
 
 #include "../utility/visualization.h"
-#include "point_matcher.h"
-#include "super_point.h"
+#include "deep_feature.h"
 #include <algorithm>
 #include <sys/stat.h>
 
@@ -120,7 +119,6 @@ FeatureTracker::FeatureTracker()
     n_id = 0;
     hasPrediction = false;
     primary_camera_id = 0;
-    deep_feature_ready = false;
     prev_deep_features.resize(259, 0);
     left_deep_features.resize(259, 0);
     right_deep_features.resize(259, 0);
@@ -175,70 +173,23 @@ void FeatureTracker::clearState()
     m_camera.clear();
 }
 
-void FeatureTracker::initDeepFrontend()
+void FeatureTracker::initDeepFeatureFrontend()
 {
-    if (deep_feature_ready)
+    if (deep_feature)
         return;
 
-    SuperPointConfig superpoint_config;
-    superpoint_config.max_keypoints = DEEP_FEATURE_MAX_KEYPOINTS;
-    superpoint_config.keypoint_threshold = static_cast<float>(DEEP_FEATURE_KEYPOINT_THRESHOLD);
-    superpoint_config.remove_borders = DEEP_FEATURE_REMOVE_BORDERS;
-    superpoint_config.dla_core = -1;
-    superpoint_config.input_tensor_names.push_back("input");
-    superpoint_config.output_tensor_names.push_back("scores");
-    superpoint_config.output_tensor_names.push_back("descriptors");
-    superpoint_config.onnx_file = joinPath(DEEP_FEATURE_MODEL_DIR, "superpoint_v1_sim_int32.onnx");
-    superpoint_config.engine_file = joinPath(DEEP_FEATURE_MODEL_DIR, "superpoint_v1_sim_int32.engine");
+    DeepFeatureOptions options;
+    options.matcher = DEEP_FEATURE_MATCHER;
+    options.model_dir = DEEP_FEATURE_MODEL_DIR;
+    options.image_width = COL;
+    options.image_height = ROW;
+    options.max_keypoints = DEEP_FEATURE_MAX_KEYPOINTS;
+    options.keypoint_threshold = static_cast<float>(DEEP_FEATURE_KEYPOINT_THRESHOLD);
+    options.remove_borders = DEEP_FEATURE_REMOVE_BORDERS;
+    options.stereo_ransac = DEEP_FEATURE_STEREO_RANSAC;
 
-    PointMatcherConfig matcher_config;
-    matcher_config.matcher = DEEP_FEATURE_MATCHER;
-    matcher_config.image_width = COL;
-    matcher_config.image_height = ROW;
-    matcher_config.dla_core = -1;
-    if (matcher_config.matcher == 0)
-    {
-        matcher_config.onnx_file = joinPath(DEEP_FEATURE_MODEL_DIR, "superpoint_lightglue.onnx");
-        matcher_config.engine_file = joinPath(DEEP_FEATURE_MODEL_DIR, "superpoint_lightglue.engine");
-    }
-    else
-    {
-        const std::string indoor_onnx = joinPath(DEEP_FEATURE_MODEL_DIR, "superglue_indoor_sim_int32.onnx");
-        const std::string indoor_engine = joinPath(DEEP_FEATURE_MODEL_DIR, "superglue_indoor_sim_int32.engine");
-        const std::string outdoor_onnx = joinPath(DEEP_FEATURE_MODEL_DIR, "superglue_outdoor_sim_int32.onnx");
-        const std::string outdoor_engine = joinPath(DEEP_FEATURE_MODEL_DIR, "superglue_outdoor_sim_int32.engine");
-        if (fileExists(indoor_onnx) || fileExists(indoor_engine))
-        {
-            matcher_config.onnx_file = indoor_onnx;
-            matcher_config.engine_file = indoor_engine;
-        }
-        else
-        {
-            matcher_config.onnx_file = outdoor_onnx;
-            matcher_config.engine_file = outdoor_engine;
-        }
-    }
-
-    deep_superpoint.reset(new SuperPoint(superpoint_config));
-    deep_point_matcher.reset(new PointMatcher(matcher_config));
-
-    if (!deep_superpoint->build())
-    {
-        ROS_ERROR("deep frontend superpoint build failed, deep feature tracking disabled");
-        deep_superpoint.reset();
-        deep_point_matcher.reset();
-        deep_feature_ready = false;
-        return;
-    }
-    if (!deep_point_matcher || !deep_point_matcher->ready())
-    {
-        ROS_ERROR("deep frontend matcher build failed, deep feature tracking disabled");
-        deep_superpoint.reset();
-        deep_point_matcher.reset();
-        deep_feature_ready = false;
-        return;
-    }
-    deep_feature_ready = true;
+    deep_feature = std::make_shared<DeepFeature>();
+    deep_feature->init(DEEP_FEATURE, options);
 }
 
 void FeatureTracker::setMask()
@@ -294,7 +245,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     }
     if (DEEP_FEATURE)
     {
-        if (!deep_feature_ready)
+        if (!deep_feature || !deep_feature->ready())
         {
             ROS_ERROR_THROTTLE(1.0, "deep feature is enabled but frontend is not ready; skip image tracking instead of using KLT");
             return map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>>();
@@ -331,7 +282,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         if(hasPrediction)
         {
             cur_pts = predict_pts;
-            cv::calcOpticalFlowPyrLK(prev_img, cur_img, prev_pts, cur_pts, status, err, cv::Size(21, 21), 1, 
+            cv::calcOpticalFlowPyrLK(prev_img, cur_img, prev_pts, cur_pts, status, err, cv::Size(21, 21), 1,
             cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 0.01), cv::OPTFLOW_USE_INITIAL_FLOW);
             
             int succ_num = 0;
@@ -350,7 +301,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         {
             vector<uchar> reverse_status;
             vector<cv::Point2f> reverse_pts = prev_pts;
-            cv::calcOpticalFlowPyrLK(cur_img, prev_img, cur_pts, reverse_pts, reverse_status, err, cv::Size(21, 21), 1, 
+            cv::calcOpticalFlowPyrLK(cur_img, prev_img, cur_pts, reverse_pts, reverse_status, err, cv::Size(21, 21), 1,
             cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 0.01), cv::OPTFLOW_USE_INITIAL_FLOW);
             //cv::calcOpticalFlowPyrLK(cur_img, prev_img, cur_pts, reverse_pts, reverse_status, err, cv::Size(21, 21), 3); 
             for(size_t i = 0; i < status.size(); i++)
@@ -594,7 +545,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     cur_un_right_pts_map.clear();
 
     Eigen::Matrix<float, 259, Eigen::Dynamic> current_features;
-    if (!deep_superpoint || !deep_superpoint->infer(cur_img, current_features))
+    if (!deep_feature || !deep_feature->extractPoints(cur_img, current_features))
     {
         ROS_WARN("deep frontend feature extraction failed");
         return map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>>();
@@ -607,8 +558,8 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     if (history_features.cols() > 0 && history_features.cols() == static_cast<int>(prev_ids.size()))
     {
         vector<cv::DMatch> matches;
-        if (deep_point_matcher && deep_point_matcher->ready())
-            deep_point_matcher->MatchingPoints(history_features, current_features, matches, true);
+        if (deep_feature && deep_feature->ready())
+            deep_feature->matchPoints(history_features, current_features, matches, true);
 
         for (const auto &match : matches)
         {
@@ -662,11 +613,11 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     if (!_img1.empty() && stereo_cam && primary_camera_id_ == 0)
     {
         Eigen::Matrix<float, 259, Eigen::Dynamic> right_features;
-        if (deep_superpoint && deep_superpoint->infer(rightImg, right_features) && right_features.cols() > 0)
+        if (deep_feature && deep_feature->extractPoints(rightImg, right_features) && right_features.cols() > 0)
         {
             vector<cv::DMatch> stereo_matches;
-            if (deep_point_matcher && deep_point_matcher->ready())
-                deep_point_matcher->MatchingPoints(matched_features, right_features, stereo_matches, DEEP_FEATURE_STEREO_RANSAC != 0);
+            if (deep_feature && deep_feature->ready())
+                deep_feature->matchPoints(matched_features, right_features, stereo_matches, DEEP_FEATURE_STEREO_RANSAC != 0);
 
             ids_right.clear();
             cur_right_pts.clear();
@@ -833,8 +784,8 @@ void FeatureTracker::readIntrinsicParameter(const vector<string> &calib_file)
     else
         stereo_cam = 0;
 
-    if (DEEP_FEATURE && !deep_feature_ready)
-        initDeepFrontend();
+    if (DEEP_FEATURE && !deep_feature)
+        initDeepFeatureFrontend();
 }
 
 void FeatureTracker::showUndistortion(const string &name)
