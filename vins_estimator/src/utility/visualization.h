@@ -13,6 +13,7 @@
 #include <std_msgs/Header.h>
 #include <std_msgs/Float32.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/ColorRGBA.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/Image.h>
@@ -38,6 +39,7 @@ extern ros::Publisher pub_key;
 extern nav_msgs::Path path;
 extern ros::Publisher pub_pose_graph;
 extern ros::Publisher pub_deep_match;
+extern ros::Publisher pub_map_line;
 extern int IMAGE_ROW, IMAGE_COL;
 
 void registerPub(ros::NodeHandle &n);
@@ -57,7 +59,9 @@ void pubKeyPoses(const Estimator &estimator, const std_msgs::Header &header);
 
 void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header);
 
-void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header);
+void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header);\
+
+void pubMapLine(const Estimator &estimator, const std_msgs::Header &header);
 
 void pubTF(const Estimator &estimator, const std_msgs::Header &header);
 

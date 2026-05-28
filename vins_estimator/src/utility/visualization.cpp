@@ -8,6 +8,7 @@
  *******************************************************/
 
 #include "visualization.h"
+#include <cstdint>
 
 using namespace ros;
 using namespace Eigen;
@@ -25,6 +26,7 @@ ros::Publisher pub_extrinsic;
 
 ros::Publisher pub_image_track;
 ros::Publisher pub_deep_match;
+ros::Publisher pub_map_line;
 
 CameraPoseVisualization cameraposevisual(1, 0, 0, 1);
 static double sum_of_path = 0;
@@ -47,6 +49,7 @@ void registerPub(ros::NodeHandle &n)
     pub_extrinsic = n.advertise<nav_msgs::Odometry>("extrinsic", 1000);
     pub_image_track = n.advertise<sensor_msgs::Image>("image_track", 1000);
     pub_deep_match = n.advertise<sensor_msgs::Image>("/deep_match", 1000);
+    pub_map_line = n.advertise<visualization_msgs::Marker>("mapline", 1000);
 
     cameraposevisual.setScale(0.1);
     cameraposevisual.setLineWidth(0.01);
@@ -314,6 +317,56 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
         }
     }
     pub_margin_cloud.publish(margin_cloud);
+}
+
+static std_msgs::ColorRGBA markerColorById(int id)
+{
+    uint32_t x = static_cast<uint32_t>(id * 2654435761u);
+    std_msgs::ColorRGBA color;
+    color.r = 0.25 + static_cast<double>(x & 0xFF) / 512.0;
+    color.g = 0.25 + static_cast<double>((x >> 8) & 0xFF) / 512.0;
+    color.b = 0.35 + static_cast<double>((x >> 16) & 0xFF) / 512.0;
+    color.a = 1.0;
+    return color;
+}
+
+void pubMapLine(const Estimator &estimator, const std_msgs::Header &header)
+{
+    visualization_msgs::Marker map_lines;
+    map_lines.header = header;
+    map_lines.header.frame_id = "world";
+    map_lines.ns = "map_lines";
+    map_lines.id = 0;
+    map_lines.type = visualization_msgs::Marker::LINE_LIST;
+    map_lines.action = visualization_msgs::Marker::ADD;
+    map_lines.pose.orientation.w = 1.0;
+    map_lines.scale.x = 0.03;
+    map_lines.color.b = 1.0;
+    map_lines.color.a = 1.0;
+    map_lines.lifetime = ros::Duration();
+
+    for (const auto &kv : estimator.f_manager.persistent_lines)
+    {
+        const double length = (kv.second.second - kv.second.first).norm();
+        geometry_msgs::Point p1;
+        p1.x = kv.second.first.x();
+        p1.y = kv.second.first.y();
+        p1.z = kv.second.first.z();
+        geometry_msgs::Point p2;
+        p2.x = kv.second.second.x();
+        p2.y = kv.second.second.y();
+        p2.z = kv.second.second.z();
+        map_lines.points.push_back(p1);
+        map_lines.points.push_back(p2);
+        std_msgs::ColorRGBA color = markerColorById(kv.first);
+        map_lines.colors.push_back(color);
+        map_lines.colors.push_back(color);
+    }
+
+    if (map_lines.points.empty())
+        map_lines.action = visualization_msgs::Marker::DELETE;
+
+    pub_map_line.publish(map_lines);
 }
 
 
