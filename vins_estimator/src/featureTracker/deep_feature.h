@@ -41,6 +41,10 @@ public:
 
     bool extractLines(const cv::Mat &image, std::vector<Eigen::Vector4d> &lines);
 
+    bool extractPointsLines(const cv::Mat &image,
+                           Eigen::Matrix<float, 259, Eigen::Dynamic> &points,
+                           std::vector<Eigen::Vector4d> &lines);
+
     bool matchPoints(const Eigen::Matrix<float, 259, Eigen::Dynamic> &features0,
                      const Eigen::Matrix<float, 259, Eigen::Dynamic> &features1,
                      std::vector<cv::DMatch> &matches,

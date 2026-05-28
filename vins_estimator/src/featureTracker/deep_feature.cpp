@@ -208,6 +208,21 @@ bool DeepFeature::extractLines(const cv::Mat &image, std::vector<Eigen::Vector4d
     }
 }
 
+bool DeepFeature::extractPointsLines(const cv::Mat &image,
+                                    Eigen::Matrix<float, 259, Eigen::Dynamic> &points,
+                                    std::vector<Eigen::Vector4d> &lines)
+{
+    if (mode_ != 2 || !ready_ || !plnet_)
+    {
+        ROS_WARN_THROTTLE(5.0, "ExtractPointLines: PLNET not ready");
+        points.resize(259, 0);
+        lines.clear();
+        return false;
+    }
+    Eigen::Matrix<float, 259, Eigen::Dynamic> junctions;
+    return plnet_->infer(image, points, lines, junctions);
+}
+
 bool DeepFeature::matchPoints(const Eigen::Matrix<float, 259, Eigen::Dynamic> &features0,
                               const Eigen::Matrix<float, 259, Eigen::Dynamic> &features1,
                               std::vector<cv::DMatch> &matches,
