@@ -1349,6 +1349,52 @@ void Estimator::optimization()
             }
         }
 
+        if (LINE_BA)
+        {
+            int linefeature_index = -1;
+            for (auto &it_per_id : f_manager.line_feature)
+            {
+                it_per_id.used_num = static_cast<int>(it_per_id.line_per_frame.size());
+                if (!f_manager.useLineForOptimization(it_per_id))
+                    continue;
+
+                ++linefeature_index;
+                if (linefeature_index >= NUM_OF_LINE_F)
+                    break;
+
+                const int imu_i = it_per_id.start_frame;
+                if (imu_i != 0)
+                    continue;
+
+                int imu_j = imu_i - 1;
+                for (const auto &it_per_frame : it_per_id.line_per_frame)
+                {
+                    imu_j++;
+                    if (imu_i == imu_j)
+                        continue;
+
+                    const Vector4d obs_left = it_per_frame.lineobs;
+                    lineProjectionFactor *f_left = new lineProjectionFactor(obs_left);
+                    ResidualBlockInfo *residual_block_info_left = new ResidualBlockInfo(
+                        f_left, line_mono_loss,
+                        vector<double *>{para_Pose[imu_j], para_Ex_Pose[it_per_frame.camera_id], para_LineFeature[linefeature_index]},
+                        vector<int>{2});
+                    marginalization_info->addResidualBlockInfo(residual_block_info_left);
+
+                    if (STEREO && it_per_frame.is_stereo && it_per_frame.camera_id == 0)
+                    {
+                        const Vector4d obs_right = it_per_frame.lineobs_R;
+                        lineProjectionFactor *f_right = new lineProjectionFactor(obs_right);
+                        ResidualBlockInfo *residual_block_info_right = new ResidualBlockInfo(
+                            f_right, line_mono_loss,
+                            vector<double *>{para_Pose[imu_j], para_Ex_Pose[1], para_LineFeature[linefeature_index]},
+                            vector<int>{2});
+                        marginalization_info->addResidualBlockInfo(residual_block_info_right);
+                    }
+                }
+            }
+        }
+
         TicToc t_pre_margin;
         marginalization_info->preMarginalize();
         ROS_DEBUG("pre marginalization %f ms", t_pre_margin.toc());
