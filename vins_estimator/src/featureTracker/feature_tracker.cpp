@@ -451,8 +451,6 @@ void FeatureTracker::initLineFeatureFrontend()
     options.max_keypoints = DEEP_FEATURE_MAX_KEYPOINTS;
     options.keypoint_threshold = static_cast<float>(DEEP_FEATURE_KEYPOINT_THRESHOLD);
     options.remove_borders = DEEP_FEATURE_REMOVE_BORDERS;
-    options.stereo_ransac = DEEP_FEATURE_STEREO_RANSAC;
-    options.ransac_threshold = static_cast<float>(DEEP_FEATURE_RANSAC_THRESHOLD);
     options.line_threshold = static_cast<float>(LINE_THRESHOLD);
     options.line_length_threshold = static_cast<float>(LINE_MIN_LENGTH);
 
@@ -473,8 +471,6 @@ void FeatureTracker::initDeepFeatureFrontend()
     options.max_keypoints = DEEP_FEATURE_MAX_KEYPOINTS;
     options.keypoint_threshold = static_cast<float>(DEEP_FEATURE_KEYPOINT_THRESHOLD);
     options.remove_borders = DEEP_FEATURE_REMOVE_BORDERS;
-    options.stereo_ransac = DEEP_FEATURE_STEREO_RANSAC;
-    options.ransac_threshold = static_cast<float>(DEEP_FEATURE_RANSAC_THRESHOLD);
 
     deep_feature = std::make_shared<DeepFeature>();
     deep_feature->init(DEEP_FEATURE, options);
@@ -862,11 +858,6 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
                 continue;
             if (match.trainIdx < 0 || match.trainIdx >= current_features.cols())
                 continue;
-            cv::Point2f prev_pt(history_features(1, match.queryIdx), history_features(2, match.queryIdx));
-            cv::Point2f cur_pt(current_features(1, match.trainIdx), current_features(2, match.trainIdx));
-            double displacement = cv::norm(cur_pt - prev_pt);
-            if (displacement < DEEP_FEATURE_MIN_TEMPORAL_PARALLAX ||
-                displacement > DEEP_FEATURE_MAX_TEMPORAL_PARALLAX) continue;
             current_prev_index[match.trainIdx] = match.queryIdx;
         }
     }
@@ -917,7 +908,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         {
             vector<cv::DMatch> stereo_matches;
             if (deep_feature && deep_feature->ready())
-                deep_feature->matchPoints(matched_features, right_features, stereo_matches, DEEP_FEATURE_STEREO_RANSAC != 0);
+                deep_feature->matchPoints(matched_features, right_features, stereo_matches, false);
 
             ids_right.clear();
             cur_right_pts.clear();
@@ -1157,7 +1148,7 @@ void FeatureTracker::processLineFeatures(const cv::Mat &left_img, const cv::Mat 
             right_line_points = right_points;
             std::vector<cv::DMatch> point_matches;
             if (cur_line_points.cols() > 0 && right_line_points.cols() > 0)
-                line_deep_feature->matchPoints(cur_line_points, right_line_points, point_matches, DEEP_FEATURE_STEREO_RANSAC != 0);
+                line_deep_feature->matchPoints(cur_line_points, right_line_points, point_matches, false);
             matchLinesByPoints(cur_points_on_lines, right_points_on_lines,
                                cur_line_points.cols(), right_line_points.cols(), point_matches, stereo_match);
         }

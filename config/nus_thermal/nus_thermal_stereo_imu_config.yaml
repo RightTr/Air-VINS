@@ -36,7 +36,7 @@ body_T_cam1: !!opencv-matrix
 
 multiple_thread: 1
 
-max_cnt: 150
+max_cnt: 400
 min_dist: 30
 freq: 10
 F_threshold: 1.0
@@ -47,30 +47,25 @@ deep_feature: 1
 deep_feature_model_dir: "/workspace/src/VINS-Fusion/output"
 # deep_feature_matcher: 0=LightGlue, 1=SuperGlue
 deep_feature_matcher: 0
-deep_feature_max_keypoints: 150
+deep_feature_max_keypoints: 400
 deep_feature_keypoint_threshold: 0.004
 deep_feature_remove_borders: 4
-# deep_feature_stereo_ransac: 0=no, 1=enable RANSAC stereo
-deep_feature_stereo_ransac: 0
-deep_feature_min_temporal_parallax: 1.0
-deep_feature_max_temporal_parallax: 120.0
-deep_feature_stereo_y_threshold: 2.0
-deep_feature_min_stereo_disparity: 1.0
-deep_feature_max_stereo_disparity: 96.0
-deep_feature_ransac_threshold: 3.0
-feature_min_depth: 0.3
-feature_max_depth: 40.0
+deep_feature_stereo_y_threshold: 1.0
+deep_feature_min_stereo_disparity: 4.0
+deep_feature_max_stereo_disparity: 420.0
+feature_min_depth: 0.1
+feature_max_depth: 8.0
 
 # line_ba is the single switch for PLNet line inference, temporal/stereo line
 # matching, line BA, and 2D/3D line visualization.
-line_ba: 1
+line_ba: 0
 line_threshold: 0.7
 line_min_track_cnt: 2
 line_max_cnt: 100
 line_min_length: 50.0
-line_stereo_y_threshold: 3.0
-line_min_stereo_disparity: 1.0
-line_max_stereo_disparity: 128.0
+line_stereo_y_threshold: 1.0
+line_min_stereo_disparity: 4.0
+line_max_stereo_disparity: 420.0
 line_match_vote_threshold: 2
 line_match_score_threshold: 0.8
 
@@ -78,7 +73,7 @@ enable_nuc_handle: 1
 
 max_solver_time: 0.04
 max_num_iterations: 8
-keyframe_parallax: 10.0
+keyframe_parallax: 5.0
 
 acc_n: 0.1
 gyr_n: 0.01

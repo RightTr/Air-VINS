@@ -490,6 +490,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
                 {
                     optimization();
                     updateLatestStates();
+                    f_manager.removeFailures();
                     solver_flag = NON_LINEAR;
                     slideWindow();
                     ROS_INFO("Initialization finish!");
@@ -505,6 +506,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
             f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
             f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
+            ROS_INFO("init stereo+imu line landmarks: %d", f_manager.getLineFeatureCount());
             if (frame_count == WINDOW_SIZE)
             {
                 map<double, ImageFrame>::iterator frame_it;
@@ -522,6 +524,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
                 }
                 optimization();
                 updateLatestStates();
+                f_manager.removeFailures();
                 solver_flag = NON_LINEAR;
                 slideWindow();
                 ROS_INFO("Initialization finish!");
@@ -534,12 +537,14 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
             f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
             f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
+            ROS_INFO("init stereo-only line landmarks: %d", f_manager.getLineFeatureCount());
             optimization();
 
             if(frame_count == WINDOW_SIZE)
             {
                 optimization();
                 updateLatestStates();
+                f_manager.removeFailures();
                 solver_flag = NON_LINEAR;
                 slideWindow();
                 ROS_INFO("Initialization finish!");
@@ -809,6 +814,7 @@ bool Estimator::visualInitialAlign()
     f_manager.clearDepth();
     f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
     f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
+    ROS_INFO("visual initial align line landmarks: %d", f_manager.getLineFeatureCount());
 
     return true;
 }

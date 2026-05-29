@@ -37,7 +37,6 @@ static PointMatcherConfig buildPointMatcherConfig(const DeepFeatureOptions &opti
     config.matcher = options.matcher;
     config.image_width = options.image_width;
     config.image_height = options.image_height;
-    config.ransac_threshold = options.ransac_threshold;
 
     config.dla_core = -1;
 

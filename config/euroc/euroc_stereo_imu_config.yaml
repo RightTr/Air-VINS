@@ -54,7 +54,6 @@ deep_feature_matcher: 0        # 0 use LightGlue, 1 use SuperGlue
 deep_feature_max_keypoints: 150
 deep_feature_keypoint_threshold: 0.004
 deep_feature_remove_borders: 4
-deep_feature_stereo_ransac: 0
 
 #optimization parameters
 max_solver_time: 0.04  # max solver itration time (ms), to guarantee real time

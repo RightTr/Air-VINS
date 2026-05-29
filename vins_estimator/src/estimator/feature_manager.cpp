@@ -285,6 +285,14 @@ void FeatureManager::removeFailures()
         if (it->solve_flag == 2)
             feature.erase(it);
     }
+
+    for (auto it = line_feature.begin(), it_next = line_feature.begin();
+         it != line_feature.end(); it = it_next)
+    {
+        it_next++;
+        if (it->solve_flag == 2)
+            line_feature.erase(it);
+    }
 }
 
 void FeatureManager::clearDepth()

@@ -18,12 +18,10 @@ struct DeepFeatureOptions
     int max_keypoints = 150;
     float keypoint_threshold = 0.004f;
     int remove_borders = 4;
-    int stereo_ransac = 0;
     int image_width = 640;
     int image_height = 512;
     float line_threshold = 0.5f;
     float line_length_threshold = 50.0f;
-    float ransac_threshold = 3.0f;
 };
 
 class DeepFeature
