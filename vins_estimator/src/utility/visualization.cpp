@@ -9,6 +9,7 @@
 
 #include "visualization.h"
 #include <cstdint>
+#include <map>
 
 using namespace ros;
 using namespace Eigen;
@@ -26,13 +27,70 @@ ros::Publisher pub_extrinsic;
 
 ros::Publisher pub_image_track;
 ros::Publisher pub_deep_match;
+ros::Publisher pub_line_match;
 ros::Publisher pub_map_line;
+ros::Publisher pub_window_map_line;
 
 CameraPoseVisualization cameraposevisual(1, 0, 0, 1);
 static double sum_of_path = 0;
 static Vector3d last_path(0.0, 0.0, 0.0);
 
 size_t pub_counter = 0;
+static std::map<int, std::pair<Eigen::Vector3d, Eigen::Vector3d>> persistent_map_lines;
+
+// Helper: convert Plucker line (6x1) to a short segment for visualization
+bool lineToSegment(const Eigen::Matrix<double, 6, 1> &line,
+                          Eigen::Vector3d &seg_start,
+                          Eigen::Vector3d &seg_end)
+{
+    const Eigen::Vector3d moment = line.head<3>();
+    const Eigen::Vector3d direction = line.tail<3>();
+    const double dir_norm = direction.norm();
+    if (!moment.allFinite() || !direction.allFinite() || dir_norm < 1e-9)
+        return false;
+    const Eigen::Vector3d anchor = direction.cross(moment) / (dir_norm * dir_norm);
+    const Eigen::Vector3d offset = direction.normalized() * 0.5;
+    seg_start = anchor - offset;
+    seg_end = anchor + offset;
+    return true;
+}
+
+// Helper: append a line segment (no color) to a Marker
+void appendLineSegment(visualization_msgs::Marker &marker,
+                              const Eigen::Vector3d &seg_start,
+                              const Eigen::Vector3d &seg_end)
+{
+    geometry_msgs::Point p1;
+    geometry_msgs::Point p2;
+    p1.x = seg_start.x();
+    p1.y = seg_start.y();
+    p1.z = seg_start.z();
+    p2.x = seg_end.x();
+    p2.y = seg_end.y();
+    p2.z = seg_end.z();
+    marker.points.push_back(p1);
+    marker.points.push_back(p2);
+}
+
+// Helper: append a colored line segment to a Marker
+void appendLineSegmentColored(visualization_msgs::Marker &marker,
+                                     const Eigen::Vector3d &seg_start,
+                                     const Eigen::Vector3d &seg_end,
+                                     const std_msgs::ColorRGBA &color)
+{
+    geometry_msgs::Point p1;
+    geometry_msgs::Point p2;
+    p1.x = seg_start.x();
+    p1.y = seg_start.y();
+    p1.z = seg_start.z();
+    p2.x = seg_end.x();
+    p2.y = seg_end.y();
+    p2.z = seg_end.z();
+    marker.points.push_back(p1);
+    marker.points.push_back(p2);
+    marker.colors.push_back(color);
+    marker.colors.push_back(color);
+}
 
 void registerPub(ros::NodeHandle &n)
 {
@@ -49,7 +107,9 @@ void registerPub(ros::NodeHandle &n)
     pub_extrinsic = n.advertise<nav_msgs::Odometry>("extrinsic", 1000);
     pub_image_track = n.advertise<sensor_msgs::Image>("image_track", 1000);
     pub_deep_match = n.advertise<sensor_msgs::Image>("/deep_match", 1000);
-    pub_map_line = n.advertise<visualization_msgs::Marker>("mapline", 1000);
+    pub_line_match = n.advertise<sensor_msgs::Image>("line_match", 1000);
+    pub_map_line = n.advertise<visualization_msgs::Marker>("global_mapline", 1000);
+    pub_window_map_line = n.advertise<visualization_msgs::Marker>("window_mapline", 1000);
 
     cameraposevisual.setScale(0.1);
     cameraposevisual.setLineWidth(0.01);
@@ -91,6 +151,17 @@ void pubDeepMatchImage(const cv::Mat &imgMatch, const double t)
     header.stamp = ros::Time(t);
     sensor_msgs::ImagePtr imgMatchMsg = cv_bridge::CvImage(header, "bgr8", imgMatch).toImageMsg();
     pub_deep_match.publish(imgMatchMsg);
+}
+
+void pubLineMatchImage(const cv::Mat &imgMatch, const double t)
+{
+    if (imgMatch.empty())
+        return;
+    std_msgs::Header header;
+    header.frame_id = "world";
+    header.stamp = ros::Time(t);
+    sensor_msgs::ImagePtr imgMatchMsg = cv_bridge::CvImage(header, "bgr8", imgMatch).toImageMsg();
+    pub_line_match.publish(imgMatchMsg);
 }
 
 
@@ -319,7 +390,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
     pub_margin_cloud.publish(margin_cloud);
 }
 
-static std_msgs::ColorRGBA markerColorById(int id)
+std_msgs::ColorRGBA markerColorById(int id)
 {
     uint32_t x = static_cast<uint32_t>(id * 2654435761u);
     std_msgs::ColorRGBA color;
@@ -330,7 +401,7 @@ static std_msgs::ColorRGBA markerColorById(int id)
     return color;
 }
 
-void pubMapLine(const Estimator &estimator, const std_msgs::Header &header)
+void pubGolbalMapLine(const Estimator &estimator, const std_msgs::Header &header)
 {
     visualization_msgs::Marker map_lines;
     map_lines.header = header;
@@ -345,28 +416,70 @@ void pubMapLine(const Estimator &estimator, const std_msgs::Header &header)
     map_lines.color.a = 1.0;
     map_lines.lifetime = ros::Duration();
 
-    for (const auto &kv : estimator.f_manager.persistent_lines)
+    // Only promote lines that have already stabilized inside the current window.
+    auto isStableForGlobal = [&](const auto &line_it)
     {
-        const double length = (kv.second.second - kv.second.first).norm();
-        geometry_msgs::Point p1;
-        p1.x = kv.second.first.x();
-        p1.y = kv.second.first.y();
-        p1.z = kv.second.first.z();
-        geometry_msgs::Point p2;
-        p2.x = kv.second.second.x();
-        p2.y = kv.second.second.y();
-        p2.z = kv.second.second.z();
-        map_lines.points.push_back(p1);
-        map_lines.points.push_back(p2);
-        std_msgs::ColorRGBA color = markerColorById(kv.first);
-        map_lines.colors.push_back(color);
-        map_lines.colors.push_back(color);
+        return estimator.f_manager.useLineForOptimization(line_it) &&
+               line_it.endFrame() <= WINDOW_SIZE - 3;
+    };
+
+    for (const auto &line_it : estimator.f_manager.line_feature)
+    {
+        if (!isStableForGlobal(line_it))
+            continue;
+        Eigen::Vector3d seg_start;
+        Eigen::Vector3d seg_end;
+        if (!::lineToSegment(line_it.line_3d_world, seg_start, seg_end))
+            continue;
+        persistent_map_lines[line_it.line_id] = std::make_pair(seg_start, seg_end);
+    }
+
+    for (const auto &line_it : persistent_map_lines)
+    {
+        appendLineSegmentColored(map_lines, line_it.second.first, line_it.second.second, markerColorById(line_it.first));
     }
 
     if (map_lines.points.empty())
         map_lines.action = visualization_msgs::Marker::DELETE;
 
     pub_map_line.publish(map_lines);
+}
+
+void pubWindowMapLine(const Estimator &estimator, const std_msgs::Header &header)
+{
+    visualization_msgs::Marker window_lines;
+    window_lines.header = header;
+    window_lines.header.frame_id = "world";
+    window_lines.ns = "window_map_lines";
+    window_lines.id = 0;
+    window_lines.type = visualization_msgs::Marker::LINE_LIST;
+    window_lines.action = visualization_msgs::Marker::ADD;
+    window_lines.pose.orientation.w = 1.0;
+    window_lines.scale.x = 0.03;
+    window_lines.color.r = 1.0;
+    window_lines.color.g = 0.0;
+    window_lines.color.b = 0.0;
+    window_lines.color.a = 1.0;
+    window_lines.lifetime = ros::Duration();
+
+    for (const auto &line_it : estimator.f_manager.line_feature)
+    {
+        if (!estimator.f_manager.useLineForOptimization(line_it))
+            continue;
+        const Eigen::Vector3d moment = line_it.line_3d_world.head<3>();
+        const Eigen::Vector3d direction = line_it.line_3d_world.tail<3>();
+        const double dir_norm = direction.norm();
+        if (!moment.allFinite() || !direction.allFinite() || dir_norm < 1e-9)
+            continue;
+        const Eigen::Vector3d anchor = direction.cross(moment) / (dir_norm * dir_norm);
+        const Eigen::Vector3d offset = direction.normalized() * 0.5;
+        appendLineSegment(window_lines, anchor - offset, anchor + offset);
+    }
+
+    if (window_lines.points.empty())
+        window_lines.action = visualization_msgs::Marker::DELETE;
+
+    pub_window_map_line.publish(window_lines);
 }
 
 
