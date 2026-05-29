@@ -24,6 +24,7 @@
 #include "camodocal/camera_models/CataCamera.h"
 #include "camodocal/camera_models/PinholeCamera.h"
 #include "../estimator/parameters.h"
+#include "../estimator/feature_manager.h"
 #include "../utility/tic_toc.h"
 
 using namespace std;
@@ -62,6 +63,8 @@ public:
     double distance(cv::Point2f &pt1, cv::Point2f &pt2);
     void removeOutliers(set<int> &removePtsIds);
     cv::Mat getTrackImage();
+    LineFeatureFrameMap getLineFrame() const;
+    bool getCameraIntrinsics(int camera_id, Eigen::Vector4d &intrinsics) const;
     bool inBorder(const cv::Point2f &pt);
 
     int row, col;
@@ -88,11 +91,23 @@ public:
     double prev_time;
     bool stereo_cam;
     int n_id;
+    int line_n_id;
     bool hasPrediction;
     int primary_camera_id;
     std::shared_ptr<DeepFeature> deep_feature;
+    std::shared_ptr<DeepFeature> line_deep_feature;
 
 private:
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0, bool allow_new_features = true);
     void initDeepFeatureFrontend();
+    void initLineFeatureFrontend();
+    void processLineFeatures(const cv::Mat &left_img, const cv::Mat &right_img);
+    void drawLineTrack(const cv::Mat &imLeft, const cv::Mat &imRight);
+
+    LineFeatureFrameMap line_feature_frame;
+    std::vector<Eigen::Vector4d> prev_lines, cur_lines, cur_right_lines;
+    std::vector<int> line_ids, prev_line_ids, line_track_cnt;
+    std::vector<int> right_line_ids, cur_right_line_match_left;
+    Eigen::Matrix<float, 259, Eigen::Dynamic> prev_line_points, cur_line_points, right_line_points;
+    std::vector<std::map<int, double>> prev_points_on_lines, cur_points_on_lines, right_points_on_lines;
 };

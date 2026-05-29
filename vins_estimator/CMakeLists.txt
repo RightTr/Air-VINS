@@ -74,12 +74,15 @@ add_library(vins_lib
     src/estimator/parameters.cpp
     src/estimator/estimator.cpp
     src/estimator/feature_manager.cpp
+    src/factor/line_parameterization.cpp
+    src/factor/line_projection_factor.cpp
     src/factor/pose_local_parameterization.cpp
     src/factor/projectionTwoFrameOneCamFactor.cpp
     src/factor/projectionTwoFrameTwoCamFactor.cpp
     src/factor/projectionOneFrameTwoCamFactor.cpp
     src/factor/marginalization_factor.cpp
     src/utility/utility.cpp
+    src/utility/line_geometry.cpp
     src/utility/visualization.cpp
     src/utility/CameraPoseVisualization.cpp
     src/initial/solve_5pts.cpp

@@ -60,6 +60,20 @@ deep_feature_max_stereo_disparity: 96.0
 deep_feature_ransac_threshold: 3.0
 feature_min_depth: 0.3
 feature_max_depth: 40.0
+
+# line_ba is the single switch for PLNet line inference, temporal/stereo line
+# matching, line BA, and 2D/3D line visualization.
+line_ba: 1
+line_threshold: 0.7
+line_min_track_cnt: 2
+line_max_cnt: 100
+line_min_length: 50.0
+line_stereo_y_threshold: 3.0
+line_min_stereo_disparity: 1.0
+line_max_stereo_disparity: 128.0
+line_match_vote_threshold: 2
+line_match_score_threshold: 0.8
+
 enable_nuc_handle: 1
 
 max_solver_time: 0.04

@@ -23,6 +23,7 @@ using namespace std;
 const double FOCAL_LENGTH = 460.0;
 const int WINDOW_SIZE = 10;
 const int NUM_OF_F = 1000;
+const int NUM_OF_LINE_F = 500;
 //#define UNIT_SPHERE_ERROR
 
 extern double INIT_DEPTH;
@@ -76,6 +77,19 @@ extern double DEEP_FEATURE_STEREO_Y_THRESHOLD;
 extern double DEEP_FEATURE_MIN_STEREO_DISPARITY;
 extern double DEEP_FEATURE_MAX_STEREO_DISPARITY;
 extern double DEEP_FEATURE_RANSAC_THRESHOLD;
+extern int LINE_BA;
+extern double LINE_THRESHOLD;
+extern int LINE_MIN_OBS;
+extern int LINE_MIN_TRACK_CNT;
+extern int LINE_MAX_CNT;
+extern double LINE_MIN_LENGTH;
+extern double LINE_STEREO_Y_THRESHOLD;
+extern double LINE_MIN_STEREO_DISPARITY;
+extern double LINE_MAX_STEREO_DISPARITY;
+extern int LINE_MATCH_VOTE_THRESHOLD;
+extern double LINE_MATCH_SCORE_THRESHOLD;
+extern double LINE_MONO_CHI2;
+extern double LINE_STEREO_CHI2;
 extern double FEATURE_MIN_DEPTH;
 extern double FEATURE_MAX_DEPTH;
 extern int ENABLE_NUC_HANDLE;

@@ -214,6 +214,22 @@ Visualization Manager:
             CameraPoseVisualization: true
           Queue Size: 100
           Value: true
+        - Class: rviz/Marker
+          Enabled: true
+          Marker Topic: /vins_estimator/global_mapline
+          Name: GlobalMapLines
+          Namespaces:
+            map_lines: true
+          Queue Size: 100
+          Value: true
+        - Class: rviz/Marker
+          Enabled: true
+          Marker Topic: /vins_estimator/window_mapline
+          Name: WindowMapLines
+          Namespaces:
+            window_map_lines: true
+          Queue Size: 100
+          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -277,6 +293,18 @@ Visualization Manager:
           Median window: 5
           Min Value: 0
           Name: track_image
+          Normalize Range: true
+          Queue Size: 2
+          Transport Hint: raw
+          Unreliable: false
+          Value: true
+        - Class: rviz/Image
+          Enabled: true
+          Image Topic: /vins_estimator/line_match
+          Max Value: 1
+          Median window: 5
+          Min Value: 0
+          Name: line_match_image
           Normalize Range: true
           Queue Size: 2
           Transport Hint: raw

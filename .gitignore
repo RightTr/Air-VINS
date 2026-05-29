@@ -20,3 +20,5 @@ output/plnet_s1.engine
 output/superglue_indoor_sim_int32.engine
 output/superpoint_lightglue.engine
 output/superpoint_v1_sim_int32.engine
+
+output/stereo_line_match
