@@ -39,6 +39,14 @@ FeatureManager::FeatureManager(Matrix3d _Rs[])
     }
     visual_tracking_mode = TRACKING_MODE_STEREO;
     active_camera_id = 0;
+    has_local_window_state = false;
+    local_tic.resize(NUM_OF_CAM, Vector3d::Zero());
+    local_ric.resize(NUM_OF_CAM, Matrix3d::Identity());
+    for (int i = 0; i <= WINDOW_SIZE; ++i)
+    {
+        local_Ps[i].setZero();
+        local_Rs[i].setIdentity();
+    }
 }
 
 void FeatureManager::setRic(Matrix3d _ric[])
@@ -58,6 +66,11 @@ void FeatureManager::setLineCameraIntrinsics(const Eigen::Vector4d intrinsics[])
 void FeatureManager::setVisualTrackingMode(VisualTrackingMode mode)
 {
     visual_tracking_mode = mode;
+}
+
+VisualTrackingMode FeatureManager::getVisualTrackingMode() const
+{
+    return visual_tracking_mode;
 }
 
 void FeatureManager::setActiveCameraId(int camera_id)
@@ -86,17 +99,27 @@ bool FeatureManager::hasReliableDepth(const FeaturePerId &feature_per_id) const
 
 bool FeatureManager::useFeatureForOptimization(const FeaturePerId &feature_per_id) const
 {
-    if (feature_per_id.used_num < 4)
-        return false;
-    if (knownLandmarksOnly() && !hasReliableDepth(feature_per_id))
+    auto it = local_mappoints.find(feature_per_id.feature_id);
+    if (it == local_mappoints.end() || !it->second || !it->second->IsGood())
         return false;
     return true;
+}
+
+bool FeatureManager::hasGoodMappoint(int feature_id) const
+{
+    auto it = local_mappoints.find(feature_id);
+    if (it == local_mappoints.end() || !it->second)
+        return false;
+    return it->second->IsGood();
 }
 
 void FeatureManager::clearState()
 {
     feature.clear();
     line_feature.clear();
+    local_frames.clear();
+    local_mappoints.clear();
+    has_local_window_state = false;
     visual_tracking_mode = TRACKING_MODE_STEREO;
     active_camera_id = 0;
 }
@@ -160,6 +183,144 @@ void FeatureManager::addLineFeature(int frame_count, const LineFeatureFrameMap &
             it->line_per_frame.push_back(line_per_frame);
         }
     }
+}
+
+void FeatureManager::setWindowState(Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[])
+{
+    if (local_tic.size() != NUM_OF_CAM)
+        local_tic.resize(NUM_OF_CAM, Vector3d::Zero());
+    if (local_ric.size() != NUM_OF_CAM)
+        local_ric.resize(NUM_OF_CAM, Matrix3d::Identity());
+
+    for (int i = 0; i <= WINDOW_SIZE; ++i)
+    {
+        local_Ps[i] = Ps[i];
+        local_Rs[i] = Rs[i];
+    }
+    for (int i = 0; i < NUM_OF_CAM; ++i)
+    {
+        local_tic[i] = tic[i];
+        local_ric[i] = ric[i];
+    }
+    has_local_window_state = true;
+}
+
+void FeatureManager::addLocalFrame(int frameCnt, double header,
+                                   const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
+                                   VisualTrackingMode tracking_mode, int active_camera_id)
+{
+    local_frames.emplace_back(frameCnt, header, static_cast<int>(tracking_mode), active_camera_id);
+    LocalFrame &local_frame = local_frames.back();
+    for (const auto &id_pts : image)
+    {
+        if (id_pts.second.empty())
+            continue;
+        local_frame.addObservation(id_pts.first, id_pts.second[0].first, id_pts.second[0].second);
+    }
+    while (local_frames.size() > WINDOW_SIZE + 1)
+        local_frames.pop_front();
+}
+
+void FeatureManager::syncMappointFromFeature(FeaturePerId &feature_per_id)
+{
+    auto it = local_mappoints.find(feature_per_id.feature_id);
+    if (it == local_mappoints.end() || !it->second)
+        return;
+
+    if (!std::isfinite(feature_per_id.estimated_depth) || feature_per_id.estimated_depth <= 0)
+        return;
+
+    if (!has_local_window_state || feature_per_id.feature_per_frame.empty())
+        return;
+
+    it->second->SetPosition(featureDepthToWorldPoint(feature_per_id));
+}
+
+void FeatureManager::markMappointFromFeature(FeaturePerId &feature_per_id)
+{
+    auto &mappoint = local_mappoints[feature_per_id.feature_id];
+    if (!mappoint)
+        mappoint = std::make_shared<Mappoint>(feature_per_id.feature_id);
+
+    mappoint->ClearObversers();
+    mappoint->SetTrackCount(static_cast<int>(feature_per_id.feature_per_frame.size()));
+    for (int i = 0; i < static_cast<int>(feature_per_id.feature_per_frame.size()); ++i)
+        mappoint->AddObverser(feature_per_id.start_frame + i, i);
+
+    if (feature_per_id.solve_flag == 2)
+    {
+        mappoint->SetBad();
+        return;
+    }
+
+    if (mappoint->IsUnTriangulated())
+    {
+        if (mappoint->ObverserNum() > 2)
+        {
+            if (!mappoint->HasPosition() && std::isfinite(feature_per_id.estimated_depth) && feature_per_id.estimated_depth > 0)
+                syncMappointFromFeature(feature_per_id);
+            if (mappoint->HasPosition())
+                mappoint->SetGood();
+        }
+        else
+        {
+            mappoint->SetUnTriangulated();
+        }
+    }
+    else if (mappoint->IsGood())
+    {
+        if (!mappoint->HasPosition() && std::isfinite(feature_per_id.estimated_depth) && feature_per_id.estimated_depth > 0)
+            syncMappointFromFeature(feature_per_id);
+        else if (mappoint->HasPosition() && std::isfinite(feature_per_id.estimated_depth) && feature_per_id.estimated_depth > 0)
+            syncMappointFromFeature(feature_per_id);
+    }
+    else if (!mappoint->IsBad())
+    {
+        mappoint->SetUnTriangulated();
+    }
+}
+
+void FeatureManager::pruneStaleLocalMappoints()
+{
+    std::set<int> alive_feature_ids;
+    for (const auto &it_per_id : feature)
+        alive_feature_ids.insert(it_per_id.feature_id);
+
+    for (auto it = local_mappoints.begin(); it != local_mappoints.end();)
+    {
+        if (alive_feature_ids.find(it->first) == alive_feature_ids.end())
+            it = local_mappoints.erase(it);
+        else
+            ++it;
+    }
+}
+
+Vector3d FeatureManager::featureDepthToWorldPoint(const FeaturePerId &feature_per_id) const
+{
+    if (!has_local_window_state || feature_per_id.feature_per_frame.empty())
+        return Vector3d::Zero();
+
+    const int anchor_camera_id = feature_per_id.feature_per_frame[0].camera_id;
+    const int anchor_frame = feature_per_id.start_frame;
+    if (anchor_camera_id < 0 || anchor_camera_id >= static_cast<int>(local_ric.size()))
+        return Vector3d::Zero();
+    if (anchor_frame < 0 || anchor_frame > WINDOW_SIZE)
+        return Vector3d::Zero();
+    const Vector3d pts_in_cam = local_ric[anchor_camera_id] *
+                                (feature_per_id.estimated_depth * feature_per_id.feature_per_frame[0].point) +
+                                local_tic[anchor_camera_id];
+    return local_Rs[anchor_frame] * pts_in_cam + local_Ps[anchor_frame];
+}
+
+void FeatureManager::updateLocalPoints(int frameCnt)
+{
+    (void)frameCnt;
+    for (auto &it_per_id : feature)
+    {
+        it_per_id.used_num = static_cast<int>(it_per_id.feature_per_frame.size());
+        markMappointFromFeature(it_per_id);
+    }
+    pruneStaleLocalMappoints();
 }
 
 
@@ -266,13 +427,20 @@ void FeatureManager::setDepth(const VectorXd &x)
 
         it_per_id.estimated_depth = 1.0 / x(++feature_index);
         //ROS_INFO("feature id %d , start_frame %d, depth %f ", it_per_id->feature_id, it_per_id-> start_frame, it_per_id->estimated_depth);
-        if (it_per_id.estimated_depth < 0)
+        if (!isReliableTriangulatedDepth(it_per_id.estimated_depth))
         {
             it_per_id.solve_flag = 2;
             it_per_id.reliable_depth = false;
+            auto mpt_it = local_mappoints.find(it_per_id.feature_id);
+            if (mpt_it != local_mappoints.end() && mpt_it->second)
+                mpt_it->second->SetBad();
         }
         else
+        {
             it_per_id.solve_flag = 1;
+            it_per_id.reliable_depth = true;
+            syncMappointFromFeature(it_per_id);
+        }
     }
 }
 
@@ -283,7 +451,10 @@ void FeatureManager::removeFailures()
     {
         it_next++;
         if (it->solve_flag == 2)
+        {
+            local_mappoints.erase(it->feature_id);
             feature.erase(it);
+        }
     }
 
     for (auto it = line_feature.begin(), it_next = line_feature.begin();
@@ -793,6 +964,7 @@ void FeatureManager::removeOutlier(set<int> &outlierIndex)
         itSet = outlierIndex.find(index);
         if(itSet != outlierIndex.end())
         {
+            local_mappoints.erase(index);
             feature.erase(it);
             //printf("remove outlier %d \n", index);
         }

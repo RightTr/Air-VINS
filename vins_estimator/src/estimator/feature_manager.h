@@ -12,7 +12,9 @@
 
 #include <list>
 #include <algorithm>
+#include <deque>
 #include <map>
+#include <memory>
 #include <set>
 #include <vector>
 #include <numeric>
@@ -26,6 +28,8 @@ using namespace Eigen;
 
 #include "parameters.h"
 #include "../utility/tic_toc.h"
+#include "../utility/localmap_frame.h"
+#include "../utility/mappoint.h"
 #include "../featureTracker/deepFeature/include/utils.h"
 
 enum VisualTrackingMode
@@ -190,12 +194,18 @@ class FeatureManager
     void setRic(Matrix3d _ric[]);
     void setLineCameraIntrinsics(const Eigen::Vector4d intrinsics[]);
     void setVisualTrackingMode(VisualTrackingMode mode);
+    VisualTrackingMode getVisualTrackingMode() const;
     void setActiveCameraId(int camera_id);
     bool knownLandmarksOnly() const;
     bool allowDepthInitialization() const;
     bool hasReliableDepth(const FeaturePerId &feature_per_id) const;
     bool useFeatureForOptimization(const FeaturePerId &feature_per_id) const;
     void clearState();
+    void setWindowState(Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[]);
+    void addLocalFrame(int frameCnt, double header,
+                       const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
+                       VisualTrackingMode tracking_mode, int active_camera_id);
+    void updateLocalPoints(int frameCnt);
     int getFeatureCount();
     int getLineFeatureCount();
     bool addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td);
@@ -231,13 +241,28 @@ class FeatureManager
     int new_feature_num;
     int long_track_num;
 
+    bool hasGoodMappoint(int feature_id) const;
+
   private:
     double compensatedParallax2(const FeaturePerId &it_per_id, int frame_count);
+    void syncMappointFromFeature(FeaturePerId &feature_per_id);
+    void markMappointFromFeature(FeaturePerId &feature_per_id);
+    void pruneStaleLocalMappoints();
+    Vector3d featureDepthToWorldPoint(const FeaturePerId &feature_per_id) const;
+
     const Matrix3d *Rs;
     Matrix3d ric[2];
     Eigen::Vector4d line_camera_intrinsics[2];
     VisualTrackingMode visual_tracking_mode;
     int active_camera_id;
+
+    std::deque<LocalFrame> local_frames;
+    std::map<int, MappointPtr> local_mappoints;
+    Vector3d local_Ps[WINDOW_SIZE + 1];
+    Matrix3d local_Rs[WINDOW_SIZE + 1];
+    std::vector<Vector3d> local_tic;
+    std::vector<Matrix3d> local_ric;
+    bool has_local_window_state;
 };
 
 #endif

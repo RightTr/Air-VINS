@@ -444,6 +444,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         //printf("non-keyframe\n");
     }
     f_manager.addLineFeature(frame_count, lines, td);
+    f_manager.addLocalFrame(frame_count, header, image, f_manager.getVisualTrackingMode(), active_camera_id);
 
     ROS_DEBUG("%s", marginalization_flag ? "Non-keyframe" : "Keyframe");
     ROS_DEBUG("Solving %d", frame_count);
@@ -488,6 +489,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
                 }
                 if(result)
                 {
+                    f_manager.setWindowState(Ps, Rs, tic, ric);
+                    f_manager.updateLocalPoints(frame_count);
                     optimization();
                     updateLatestStates();
                     f_manager.removeFailures();
@@ -506,6 +509,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
             f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
             f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
+            f_manager.setWindowState(Ps, Rs, tic, ric);
+            f_manager.updateLocalPoints(frame_count);
             ROS_INFO("init stereo+imu line landmarks: %d", f_manager.getLineFeatureCount());
             if (frame_count == WINDOW_SIZE)
             {
@@ -537,6 +542,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
             f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
             f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
+            f_manager.setWindowState(Ps, Rs, tic, ric);
+            f_manager.updateLocalPoints(frame_count);
             ROS_INFO("init stereo-only line landmarks: %d", f_manager.getLineFeatureCount());
             optimization();
 
@@ -570,6 +577,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
             f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
         f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
         f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
+        f_manager.setWindowState(Ps, Rs, tic, ric);
+        f_manager.updateLocalPoints(frame_count);
         optimization();
         std::map<int, std::set<int>> removeLineObservations;
         lineOutliersRejection(removeLineObservations);
@@ -852,6 +861,8 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
 
 void Estimator::vector2double()
 {
+    f_manager.setWindowState(Ps, Rs, tic, ric);
+
     for (int i = 0; i <= WINDOW_SIZE; i++)
     {
         para_Pose[i][0] = Ps[i].x();
@@ -989,6 +1000,7 @@ void Estimator::double2vector()
     VectorXd dep = f_manager.getDepthVector();
     for (int i = 0; i < f_manager.getFeatureCount(); i++)
         dep(i) = para_Feature[i][0];
+    f_manager.setWindowState(Ps, Rs, tic, ric);
     f_manager.setDepth(dep);
 
     if (LINE_BA)
@@ -1644,6 +1656,8 @@ void Estimator::predictPtsInNextFrame()
 
     for (auto &it_per_id : f_manager.feature)
     {
+        if (!f_manager.useFeatureForOptimization(it_per_id))
+            continue;
         if(it_per_id.estimated_depth > 0)
         {
             int firstIndex = it_per_id.start_frame;
