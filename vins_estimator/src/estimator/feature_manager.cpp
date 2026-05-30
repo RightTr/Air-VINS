@@ -259,8 +259,7 @@ void FeatureManager::markMappointFromFeature(FeaturePerId &feature_per_id)
         {
             if (!mappoint->HasPosition() && std::isfinite(feature_per_id.estimated_depth) && feature_per_id.estimated_depth > 0)
                 syncMappointFromFeature(feature_per_id);
-            if (mappoint->HasPosition())
-                mappoint->SetGood();
+            mappoint->SetGood();
         }
         else
         {
@@ -269,9 +268,7 @@ void FeatureManager::markMappointFromFeature(FeaturePerId &feature_per_id)
     }
     else if (mappoint->IsGood())
     {
-        if (!mappoint->HasPosition() && std::isfinite(feature_per_id.estimated_depth) && feature_per_id.estimated_depth > 0)
-            syncMappointFromFeature(feature_per_id);
-        else if (mappoint->HasPosition() && std::isfinite(feature_per_id.estimated_depth) && feature_per_id.estimated_depth > 0)
+        if (std::isfinite(feature_per_id.estimated_depth) && feature_per_id.estimated_depth > 0)
             syncMappointFromFeature(feature_per_id);
     }
     else if (!mappoint->IsBad())
@@ -288,7 +285,8 @@ void FeatureManager::pruneStaleLocalMappoints()
 
     for (auto it = local_mappoints.begin(); it != local_mappoints.end();)
     {
-        if (alive_feature_ids.find(it->first) == alive_feature_ids.end())
+        const bool alive = alive_feature_ids.find(it->first) != alive_feature_ids.end();
+        if (!alive && (!it->second || !it->second->IsGood()))
             it = local_mappoints.erase(it);
         else
             ++it;
@@ -315,12 +313,38 @@ Vector3d FeatureManager::featureDepthToWorldPoint(const FeaturePerId &feature_pe
 void FeatureManager::updateLocalPoints(int frameCnt)
 {
     (void)frameCnt;
+    int untriangulated_count = 0;
+    int good_count = 0;
+    int bad_count = 0;
     for (auto &it_per_id : feature)
     {
         it_per_id.used_num = static_cast<int>(it_per_id.feature_per_frame.size());
         markMappointFromFeature(it_per_id);
+
+        auto mpt_it = local_mappoints.find(it_per_id.feature_id);
+        if (mpt_it == local_mappoints.end() || !mpt_it->second)
+            continue;
+
+        if (mpt_it->second->IsUnTriangulated())
+            ++untriangulated_count;
+        else if (mpt_it->second->IsGood())
+            ++good_count;
+        else if (mpt_it->second->IsBad())
+            ++bad_count;
     }
     pruneStaleLocalMappoints();
+
+    if (frameCnt >= 0 && frameCnt % 10 == 0)
+    {
+        const int feature_ba_count = getFeatureCount();
+        ROS_INFO_STREAM("local map stats frame=" << frameCnt
+                                                 << " untriangulated=" << untriangulated_count
+                                                 << " good=" << good_count
+                                                 << " bad=" << bad_count
+                                                 << " ba_features=" << feature_ba_count
+                                                 << " total_features=" << feature.size()
+                                                 << " local_mappoints=" << local_mappoints.size());
+    }
 }
 
 
@@ -425,22 +449,42 @@ void FeatureManager::setDepth(const VectorXd &x)
         if (!useFeatureForOptimization(it_per_id))
             continue;
 
-        it_per_id.estimated_depth = 1.0 / x(++feature_index);
-        //ROS_INFO("feature id %d , start_frame %d, depth %f ", it_per_id->feature_id, it_per_id-> start_frame, it_per_id->estimated_depth);
-        if (!isReliableTriangulatedDepth(it_per_id.estimated_depth))
+        const double optimized_inv_depth = x(++feature_index);
+        const double optimized_depth = 1.0 / optimized_inv_depth;
+        const bool depth_valid = std::isfinite(optimized_depth) &&
+                                 optimized_depth >= FEATURE_MIN_DEPTH &&
+                                 optimized_depth <= FEATURE_MAX_DEPTH;
+        if (depth_valid)
         {
-            it_per_id.solve_flag = 2;
-            it_per_id.reliable_depth = false;
-            auto mpt_it = local_mappoints.find(it_per_id.feature_id);
-            if (mpt_it != local_mappoints.end() && mpt_it->second)
-                mpt_it->second->SetBad();
+            it_per_id.estimated_depth = optimized_depth;
+            it_per_id.reliable_depth = true;
+            it_per_id.solve_flag = 1;
+            it_per_id.depth_fail_count = 0;
         }
         else
         {
-            it_per_id.solve_flag = 1;
-            it_per_id.reliable_depth = true;
-            syncMappointFromFeature(it_per_id);
+            it_per_id.depth_fail_count++;
+            const double fallback_depth = (std::isfinite(it_per_id.estimated_depth) && it_per_id.estimated_depth > 0)
+                                              ? std::min(std::max(it_per_id.estimated_depth, FEATURE_MIN_DEPTH), FEATURE_MAX_DEPTH)
+                                              : INIT_DEPTH;
+            it_per_id.estimated_depth = fallback_depth;
+            it_per_id.reliable_depth = false;
+            if (it_per_id.depth_fail_count >= 2)
+            {
+                it_per_id.solve_flag = 2;
+                auto mpt_it = local_mappoints.find(it_per_id.feature_id);
+                if (mpt_it != local_mappoints.end() && mpt_it->second)
+                    mpt_it->second->SetBad();
+            }
+            else
+            {
+                it_per_id.solve_flag = 1;
+            }
         }
+
+        //ROS_INFO("feature id %d , start_frame %d, depth %f ", it_per_id->feature_id, it_per_id-> start_frame, it_per_id->estimated_depth);
+        if (it_per_id.solve_flag == 1)
+            syncMappointFromFeature(it_per_id);
     }
 }
 
@@ -472,6 +516,7 @@ void FeatureManager::clearDepth()
     {
         it_per_id.estimated_depth = -1;
         it_per_id.reliable_depth = false;
+        it_per_id.depth_fail_count = 0;
     }
 }
 
