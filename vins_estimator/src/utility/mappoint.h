@@ -38,9 +38,18 @@ class Mappoint
     void RemoveObverser(int frame_id);
     void ClearObversers();
     int ObverserNum() const;
+    const std::map<int, int> &GetAllObversers() const;
 
     void SetTrackCount(int track_count);
     int TrackCount() const;
+
+    void ResetStaleCount();
+    void IncreaseStaleCount();
+    int StaleCount() const;
+
+    void SetWindowSupport(int support_count, int last_support_frame_id);
+    int WindowSupportCount() const;
+    int LastWindowSupportFrameId() const;
 
     void SetDescriptor(const Eigen::Matrix<float, 259, 1> &descriptor);
     bool HasDescriptor() const;
@@ -54,6 +63,9 @@ class Mappoint
     int track_count_;
     bool has_descriptor_;
     Eigen::Matrix<float, 259, 1> descriptor_;
+    int stale_count_;
+    int window_support_count_;
+    int last_window_support_frame_id_;
 };
 
 using MappointPtr = std::shared_ptr<Mappoint>;

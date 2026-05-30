@@ -10,6 +10,7 @@
 #include "feature_manager.h"
 #include <cmath>
 #include <limits>
+#include <utility>
 #include <opencv2/imgproc/imgproc.hpp>
 #include "camodocal/camera_models/CameraFactory.h"
 #include "../utility/line_geometry.h"
@@ -221,6 +222,24 @@ void FeatureManager::addLocalFrame(int frameCnt, double header,
         local_frames.pop_front();
 }
 
+std::pair<int, int> FeatureManager::windowSupportStats(int feature_id) const
+{
+    if (feature_id < 0)
+        return std::make_pair(0, -1);
+
+    int support_count = 0;
+    int last_support_frame_id = -1;
+    for (auto it = local_frames.rbegin(); it != local_frames.rend(); ++it)
+    {
+        if (!it->hasObservation(feature_id))
+            continue;
+        ++support_count;
+        if (last_support_frame_id < 0)
+            last_support_frame_id = it->frame_id;
+    }
+    return std::make_pair(support_count, last_support_frame_id);
+}
+
 void FeatureManager::syncMappointFromFeature(FeaturePerId &feature_per_id)
 {
     auto it = local_mappoints.find(feature_per_id.feature_id);
@@ -236,6 +255,25 @@ void FeatureManager::syncMappointFromFeature(FeaturePerId &feature_per_id)
     it->second->SetPosition(featureDepthToWorldPoint(feature_per_id));
 }
 
+void FeatureManager::updateMappointDescriptors(const std::vector<int> &ids, const Eigen::Matrix<float, 259, Eigen::Dynamic> &features)
+{
+    if (features.rows() != 259 || features.cols() <= 0 || ids.empty())
+        return;
+
+    const int count = std::min<int>(static_cast<int>(ids.size()), static_cast<int>(features.cols()));
+    for (int i = 0; i < count; ++i)
+    {
+        const int feature_id = ids[i];
+        auto it = local_mappoints.find(feature_id);
+        if (it == local_mappoints.end() || !it->second)
+            continue;
+        if (!features.col(i).allFinite())
+            continue;
+
+        it->second->SetDescriptor(features.col(i));
+    }
+}
+
 void FeatureManager::markMappointFromFeature(FeaturePerId &feature_per_id)
 {
     auto &mappoint = local_mappoints[feature_per_id.feature_id];
@@ -244,6 +282,7 @@ void FeatureManager::markMappointFromFeature(FeaturePerId &feature_per_id)
 
     mappoint->ClearObversers();
     mappoint->SetTrackCount(static_cast<int>(feature_per_id.feature_per_frame.size()));
+    mappoint->ResetStaleCount();
     for (int i = 0; i < static_cast<int>(feature_per_id.feature_per_frame.size()); ++i)
         mappoint->AddObverser(feature_per_id.start_frame + i, i);
 
@@ -277,6 +316,74 @@ void FeatureManager::markMappointFromFeature(FeaturePerId &feature_per_id)
     }
 }
 
+bool FeatureManager::projectWorldPointToCamera(const Vector3d &point_w, const Eigen::Matrix4d &nextT, int camera_id, Vector3d &point_cam) const
+{
+    if (!has_local_window_state)
+        return false;
+    if (camera_id < 0 || camera_id >= static_cast<int>(local_ric.size()))
+        return false;
+    if (!point_w.allFinite() || !nextT.allFinite())
+        return false;
+
+    const Eigen::Matrix3d Rwb = nextT.block<3, 3>(0, 0);
+    const Eigen::Vector3d Pwb = nextT.block<3, 1>(0, 3);
+    const Eigen::Vector3d point_in_body = Rwb.transpose() * (point_w - Pwb);
+    point_cam = local_ric[camera_id].transpose() * (point_in_body - local_tic[camera_id]);
+    return point_cam.allFinite() && point_cam.z() > 0.0;
+}
+
+std::vector<ProjectionCandidate> FeatureManager::collectProjectionCandidates(const Eigen::Matrix4d &nextT) const
+{
+    std::vector<ProjectionCandidate> candidates;
+    if (!has_local_window_state)
+        return candidates;
+
+    const int camera_id = active_camera_id;
+    if (camera_id < 0 || camera_id >= static_cast<int>(local_ric.size()))
+        return candidates;
+
+    candidates.reserve(std::min<size_t>(local_mappoints.size(), 512));
+    for (const auto &item : local_mappoints)
+    {
+        const auto &mappoint = item.second;
+        if (!mappoint || !mappoint->IsGood() || !mappoint->HasPosition() || !mappoint->HasDescriptor())
+            continue;
+
+        const auto support_stats = windowSupportStats(item.first);
+        ProjectionCandidate candidate;
+        candidate.feature_id = item.first;
+        candidate.camera_id = camera_id;
+        candidate.track_count = mappoint->TrackCount();
+        candidate.observer_count = mappoint->ObverserNum();
+        candidate.window_support_count = support_stats.first;
+        candidate.last_support_frame_id = support_stats.second;
+        candidate.descriptor = mappoint->GetDescriptor().segment<256>(3);
+
+        Vector3d point_cam = Vector3d::Zero();
+        if (!projectWorldPointToCamera(mappoint->GetPosition(), nextT, camera_id, point_cam))
+            continue;
+
+        candidate.point_cam = point_cam;
+        candidates.push_back(candidate);
+    }
+
+    std::sort(candidates.begin(), candidates.end(), [](const ProjectionCandidate &a, const ProjectionCandidate &b) {
+        if (a.window_support_count != b.window_support_count)
+            return a.window_support_count > b.window_support_count;
+        if (a.track_count != b.track_count)
+            return a.track_count > b.track_count;
+        if (a.observer_count != b.observer_count)
+            return a.observer_count > b.observer_count;
+        if (a.last_support_frame_id != b.last_support_frame_id)
+            return a.last_support_frame_id > b.last_support_frame_id;
+        return a.feature_id < b.feature_id;
+    });
+
+    if (candidates.size() > 512)
+        candidates.resize(512);
+    return candidates;
+}
+
 void FeatureManager::pruneStaleLocalMappoints()
 {
     std::set<int> alive_feature_ids;
@@ -286,10 +393,33 @@ void FeatureManager::pruneStaleLocalMappoints()
     for (auto it = local_mappoints.begin(); it != local_mappoints.end();)
     {
         const bool alive = alive_feature_ids.find(it->first) != alive_feature_ids.end();
-        if (!alive && (!it->second || !it->second->IsGood()))
+        if (!it->second)
+        {
             it = local_mappoints.erase(it);
-        else
+            continue;
+        }
+
+        if (alive)
+        {
+            it->second->ResetStaleCount();
             ++it;
+            continue;
+        }
+
+        it->second->IncreaseStaleCount();
+        const auto support_stats = windowSupportStats(it->first);
+        const bool strong_window_support = support_stats.first >= 2;
+        const int keep_good_limit = strong_window_support ? 6 : 3;
+        const int keep_non_good_limit = strong_window_support ? 4 : 2;
+        const bool keep_temporarily = it->second->IsGood() && it->second->StaleCount() < keep_good_limit;
+        const bool keep_non_good_temporarily = !it->second->IsGood() && it->second->StaleCount() < keep_non_good_limit;
+        if (keep_temporarily || keep_non_good_temporarily)
+        {
+            ++it;
+            continue;
+        }
+
+        it = local_mappoints.erase(it);
     }
 }
 
@@ -316,6 +446,7 @@ void FeatureManager::updateLocalPoints(int frameCnt)
     int untriangulated_count = 0;
     int good_count = 0;
     int bad_count = 0;
+    int supported_good_count = 0;
     for (auto &it_per_id : feature)
     {
         it_per_id.used_num = static_cast<int>(it_per_id.feature_per_frame.size());
@@ -325,10 +456,17 @@ void FeatureManager::updateLocalPoints(int frameCnt)
         if (mpt_it == local_mappoints.end() || !mpt_it->second)
             continue;
 
+        const auto support_stats = windowSupportStats(it_per_id.feature_id);
+        mpt_it->second->SetWindowSupport(support_stats.first, support_stats.second);
+
         if (mpt_it->second->IsUnTriangulated())
             ++untriangulated_count;
         else if (mpt_it->second->IsGood())
+        {
             ++good_count;
+            if (mpt_it->second->WindowSupportCount() >= 2)
+                ++supported_good_count;
+        }
         else if (mpt_it->second->IsBad())
             ++bad_count;
     }
@@ -340,6 +478,7 @@ void FeatureManager::updateLocalPoints(int frameCnt)
         ROS_INFO_STREAM("local map stats frame=" << frameCnt
                                                  << " untriangulated=" << untriangulated_count
                                                  << " good=" << good_count
+                                                 << " supported_good=" << supported_good_count
                                                  << " bad=" << bad_count
                                                  << " ba_features=" << feature_ba_count
                                                  << " total_features=" << feature.size()
@@ -469,7 +608,7 @@ void FeatureManager::setDepth(const VectorXd &x)
                                               : INIT_DEPTH;
             it_per_id.estimated_depth = fallback_depth;
             it_per_id.reliable_depth = false;
-            if (it_per_id.depth_fail_count >= 2)
+            if (it_per_id.depth_fail_count >= 3)
             {
                 it_per_id.solve_flag = 2;
                 auto mpt_it = local_mappoints.find(it_per_id.feature_id);
@@ -496,7 +635,6 @@ void FeatureManager::removeFailures()
         it_next++;
         if (it->solve_flag == 2)
         {
-            local_mappoints.erase(it->feature_id);
             feature.erase(it);
         }
     }
@@ -1009,7 +1147,9 @@ void FeatureManager::removeOutlier(set<int> &outlierIndex)
         itSet = outlierIndex.find(index);
         if(itSet != outlierIndex.end())
         {
-            local_mappoints.erase(index);
+            auto mpt_it = local_mappoints.find(index);
+            if (mpt_it != local_mappoints.end() && mpt_it->second)
+                mpt_it->second->SetBad();
             feature.erase(it);
             //printf("remove outlier %d \n", index);
         }

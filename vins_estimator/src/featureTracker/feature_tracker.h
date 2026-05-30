@@ -59,7 +59,7 @@ public:
                                    vector<cv::Point2f> &curLeftPts, 
                                    vector<cv::Point2f> &curRightPts,
                                    map<int, cv::Point2f> &prevLeftPtsMap);
-    void setPrediction(map<int, Eigen::Vector3d> &predictPts);
+    void setProjectionCandidates(const std::vector<ProjectionCandidate> &candidates);
     double distance(cv::Point2f &pt1, cv::Point2f &pt2);
     void removeOutliers(set<int> &removePtsIds);
     cv::Mat getTrackImage();
@@ -74,15 +74,14 @@ public:
     cv::Mat prev_img, cur_img;
     cv::Mat left_prev_img, right_prev_img;
     vector<cv::Point2f> n_pts;
-    vector<cv::Point2f> predict_pts;
-    vector<cv::Point2f> predict_pts_debug;
+    std::vector<ProjectionCandidate> projection_candidates;
     vector<cv::Point2f> prev_pts, cur_pts, cur_right_pts;
     vector<cv::Point2f> prev_un_pts, cur_un_pts, cur_un_right_pts;
     vector<cv::Point2f> pts_velocity, right_pts_velocity;
     vector<int> ids, ids_right;
     vector<int> track_cnt, left_track_cnt, right_track_cnt;
     vector<int> left_ids;
-    Eigen::Matrix<float, 259, Eigen::Dynamic> prev_deep_features, left_deep_features, right_deep_features;
+    Eigen::Matrix<float, 259, Eigen::Dynamic> left_deep_features, right_deep_features;
     map<int, cv::Point2f> cur_un_pts_map, prev_un_pts_map;
     map<int, cv::Point2f> cur_un_right_pts_map, prev_un_right_pts_map;
     map<int, cv::Point2f> prevLeftPtsMap;
@@ -92,12 +91,9 @@ public:
     bool stereo_cam;
     int n_id;
     int line_n_id;
-    bool hasPrediction;
     int primary_camera_id;
     std::shared_ptr<DeepFeature> deep_feature;
     std::shared_ptr<DeepFeature> line_deep_feature;
-
-private:
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1 = cv::Mat(), int primary_camera_id = 0, bool allow_new_features = true);
     void initDeepFeatureFrontend();
     void initLineFeatureFrontend();

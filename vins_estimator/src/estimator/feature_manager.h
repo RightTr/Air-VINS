@@ -18,6 +18,7 @@
 #include <set>
 #include <vector>
 #include <numeric>
+#include <utility>
 using namespace std;
 
 #include <eigen3/Eigen/Dense>
@@ -61,6 +62,25 @@ struct LineObservationInput
 };
 
 typedef map<int, vector<LineObservationInput>> LineFeatureFrameMap;
+
+struct ProjectionCandidate
+{
+    int feature_id;
+    int camera_id;
+    int track_count;
+    int observer_count;
+    int window_support_count;
+    int last_support_frame_id;
+    Eigen::Vector3d point_cam;
+    Eigen::Matrix<float, 256, 1> descriptor;
+
+    ProjectionCandidate()
+        : feature_id(-1), camera_id(0), track_count(0), observer_count(0),
+          window_support_count(0), last_support_frame_id(-1), point_cam(Eigen::Vector3d::Zero())
+    {
+        descriptor.setZero();
+    }
+};
 
 class FeaturePerFrame
 {
@@ -218,6 +238,8 @@ class FeatureManager
     void clearDepth();
     VectorXd getDepthVector();
     void triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[]);
+    std::vector<ProjectionCandidate> collectProjectionCandidates(const Eigen::Matrix4d &nextT) const;
+    void updateMappointDescriptors(const std::vector<int> &ids, const Eigen::Matrix<float, 259, Eigen::Dynamic> &features);
     void triangulateLine(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[]);
     void triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matrix<double, 3, 4> &Pose1,
                             Eigen::Vector2d &point0, Eigen::Vector2d &point1, Eigen::Vector3d &point_3d);
@@ -249,7 +271,9 @@ class FeatureManager
     void syncMappointFromFeature(FeaturePerId &feature_per_id);
     void markMappointFromFeature(FeaturePerId &feature_per_id);
     void pruneStaleLocalMappoints();
+    std::pair<int, int> windowSupportStats(int feature_id) const;
     Vector3d featureDepthToWorldPoint(const FeaturePerId &feature_per_id) const;
+    bool projectWorldPointToCamera(const Vector3d &point_w, const Eigen::Matrix4d &nextT, int camera_id, Vector3d &point_cam) const;
 
     const Matrix3d *Rs;
     Matrix3d ric[2];

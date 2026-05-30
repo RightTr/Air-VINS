@@ -17,6 +17,7 @@
 #include <set>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace
 {
@@ -363,9 +364,7 @@ FeatureTracker::FeatureTracker()
     stereo_cam = 0;
     n_id = 0;
     line_n_id = 0;
-    hasPrediction = false;
     primary_camera_id = 0;
-    prev_deep_features.resize(259, 0);
     left_deep_features.resize(259, 0);
     right_deep_features.resize(259, 0);
     prev_line_points.resize(259, 0);
@@ -384,8 +383,7 @@ void FeatureTracker::resetTrackingState()
     right_prev_img.release();
 
     n_pts.clear();
-    predict_pts.clear();
-    predict_pts_debug.clear();
+    projection_candidates.clear();
     prev_pts.clear();
     cur_pts.clear();
     cur_right_pts.clear();
@@ -420,13 +418,11 @@ void FeatureTracker::resetTrackingState()
     prev_line_points.resize(259, 0);
     cur_line_points.resize(259, 0);
     right_line_points.resize(259, 0);
-    prev_deep_features.resize(259, 0);
     left_deep_features.resize(259, 0);
     right_deep_features.resize(259, 0);
     cur_time = 0;
     prev_time = 0;
     stereo_cam = 0;
-    hasPrediction = false;
 }
 
 void FeatureTracker::clearState()
@@ -563,23 +559,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         TicToc t_o;
         vector<uchar> status;
         vector<float> err;
-        if(hasPrediction)
-        {
-            cur_pts = predict_pts;
-            cv::calcOpticalFlowPyrLK(prev_img, cur_img, prev_pts, cur_pts, status, err, cv::Size(21, 21), 1,
-            cv::TermCriteria(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, 30, 0.01), cv::OPTFLOW_USE_INITIAL_FLOW);
-            
-            int succ_num = 0;
-            for (size_t i = 0; i < status.size(); i++)
-            {
-                if (status[i])
-                    succ_num++;
-            }
-            if (succ_num < 10)
-               cv::calcOpticalFlowPyrLK(prev_img, cur_img, prev_pts, cur_pts, status, err, cv::Size(21, 21), 3);
-        }
-        else
-            cv::calcOpticalFlowPyrLK(prev_img, cur_img, prev_pts, cur_pts, status, err, cv::Size(21, 21), 3);
+        cv::calcOpticalFlowPyrLK(prev_img, cur_img, prev_pts, cur_pts, status, err, cv::Size(21, 21), 3);
         // reverse check
         if(FLOW_BACK)
         {
@@ -707,7 +687,6 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     prev_un_pts = cur_un_pts;
     prev_un_pts_map = cur_un_pts_map;
     prev_time = cur_time;
-    hasPrediction = false;
 
     prevLeftPtsMap.clear();
     for(size_t i = 0; i < cur_pts.size(); i++)
@@ -835,6 +814,9 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     right_pts_velocity.clear();
     cur_un_right_pts_map.clear();
 
+    const std::vector<ProjectionCandidate> projection_candidates_local = projection_candidates;
+    projection_candidates.clear();
+
     Eigen::Matrix<float, 259, Eigen::Dynamic> current_features;
     if (!deep_feature || !deep_feature->extractPoints(cur_img, current_features))
     {
@@ -843,6 +825,9 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     }
 
     vector<int> current_prev_index(current_features.cols(), -1);
+    vector<int> current_feature_ids(current_features.cols(), -1);
+    vector<int> current_feature_track_cnt(current_features.cols(), 1);
+    vector<bool> current_feature_taken(current_features.cols(), false);
     Eigen::Matrix<float, 259, Eigen::Dynamic> matched_features;
     matched_features.resize(259, 0);
 
@@ -859,6 +844,77 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             if (match.trainIdx < 0 || match.trainIdx >= current_features.cols())
                 continue;
             current_prev_index[match.trainIdx] = match.queryIdx;
+            current_feature_ids[match.trainIdx] = prev_ids[match.queryIdx];
+            current_feature_track_cnt[match.trainIdx] = prev_track_cnt[match.queryIdx] + 1;
+            current_feature_taken[match.trainIdx] = true;
+        }
+    }
+
+    if (!projection_candidates_local.empty())
+    {
+        const float projection_radius = 15.0f;
+        const float projection_descriptor_threshold = 0.35f;
+        const float projection_descriptor_ratio = 0.60f;
+
+        for (const auto &candidate : projection_candidates_local)
+        {
+            if (candidate.feature_id < 0 || candidate.camera_id != primary_camera_id_)
+                continue;
+
+            if (!std::isfinite(candidate.point_cam.x()) || !std::isfinite(candidate.point_cam.y()) ||
+                !std::isfinite(candidate.point_cam.z()) || candidate.point_cam.z() <= 0.1)
+                continue;
+
+            Eigen::Vector2d projected_uv;
+            m_camera[candidate.camera_id]->spaceToPlane(candidate.point_cam, projected_uv);
+            cv::Point2f projected_pt(projected_uv.x(), projected_uv.y());
+            if (!inBorder(projected_pt))
+                continue;
+
+            int best_idx = -1;
+            float best_desc_dist = std::numeric_limits<float>::max();
+            int second_idx = -1;
+            float second_desc_dist = std::numeric_limits<float>::max();
+
+            const Eigen::Matrix<float, 256, 1> &candidate_descriptor = candidate.descriptor;
+
+            for (int idx = 0; idx < current_features.cols(); ++idx)
+            {
+                if (current_feature_taken[idx])
+                    continue;
+
+                cv::Point2f pt(current_features(1, idx), current_features(2, idx));
+                if (!inBorder(pt))
+                    continue;
+                if (cv::norm(pt - projected_pt) > projection_radius)
+                    continue;
+
+                const Eigen::Matrix<float, 256, 1> current_descriptor = current_features.block<256, 1>(3, idx);
+                const float desc_dist = DescriptorDistance(candidate_descriptor, current_descriptor);
+                if (desc_dist < best_desc_dist)
+                {
+                    second_desc_dist = best_desc_dist;
+                    second_idx = best_idx;
+                    best_desc_dist = desc_dist;
+                    best_idx = idx;
+                }
+                else if (desc_dist < second_desc_dist)
+                {
+                    second_desc_dist = desc_dist;
+                    second_idx = idx;
+                }
+            }
+
+            if (best_idx >= 0 &&
+                best_desc_dist <= projection_descriptor_threshold &&
+                (second_idx < 0 || second_desc_dist == std::numeric_limits<float>::max() ||
+                 best_desc_dist <= projection_descriptor_ratio * second_desc_dist))
+            {
+                current_prev_index[best_idx] = -2;
+                current_feature_ids[best_idx] = candidate.feature_id;
+                current_feature_track_cnt[best_idx] = std::max(1, candidate.track_count + 1);
+                current_feature_taken[best_idx] = true;
+            }
         }
     }
 
@@ -878,12 +934,12 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     {
         int idx = kept_indexes[i];
         cv::Point2f pt(current_features(1, idx), current_features(2, idx));
-        if (current_prev_index[idx] >= 0)
+        if (current_feature_ids[idx] >= 0)
         {
             cur_pts.push_back(pt);
             matched_features.col(kept_feature_count++) = current_features.col(idx);
-            ids.push_back(prev_ids[current_prev_index[idx]]);
-            track_cnt.push_back(prev_track_cnt[current_prev_index[idx]] + 1);
+            ids.push_back(current_feature_ids[idx]);
+            track_cnt.push_back(current_feature_track_cnt[idx]);
         }
         else if (allow_new_features)
         {
@@ -971,11 +1027,12 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     prev_un_pts = cur_un_pts;
     prev_un_pts_map = cur_un_pts_map;
     prev_time = cur_time;
-    hasPrediction = false;
 
     prevLeftPtsMap.clear();
     for (size_t i = 0; i < cur_pts.size(); i++)
         prevLeftPtsMap[ids[i]] = cur_pts[i];
+
+    projection_candidates.clear();
 
     if (primary_camera_id_ == 1)
     {
@@ -1479,46 +1536,13 @@ void FeatureTracker::drawTrack(const cv::Mat &imLeft, const cv::Mat &imRight,
         }
     }
 
-    //draw prediction
-    /*
-    for(size_t i = 0; i < predict_pts_debug.size(); i++)
-    {
-        cv::circle(imTrack, predict_pts_debug[i], 2, cv::Scalar(0, 170, 255), 2);
-    }
-    */
-    //printf("predict pts size %d \n", (int)predict_pts_debug.size());
-
     //cv::Mat imCur2Compress;
     //cv::resize(imCur2, imCur2Compress, cv::Size(cols, rows / 2));
 }
 
-
-void FeatureTracker::setPrediction(map<int, Eigen::Vector3d> &predictPts)
+void FeatureTracker::setProjectionCandidates(const std::vector<ProjectionCandidate> &candidates)
 {
-    if (DEEP_FEATURE)
-    {
-        hasPrediction = false;
-        return;
-    }
-    hasPrediction = true;
-    predict_pts.clear();
-    predict_pts_debug.clear();
-    map<int, Eigen::Vector3d>::iterator itPredict;
-    for (size_t i = 0; i < ids.size(); i++)
-    {
-        //printf("prevLeftId size %d prevLeftPts size %d\n",(int)prevLeftIds.size(), (int)prevLeftPts.size());
-        int id = ids[i];
-        itPredict = predictPts.find(id);
-        if (itPredict != predictPts.end())
-        {
-            Eigen::Vector2d tmp_uv;
-            m_camera[0]->spaceToPlane(itPredict->second, tmp_uv);
-            predict_pts.push_back(cv::Point2f(tmp_uv.x(), tmp_uv.y()));
-            predict_pts_debug.push_back(cv::Point2f(tmp_uv.x(), tmp_uv.y()));
-        }
-        else
-            predict_pts.push_back(prev_pts[i]);
-    }
+    projection_candidates = candidates;
 }
 
 
@@ -1585,25 +1609,6 @@ void FeatureTracker::removeOutliers(set<int> &removePtsIds)
     reduceVector(prev_pts, status);
     reduceVector(ids, status);
     reduceVector(track_cnt, status);
-    if (prev_deep_features.cols() == static_cast<int>(status.size()))
-    {
-        Eigen::Matrix<float, 259, Eigen::Dynamic> filtered_features(259, 0);
-        vector<int> filtered_prev_index;
-        for (size_t i = 0; i < status.size(); i++)
-        {
-            if (status[i])
-                filtered_prev_index.push_back(static_cast<int>(i));
-        }
-        filtered_features.resize(259, filtered_prev_index.size());
-        for (size_t i = 0; i < filtered_prev_index.size(); i++)
-            filtered_features.col(i) = prev_deep_features.col(filtered_prev_index[i]);
-        prev_deep_features = filtered_features;
-    }
-    if (predict_pts.size() == status.size())
-        reduceVector(predict_pts, status);
-    if (predict_pts_debug.size() == status.size())
-        reduceVector(predict_pts_debug, status);
-
     // Keep deep-feature histories consistent with backend outlier rejection.
     filterHistoryById(left_ids, left_track_cnt, left_deep_features);
     filterHistoryById(ids_right, right_track_cnt, right_deep_features);

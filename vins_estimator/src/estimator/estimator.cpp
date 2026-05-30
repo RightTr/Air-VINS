@@ -181,6 +181,12 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1, 
         featureFrame = featureTracker.trackImage(t, _img, cv::Mat(), primary_camera_id, allow_new_features);
     else
         featureFrame = featureTracker.trackImage(t, _img, _img1, primary_camera_id, allow_new_features);
+
+    if (primary_camera_id == 1)
+        f_manager.updateMappointDescriptors(featureTracker.ids, featureTracker.right_deep_features);
+    else
+        f_manager.updateMappointDescriptors(featureTracker.ids, featureTracker.left_deep_features);
+
     LineFeatureFrameMap lineFrame;
     lineFrame = featureTracker.getLineFrame();
     //printf("featureTracker time: %f\n", featureTrackerTime.toc());
@@ -1644,41 +1650,17 @@ void Estimator::getPoseInWorldFrame(int index, Eigen::Matrix4d &T)
 
 void Estimator::predictPtsInNextFrame()
 {
-    //printf("predict pts in next frame\n");
     if(frame_count < 2)
+    {
+        featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
         return;
-    // predict next pose. Assume constant velocity motion
+    }
+
     Eigen::Matrix4d curT, prevT, nextT;
     getPoseInWorldFrame(curT);
     getPoseInWorldFrame(frame_count - 1, prevT);
     nextT = curT * (prevT.inverse() * curT);
-    map<int, Eigen::Vector3d> predictPts;
-
-    for (auto &it_per_id : f_manager.feature)
-    {
-        if (!f_manager.useFeatureForOptimization(it_per_id))
-            continue;
-        if(it_per_id.estimated_depth > 0)
-        {
-            int firstIndex = it_per_id.start_frame;
-            int lastIndex = it_per_id.start_frame + it_per_id.feature_per_frame.size() - 1;
-            //printf("cur frame index  %d last frame index %d\n", frame_count, lastIndex);
-            if((int)it_per_id.feature_per_frame.size() >= 2 && lastIndex == frame_count)
-            {
-                double depth = it_per_id.estimated_depth;
-                const int anchor_camera_id = it_per_id.feature_per_frame[0].camera_id;
-                const int current_camera_id = it_per_id.feature_per_frame.back().camera_id;
-                Vector3d pts_j = ric[anchor_camera_id] * (depth * it_per_id.feature_per_frame[0].point) + tic[anchor_camera_id];
-                Vector3d pts_w = Rs[firstIndex] * pts_j + Ps[firstIndex];
-                Vector3d pts_local = nextT.block<3, 3>(0, 0).transpose() * (pts_w - nextT.block<3, 1>(0, 3));
-                Vector3d pts_cam = ric[current_camera_id].transpose() * (pts_local - tic[current_camera_id]);
-                int ptsIndex = it_per_id.feature_id;
-                predictPts[ptsIndex] = pts_cam;
-            }
-        }
-    }
-    featureTracker.setPrediction(predictPts);
-    //printf("estimator output %d predict pts\n",(int)predictPts.size());
+    featureTracker.setProjectionCandidates(f_manager.collectProjectionCandidates(nextT));
 }
 
 double Estimator::reprojectionError(Matrix3d &Ri, Vector3d &Pi, Matrix3d &rici, Vector3d &tici,

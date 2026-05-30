@@ -8,6 +8,7 @@
  *******************************************************/
 
 #include "parameters.h"
+#include <algorithm>
 
 double INIT_DEPTH;
 double MIN_PARALLAX;
@@ -137,8 +138,8 @@ void readParameters(std::string config_file)
     DEEP_FEATURE = 0;
     DEEP_FEATURE_MODEL_DIR = joinPath(configPath, "../../output");
     DEEP_FEATURE_MATCHER = 1;
-    DEEP_FEATURE_MAX_KEYPOINTS = MAX_CNT;
-    DEEP_FEATURE_KEYPOINT_THRESHOLD = 0.004;
+    DEEP_FEATURE_MAX_KEYPOINTS = std::max(MAX_CNT, static_cast<int>(MAX_CNT * 3 / 2));
+    DEEP_FEATURE_KEYPOINT_THRESHOLD = 0.003;
     DEEP_FEATURE_REMOVE_BORDERS = 4;
     DEEP_FEATURE_STEREO_Y_THRESHOLD = 2.0;
     DEEP_FEATURE_MIN_STEREO_DISPARITY = 1.0;
