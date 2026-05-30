@@ -14,6 +14,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include "camodocal/camera_models/CameraFactory.h"
 #include "../utility/line_geometry.h"
+#include "../utility/mapline.h"
 #include "../featureTracker/deepFeature/include/utils.h"
 
 namespace
@@ -141,7 +142,8 @@ int FeatureManager::getFeatureCount()
 
 bool FeatureManager::useLineForOptimization(const LinePerId &line_per_id) const
 {
-    return LINE_BA && line_per_id.solve_flag == 1 &&
+    return LINE_BA && line_per_id.mapline && line_per_id.mapline->IsValid() &&
+           line_per_id.solve_flag == 1 &&
            line_per_id.used_num >= LINE_MIN_OBS &&
            line_per_id.start_frame < WINDOW_SIZE - 2 &&
            line_per_id.line_3d_world.allFinite();
@@ -178,10 +180,14 @@ void FeatureManager::addLineFeature(int frame_count, const LineFeatureFrameMap &
         {
             line_feature.push_back(LinePerId(line_id, frame_count));
             line_feature.back().line_per_frame.push_back(line_per_frame);
+            if (line_feature.back().mapline)
+                line_feature.back().mapline->AddObverser(frame_count, 0);
         }
         else
         {
             it->line_per_frame.push_back(line_per_frame);
+            if (it->mapline)
+                it->mapline->AddObverser(frame_count, static_cast<int>(it->line_per_frame.size()) - 1);
         }
     }
 }
@@ -991,7 +997,8 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
 
 void FeatureManager::triangulateLine(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[])
 {
-    // Counters and logging removed — keep only triangulation logic
+    if (!LINE_BA)
+        return;
 
     for (auto &it_per_id : line_feature)
     {
@@ -999,9 +1006,7 @@ void FeatureManager::triangulateLine(int frameCnt, Vector3d Ps[], Matrix3d Rs[],
         if (it_per_id.used_num < LINE_MIN_OBS || it_per_id.start_frame >= WINDOW_SIZE - 2)
             continue;
         if (it_per_id.solve_flag == 1 && it_per_id.is_triangulation)
-        {
             continue;
-        }
 
         bool solved = false;
 
@@ -1054,13 +1059,17 @@ void FeatureManager::triangulateLine(int frameCnt, Vector3d Ps[], Matrix3d Rs[],
                             {
                                 it_per_id.solve_flag = 1;
                                 it_per_id.is_triangulation = true;
+                                if (it_per_id.mapline)
+                                {
+                                    Vector6d endpoints;
+                                    endpoints << start_world, end_world;
+                                    it_per_id.mapline->SetEndpoints(endpoints, false);
+                                    it_per_id.mapline->SetLine3D(it_per_id.line_3d_world);
+                                    it_per_id.mapline->SetGood();
+                                }
                                 solved = true;
                             }
                         }
-                    }
-                    else
-                    {
-                        // stereo candidate rejected by geometric checks
                     }
                 }
             }
@@ -1113,8 +1122,8 @@ void FeatureManager::triangulateLine(int frameCnt, Vector3d Ps[], Matrix3d Rs[],
                     min_cos_theta = cos_theta;
                     tij = t;
                     Rij = R;
-                        obsj << it_per_frame.start_point.x(), it_per_frame.start_point.y(),
-                            it_per_frame.end_point.x(), it_per_frame.end_point.y();
+                    obsj << it_per_frame.start_point.x(), it_per_frame.start_point.y(),
+                        it_per_frame.end_point.x(), it_per_frame.end_point.y();
                 }
             }
 
@@ -1131,18 +1140,25 @@ void FeatureManager::triangulateLine(int frameCnt, Vector3d Ps[], Matrix3d Rs[],
                     {
                         it_per_id.solve_flag = 1;
                         it_per_id.is_triangulation = true;
+                        if (it_per_id.mapline)
+                        {
+                            it_per_id.mapline->SetLine3D(it_per_id.line_3d_world);
+                            it_per_id.mapline->SetGood();
+                        }
                         solved = true;
                     }
                 }
             }
-            if (!solved)
-            {
-                it_per_id.solve_flag = 0;
-                it_per_id.is_triangulation = false;
-            }
+        }
+
+        if (!solved)
+        {
+            it_per_id.solve_flag = 0;
+            it_per_id.is_triangulation = false;
+            if (it_per_id.mapline)
+                it_per_id.mapline->SetUnTriangulated();
         }
     }
-
 }
 
 Eigen::Matrix<double, Eigen::Dynamic, 4> FeatureManager::getLineFeatureVector()
@@ -1162,6 +1178,9 @@ Eigen::Matrix<double, Eigen::Dynamic, 4> FeatureManager::getLineFeatureVector()
 void FeatureManager::setLineFeature(const Eigen::Matrix<double, Eigen::Dynamic, 4> &x,
                                     int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[])
 {
+    if (!LINE_BA)
+        return;
+
     int line_index = -1;
     for (auto &it_per_id : line_feature)
     {
@@ -1176,10 +1195,17 @@ void FeatureManager::setLineFeature(const Eigen::Matrix<double, Eigen::Dynamic, 
         {
             it_per_id.solve_flag = 2;
             it_per_id.is_triangulation = false;
+            if (it_per_id.mapline)
+                it_per_id.mapline->SetBad();
             continue;
         }
         it_per_id.solve_flag = 1;
         it_per_id.is_triangulation = true;
+        if (it_per_id.mapline)
+        {
+            it_per_id.mapline->SetLine3D(it_per_id.line_3d_world);
+            it_per_id.mapline->SetGood();
+        }
     }
 }
 
@@ -1218,11 +1244,15 @@ void FeatureManager::removeLineOutliers(const std::map<int, std::set<int>> &outl
             const int frame_id = it->start_frame + idx;
             if (bad_frames.find(frame_id) == bad_frames.end())
                 continue;
+            if (it->mapline)
+                it->mapline->RemoveObverser(frame_id);
             it->line_per_frame.erase(it->line_per_frame.begin() + idx);
         }
 
         if (it->line_per_frame.empty())
         {
+            if (it->mapline)
+                it->mapline->SetBad();
             line_feature.erase(it);
             continue;
         }
@@ -1230,6 +1260,8 @@ void FeatureManager::removeLineOutliers(const std::map<int, std::set<int>> &outl
         it->used_num = static_cast<int>(it->line_per_frame.size());
         if (it->used_num < LINE_MIN_OBS)
         {
+            if (it->mapline)
+                it->mapline->SetBad();
             line_feature.erase(it);
             continue;
         }
@@ -1297,10 +1329,16 @@ void FeatureManager::removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::Vector
         }
         else
         {
+            if (it->mapline)
+                it->mapline->RemoveObverser(it->start_frame);
             if (!it->line_per_frame.empty())
                 it->line_per_frame.erase(it->line_per_frame.begin());
             if (it->line_per_frame.empty())
+            {
+                if (it->mapline)
+                    it->mapline->SetBad();
                 line_feature.erase(it);
+            }
             else
                 it->used_num = static_cast<int>(it->line_per_frame.size());
         }
@@ -1333,10 +1371,16 @@ void FeatureManager::removeBack()
         }
         else
         {
+            if (it->mapline)
+                it->mapline->RemoveObverser(it->start_frame);
             if (!it->line_per_frame.empty())
                 it->line_per_frame.erase(it->line_per_frame.begin());
             if (it->line_per_frame.empty())
+            {
+                if (it->mapline)
+                    it->mapline->SetBad();
                 line_feature.erase(it);
+            }
             else
                 it->used_num = static_cast<int>(it->line_per_frame.size());
         }
@@ -1377,9 +1421,17 @@ void FeatureManager::removeFront(int frame_count)
             if (it->endFrame() < frame_count - 1)
                 continue;
             if (j >= 0 && j < static_cast<int>(it->line_per_frame.size()))
+            {
+                if (it->mapline)
+                    it->mapline->RemoveObverser(frame_count);
                 it->line_per_frame.erase(it->line_per_frame.begin() + j);
+            }
             if (it->line_per_frame.empty())
+            {
+                if (it->mapline)
+                    it->mapline->SetBad();
                 line_feature.erase(it);
+            }
             else
                 it->used_num = static_cast<int>(it->line_per_frame.size());
         }

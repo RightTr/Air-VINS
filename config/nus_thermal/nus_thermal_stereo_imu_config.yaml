@@ -58,7 +58,7 @@ feature_max_depth: 8.0
 
 # line_ba is the single switch for PLNet line inference, temporal/stereo line
 # matching, line BA, and 2D/3D line visualization.
-line_ba: 0
+line_ba: 1
 line_threshold: 0.7
 line_min_track_cnt: 2
 line_max_cnt: 100

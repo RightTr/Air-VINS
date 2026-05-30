@@ -31,6 +31,7 @@ using namespace Eigen;
 #include "../utility/tic_toc.h"
 #include "../utility/localmap_frame.h"
 #include "../utility/mappoint.h"
+#include "../utility/mapline.h"
 #include "../featureTracker/deepFeature/include/utils.h"
 
 enum VisualTrackingMode
@@ -193,10 +194,11 @@ class LinePerId
     int solve_flag;
     Eigen::Matrix<double, 6, 1> line_3d_world;
     bool is_triangulation;
+    MaplinePtr mapline;
 
     LinePerId(int _line_id, int _start_frame)
         : line_id(_line_id), start_frame(_start_frame), used_num(0), solve_flag(0),
-          is_triangulation(false)
+          is_triangulation(false), mapline(std::make_shared<Mapline>(_line_id))
     {
         line_3d_world.setZero();
     }
