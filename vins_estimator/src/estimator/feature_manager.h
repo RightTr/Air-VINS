@@ -241,8 +241,8 @@ class FeatureManager
     std::vector<ProjectionCandidate> collectProjectionCandidates(const Eigen::Matrix4d &nextT) const;
     void updateMappointDescriptors(const std::vector<int> &ids, const Eigen::Matrix<float, 259, Eigen::Dynamic> &features);
     void triangulateLine(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[]);
-    void triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matrix<double, 3, 4> &Pose1,
-                            Eigen::Vector2d &point0, Eigen::Vector2d &point1, Eigen::Vector3d &point_3d);
+    void triangulatePoint(const Eigen::Matrix<double, 3, 4> &Pose0, const Eigen::Matrix<double, 3, 4> &Pose1,
+                            const Eigen::Vector2d &point0, const Eigen::Vector2d &point1, Eigen::Vector3d &point_3d) const;
     void initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[], int active_camera_id);
     bool solvePoseByPnP(Eigen::Matrix3d &R_initial, Eigen::Vector3d &P_initial, 
                             vector<cv::Point2f> &pts2D, vector<cv::Point3f> &pts3D);
@@ -272,7 +272,9 @@ class FeatureManager
     void markMappointFromFeature(FeaturePerId &feature_per_id);
     void pruneStaleLocalMappoints();
     std::pair<int, int> windowSupportStats(int feature_id) const;
+    bool triangulateMappointWorldPoint(const FeaturePerId &feature_per_id, Vector3d &point_w, double &depth) const;
     Vector3d featureDepthToWorldPoint(const FeaturePerId &feature_per_id) const;
+    double worldPointToFeatureDepth(const FeaturePerId &feature_per_id, const Vector3d &point_w) const;
     bool projectWorldPointToCamera(const Vector3d &point_w, const Eigen::Matrix4d &nextT, int camera_id, Vector3d &point_cam) const;
 
     const Matrix3d *Rs;

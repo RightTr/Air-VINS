@@ -255,6 +255,122 @@ void FeatureManager::syncMappointFromFeature(FeaturePerId &feature_per_id)
     it->second->SetPosition(featureDepthToWorldPoint(feature_per_id));
 }
 
+bool FeatureManager::triangulateMappointWorldPoint(const FeaturePerId &feature_per_id, Vector3d &point_w, double &depth) const
+{
+    point_w.setZero();
+    depth = -1.0;
+
+    if (!has_local_window_state || feature_per_id.feature_per_frame.empty())
+        return false;
+
+    const int anchor_frame = feature_per_id.start_frame;
+    const int anchor_camera_id = feature_per_id.feature_per_frame[0].camera_id;
+    if (anchor_frame < 0 || anchor_frame > WINDOW_SIZE)
+        return false;
+    if (anchor_camera_id < 0 || anchor_camera_id >= static_cast<int>(local_ric.size()))
+        return false;
+
+    if (STEREO && anchor_camera_id == 0 && feature_per_id.feature_per_frame[0].is_stereo)
+    {
+        Eigen::Matrix<double, 3, 4> leftPose;
+        Eigen::Vector3d t0 = local_Ps[anchor_frame] + local_Rs[anchor_frame] * local_tic[0];
+        Eigen::Matrix3d R0 = local_Rs[anchor_frame] * local_ric[0];
+        leftPose.leftCols<3>() = R0.transpose();
+        leftPose.rightCols<1>() = -R0.transpose() * t0;
+
+        Eigen::Matrix<double, 3, 4> rightPose;
+        Eigen::Vector3d t1 = local_Ps[anchor_frame] + local_Rs[anchor_frame] * local_tic[1];
+        Eigen::Matrix3d R1 = local_Rs[anchor_frame] * local_ric[1];
+        rightPose.leftCols<3>() = R1.transpose();
+        rightPose.rightCols<1>() = -R1.transpose() * t1;
+
+        const Eigen::Vector2d point0 = feature_per_id.feature_per_frame[0].point.head(2);
+        const Eigen::Vector2d point1 = feature_per_id.feature_per_frame[0].pointRight.head(2);
+        Eigen::Vector3d point3d;
+        triangulatePoint(leftPose, rightPose, point0, point1, point3d);
+
+        const Eigen::Vector3d localPoint = leftPose.leftCols<3>() * point3d + leftPose.rightCols<1>();
+        depth = localPoint.z();
+        if (!isReliableTriangulatedDepth(depth))
+            return false;
+
+        point_w = local_Rs[anchor_frame] * (local_ric[0] * localPoint + local_tic[0]) + local_Ps[anchor_frame];
+        if (!point_w.allFinite())
+            return false;
+    }
+    else
+    {
+        if (feature_per_id.feature_per_frame.size() < 2)
+            return false;
+
+        Eigen::MatrixXd svd_A(2 * feature_per_id.feature_per_frame.size(), 4);
+        int svd_idx = 0;
+
+        for (size_t obs_idx = 0; obs_idx < feature_per_id.feature_per_frame.size(); ++obs_idx)
+        {
+            const int frame_idx = feature_per_id.start_frame + static_cast<int>(obs_idx);
+            if (frame_idx < 0 || frame_idx > WINDOW_SIZE)
+                return false;
+
+            const FeaturePerFrame &obs = feature_per_id.feature_per_frame[obs_idx];
+            const int camera_id = obs.camera_id;
+            if (camera_id < 0 || camera_id >= static_cast<int>(local_ric.size()))
+                return false;
+
+            const Eigen::Vector3d t = local_Ps[frame_idx] + local_Rs[frame_idx] * local_tic[camera_id];
+            const Eigen::Matrix3d R = local_Rs[frame_idx] * local_ric[camera_id];
+            Eigen::Matrix<double, 3, 4> P;
+            P.leftCols<3>() = R.transpose();
+            P.rightCols<1>() = -R.transpose() * t;
+
+            const Eigen::Vector3d f = obs.point.normalized();
+            svd_A.row(svd_idx++) = f[0] * P.row(2) - P.row(0);
+            svd_A.row(svd_idx++) = f[1] * P.row(2) - P.row(1);
+        }
+
+        if (svd_idx < 4)
+            return false;
+
+        const Eigen::Vector4d svd_V = Eigen::JacobiSVD<Eigen::MatrixXd>(svd_A, Eigen::ComputeThinV).matrixV().rightCols<1>();
+        if (std::abs(svd_V[3]) < 1e-12)
+            return false;
+
+        point_w = svd_V.head<3>() / svd_V[3];
+        if (!point_w.allFinite())
+            return false;
+
+        const Eigen::Vector3d anchor_t = local_Ps[anchor_frame] + local_Rs[anchor_frame] * local_tic[anchor_camera_id];
+        const Eigen::Matrix3d anchor_R = local_Rs[anchor_frame] * local_ric[anchor_camera_id];
+        const Eigen::Vector3d anchor_point_cam = anchor_R.transpose() * (point_w - anchor_t);
+        depth = anchor_point_cam.z();
+        if (!isReliableTriangulatedDepth(depth))
+            return false;
+
+        double reproj_sum = 0.0;
+        int valid_obs = 0;
+        for (size_t obs_idx = 0; obs_idx < feature_per_id.feature_per_frame.size(); ++obs_idx)
+        {
+            const int frame_idx = feature_per_id.start_frame + static_cast<int>(obs_idx);
+            const FeaturePerFrame &obs = feature_per_id.feature_per_frame[obs_idx];
+            const Eigen::Vector3d t = local_Ps[frame_idx] + local_Rs[frame_idx] * local_tic[obs.camera_id];
+            const Eigen::Matrix3d R = local_Rs[frame_idx] * local_ric[obs.camera_id];
+            const Eigen::Vector3d point_cam = R.transpose() * (point_w - t);
+            if (!point_cam.allFinite() || point_cam.z() <= 0.0)
+                return false;
+            const Eigen::Vector2d proj = point_cam.head<2>() / point_cam.z();
+            reproj_sum += (proj - obs.point.head<2>()).norm();
+            ++valid_obs;
+        }
+
+        if (valid_obs < 2)
+            return false;
+        if (reproj_sum / valid_obs > 0.01)
+            return false;
+    }
+
+    return true;
+}
+
 void FeatureManager::updateMappointDescriptors(const std::vector<int> &ids, const Eigen::Matrix<float, 259, Eigen::Dynamic> &features)
 {
     if (features.rows() != 259 || features.cols() <= 0 || ids.empty())
@@ -296,9 +412,21 @@ void FeatureManager::markMappointFromFeature(FeaturePerId &feature_per_id)
     {
         if (mappoint->ObverserNum() > 2)
         {
-            if (!mappoint->HasPosition() && std::isfinite(feature_per_id.estimated_depth) && feature_per_id.estimated_depth > 0)
-                syncMappointFromFeature(feature_per_id);
-            mappoint->SetGood();
+            Vector3d triangulated_point = Vector3d::Zero();
+            double triangulated_depth = -1.0;
+            if (triangulateMappointWorldPoint(feature_per_id, triangulated_point, triangulated_depth))
+            {
+                mappoint->SetPosition(triangulated_point);
+                mappoint->SetGood();
+                feature_per_id.estimated_depth = triangulated_depth;
+                feature_per_id.reliable_depth = true;
+                feature_per_id.solve_flag = 1;
+                feature_per_id.depth_fail_count = 0;
+            }
+            else
+            {
+                mappoint->SetUnTriangulated();
+            }
         }
         else
         {
@@ -309,6 +437,17 @@ void FeatureManager::markMappointFromFeature(FeaturePerId &feature_per_id)
     {
         if (std::isfinite(feature_per_id.estimated_depth) && feature_per_id.estimated_depth > 0)
             syncMappointFromFeature(feature_per_id);
+        else if (mappoint->HasPosition())
+        {
+            const double depth = worldPointToFeatureDepth(feature_per_id, mappoint->GetPosition());
+            if (isReliableTriangulatedDepth(depth))
+            {
+                feature_per_id.estimated_depth = depth;
+                feature_per_id.reliable_depth = true;
+                feature_per_id.solve_flag = 1;
+                feature_per_id.depth_fail_count = 0;
+            }
+        }
     }
     else if (!mappoint->IsBad())
     {
@@ -438,6 +577,24 @@ Vector3d FeatureManager::featureDepthToWorldPoint(const FeaturePerId &feature_pe
                                 (feature_per_id.estimated_depth * feature_per_id.feature_per_frame[0].point) +
                                 local_tic[anchor_camera_id];
     return local_Rs[anchor_frame] * pts_in_cam + local_Ps[anchor_frame];
+}
+
+double FeatureManager::worldPointToFeatureDepth(const FeaturePerId &feature_per_id, const Vector3d &point_w) const
+{
+    if (!has_local_window_state || feature_per_id.feature_per_frame.empty())
+        return -1.0;
+
+    const int anchor_frame = feature_per_id.start_frame;
+    const int anchor_camera_id = feature_per_id.feature_per_frame[0].camera_id;
+    if (anchor_frame < 0 || anchor_frame > WINDOW_SIZE)
+        return -1.0;
+    if (anchor_camera_id < 0 || anchor_camera_id >= static_cast<int>(local_ric.size()))
+        return -1.0;
+
+    const Eigen::Vector3d anchor_t = local_Ps[anchor_frame] + local_Rs[anchor_frame] * local_tic[anchor_camera_id];
+    const Eigen::Matrix3d anchor_R = local_Rs[anchor_frame] * local_ric[anchor_camera_id];
+    const Eigen::Vector3d point_cam = anchor_R.transpose() * (point_w - anchor_t);
+    return point_cam.z();
 }
 
 void FeatureManager::updateLocalPoints(int frameCnt)
@@ -677,8 +834,8 @@ VectorXd FeatureManager::getDepthVector()
 }
 
 
-void FeatureManager::triangulatePoint(Eigen::Matrix<double, 3, 4> &Pose0, Eigen::Matrix<double, 3, 4> &Pose1,
-                        Eigen::Vector2d &point0, Eigen::Vector2d &point1, Eigen::Vector3d &point_3d)
+void FeatureManager::triangulatePoint(const Eigen::Matrix<double, 3, 4> &Pose0, const Eigen::Matrix<double, 3, 4> &Pose1,
+                        const Eigen::Vector2d &point0, const Eigen::Vector2d &point1, Eigen::Vector3d &point_3d) const
 {
     Eigen::Matrix4d design_matrix = Eigen::Matrix4d::Zero();
     design_matrix.row(0) = point0[0] * Pose0.row(2) - Pose0.row(0);
@@ -794,150 +951,40 @@ void FeatureManager::triangulate(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vec
 
     for (auto &it_per_id : feature)
     {
-        if (it_per_id.estimated_depth > 0)
-            continue;
+        auto mpt_it = local_mappoints.find(it_per_id.feature_id);
+        MappointPtr mappoint = (mpt_it != local_mappoints.end()) ? mpt_it->second : nullptr;
 
-        const int anchor_camera_id = it_per_id.feature_per_frame[0].camera_id;
-
-        if(STEREO && anchor_camera_id == 0 && it_per_id.feature_per_frame[0].is_stereo)
+        if (mappoint && mappoint->HasPosition())
         {
-            int imu_i = it_per_id.start_frame;
-            Eigen::Matrix<double, 3, 4> leftPose;
-            Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[0];
-            Eigen::Matrix3d R0 = Rs[imu_i] * ric[0];
-            leftPose.leftCols<3>() = R0.transpose();
-            leftPose.rightCols<1>() = -R0.transpose() * t0;
-            //cout << "left pose " << leftPose << endl;
-
-            Eigen::Matrix<double, 3, 4> rightPose;
-            Eigen::Vector3d t1 = Ps[imu_i] + Rs[imu_i] * tic[1];
-            Eigen::Matrix3d R1 = Rs[imu_i] * ric[1];
-            rightPose.leftCols<3>() = R1.transpose();
-            rightPose.rightCols<1>() = -R1.transpose() * t1;
-            //cout << "right pose " << rightPose << endl;
-
-            Eigen::Vector2d point0, point1;
-            Eigen::Vector3d point3d;
-            point0 = it_per_id.feature_per_frame[0].point.head(2);
-            point1 = it_per_id.feature_per_frame[0].pointRight.head(2);
-            //cout << "point0 " << point0.transpose() << endl;
-            //cout << "point1 " << point1.transpose() << endl;
-
-            triangulatePoint(leftPose, rightPose, point0, point1, point3d);
-            Eigen::Vector3d localPoint;
-            localPoint = leftPose.leftCols<3>() * point3d + leftPose.rightCols<1>();
-            double depth = localPoint.z();
+            const double depth = worldPointToFeatureDepth(it_per_id, mappoint->GetPosition());
             if (isReliableTriangulatedDepth(depth))
             {
                 it_per_id.estimated_depth = depth;
                 it_per_id.reliable_depth = true;
+                it_per_id.solve_flag = 1;
+                it_per_id.depth_fail_count = 0;
             }
-            else
-            {
-                it_per_id.estimated_depth = INIT_DEPTH;
-                it_per_id.reliable_depth = false;
-            }
-            /*
-            Vector3d ptsGt = pts_gt[it_per_id.feature_id];
-            printf("stereo %d pts: %f %f %f gt: %f %f %f \n",it_per_id.feature_id, point3d.x(), point3d.y(), point3d.z(),
-                                                            ptsGt.x(), ptsGt.y(), ptsGt.z());
-            */
             continue;
         }
-        else if(it_per_id.feature_per_frame.size() > 1)
+
+        Vector3d triangulated_point = Vector3d::Zero();
+        double triangulated_depth = -1.0;
+        if (triangulateMappointWorldPoint(it_per_id, triangulated_point, triangulated_depth))
         {
-            int imu_i = it_per_id.start_frame;
-            Eigen::Matrix<double, 3, 4> leftPose;
-            Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[anchor_camera_id];
-            Eigen::Matrix3d R0 = Rs[imu_i] * ric[anchor_camera_id];
-            leftPose.leftCols<3>() = R0.transpose();
-            leftPose.rightCols<1>() = -R0.transpose() * t0;
-
-            imu_i++;
-            Eigen::Matrix<double, 3, 4> rightPose;
-            const int camera_id_1 = it_per_id.feature_per_frame[1].camera_id;
-            Eigen::Vector3d t1 = Ps[imu_i] + Rs[imu_i] * tic[camera_id_1];
-            Eigen::Matrix3d R1 = Rs[imu_i] * ric[camera_id_1];
-            rightPose.leftCols<3>() = R1.transpose();
-            rightPose.rightCols<1>() = -R1.transpose() * t1;
-
-            Eigen::Vector2d point0, point1;
-            Eigen::Vector3d point3d;
-            point0 = it_per_id.feature_per_frame[0].point.head(2);
-            point1 = it_per_id.feature_per_frame[1].point.head(2);
-            triangulatePoint(leftPose, rightPose, point0, point1, point3d);
-            Eigen::Vector3d localPoint;
-            localPoint = leftPose.leftCols<3>() * point3d + leftPose.rightCols<1>();
-            double depth = localPoint.z();
-            if (isReliableTriangulatedDepth(depth))
+            if (!mappoint)
             {
-                it_per_id.estimated_depth = depth;
-                it_per_id.reliable_depth = true;
+                mappoint = std::make_shared<Mappoint>(it_per_id.feature_id);
+                local_mappoints[it_per_id.feature_id] = mappoint;
             }
-            else
-            {
-                it_per_id.estimated_depth = INIT_DEPTH;
-                it_per_id.reliable_depth = false;
-            }
-            /*
-            Vector3d ptsGt = pts_gt[it_per_id.feature_id];
-            printf("motion  %d pts: %f %f %f gt: %f %f %f \n",it_per_id.feature_id, point3d.x(), point3d.y(), point3d.z(),
-                                                            ptsGt.x(), ptsGt.y(), ptsGt.z());
-            */
-            continue;
-        }
-        it_per_id.used_num = it_per_id.feature_per_frame.size();
-        if (it_per_id.used_num < 4)
-            continue;
-
-        int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
-
-        Eigen::MatrixXd svd_A(2 * it_per_id.feature_per_frame.size(), 4);
-        int svd_idx = 0;
-
-        Eigen::Matrix<double, 3, 4> P0;
-        Eigen::Vector3d t0 = Ps[imu_i] + Rs[imu_i] * tic[anchor_camera_id];
-        Eigen::Matrix3d R0 = Rs[imu_i] * ric[anchor_camera_id];
-        P0.leftCols<3>() = Eigen::Matrix3d::Identity();
-        P0.rightCols<1>() = Eigen::Vector3d::Zero();
-
-        for (auto &it_per_frame : it_per_id.feature_per_frame)
-        {
-            imu_j++;
-
-            const int camera_id_j = it_per_frame.camera_id;
-            Eigen::Vector3d t1 = Ps[imu_j] + Rs[imu_j] * tic[camera_id_j];
-            Eigen::Matrix3d R1 = Rs[imu_j] * ric[camera_id_j];
-            Eigen::Vector3d t = R0.transpose() * (t1 - t0);
-            Eigen::Matrix3d R = R0.transpose() * R1;
-            Eigen::Matrix<double, 3, 4> P;
-            P.leftCols<3>() = R.transpose();
-            P.rightCols<1>() = -R.transpose() * t;
-            Eigen::Vector3d f = it_per_frame.point.normalized();
-            svd_A.row(svd_idx++) = f[0] * P.row(2) - f[2] * P.row(0);
-            svd_A.row(svd_idx++) = f[1] * P.row(2) - f[2] * P.row(1);
-
-            if (imu_i == imu_j)
-                continue;
-        }
-        ROS_ASSERT(svd_idx == svd_A.rows());
-        Eigen::Vector4d svd_V = Eigen::JacobiSVD<Eigen::MatrixXd>(svd_A, Eigen::ComputeThinV).matrixV().rightCols<1>();
-        double svd_method = svd_V[2] / svd_V[3];
-        //it_per_id->estimated_depth = -b / A;
-        //it_per_id->estimated_depth = svd_V[2] / svd_V[3];
-
-        it_per_id.estimated_depth = svd_method;
-        //it_per_id->estimated_depth = INIT_DEPTH;
-
-        if (!isReliableTriangulatedDepth(it_per_id.estimated_depth))
-        {
-            it_per_id.estimated_depth = INIT_DEPTH;
-            it_per_id.reliable_depth = false;
-        }
-        else
-        {
+            mappoint->SetPosition(triangulated_point);
+            mappoint->SetGood();
+            it_per_id.estimated_depth = triangulated_depth;
             it_per_id.reliable_depth = true;
+            it_per_id.solve_flag = 1;
+            it_per_id.depth_fail_count = 0;
         }
+
+        continue;
 
     }
 }
