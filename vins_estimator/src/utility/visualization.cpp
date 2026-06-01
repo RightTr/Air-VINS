@@ -25,8 +25,6 @@ ros::Publisher pub_camera_pose_visual;
 nav_msgs::Path path;
 nav_msgs::Path keyframe_path;
 visualization_msgs::Marker keyframe_marker;
-sensor_msgs::PointCloud keyframe_point_cloud;
-std::map<int, size_t> keyframe_point_index;
 
 ros::Publisher pub_keyframe_point;
 ros::Publisher pub_keyframe_pose;
@@ -602,46 +600,32 @@ void pubKeyframe(const Estimator &estimator)
         keyframe_pose.pose.pose.orientation.w = R.w();
         ros_utils::ros_publish(pub_keyframe_pose, keyframe_pose);
 
-        keyframe_point_cloud.header = header;
-        keyframe_point_cloud.header.frame_id = "world";
-        for (auto &it_per_id : estimator.f_manager.feature)
+        const auto good_points = estimator.f_manager.collectGoodKeyframePoints();
+        ROS_INFO_STREAM_THROTTLE(5.0, "[vins_estimator] keyframe good points=" << good_points.size());
+        sensor_msgs::PointCloud keyframe_point_msg;
+        keyframe_point_msg.header = header;
+        keyframe_point_msg.header.frame_id = "world";
+        keyframe_point_msg.points.reserve(good_points.size());
+        keyframe_point_msg.channels.reserve(good_points.size());
+        for (const auto &good_point : good_points)
         {
-            if (!estimator.f_manager.useFeatureForOptimization(it_per_id))
-                continue;
-            if (it_per_id.solve_flag != 1 || it_per_id.feature_per_frame.empty())
-                continue;
-
-            int imu_i = it_per_id.start_frame;
-            Vector3d pts_i = it_per_id.feature_per_frame[0].point * it_per_id.estimated_depth;
-            Vector3d w_pts_i = estimator.Rs[imu_i] * (estimator.ric[0] * pts_i + estimator.tic[0])
-                                  + estimator.Ps[imu_i];
             geometry_msgs::Point32 p;
-            p.x = w_pts_i(0);
-            p.y = w_pts_i(1);
-            p.z = w_pts_i(2);
+            p.x = good_point.point_w.x();
+            p.y = good_point.point_w.y();
+            p.z = good_point.point_w.z();
+            keyframe_point_msg.points.push_back(p);
 
-            sensor_msgs::ChannelFloat32 p_2d;
-            p_2d.values.push_back(it_per_id.feature_per_frame[0].point.x());
-            p_2d.values.push_back(it_per_id.feature_per_frame[0].point.y());
-            p_2d.values.push_back(it_per_id.feature_per_frame[0].uv.x());
-            p_2d.values.push_back(it_per_id.feature_per_frame[0].uv.y());
-            p_2d.values.push_back(it_per_id.feature_id);
-
-            auto idx_it = keyframe_point_index.find(it_per_id.feature_id);
-            if (idx_it == keyframe_point_index.end())
-            {
-                keyframe_point_index[it_per_id.feature_id] = keyframe_point_cloud.points.size();
-                keyframe_point_cloud.points.push_back(p);
-                keyframe_point_cloud.channels.push_back(p_2d);
-            }
-            else
-            {
-                const size_t idx = idx_it->second;
-                keyframe_point_cloud.points[idx] = p;
-                if (idx < keyframe_point_cloud.channels.size())
-                    keyframe_point_cloud.channels[idx] = p_2d;
-            }
+            sensor_msgs::ChannelFloat32 channel;
+            channel.values.reserve(261);
+            channel.values.push_back(good_point.point_norm.x());
+            channel.values.push_back(good_point.point_norm.y());
+            channel.values.push_back(good_point.point_uv.x());
+            channel.values.push_back(good_point.point_uv.y());
+            channel.values.push_back(static_cast<float>(good_point.feature_id));
+            for (int i = 0; i < good_point.descriptor.size(); ++i)
+                channel.values.push_back(good_point.descriptor(i));
+            keyframe_point_msg.channels.push_back(channel);
         }
-        ros_utils::ros_publish(pub_keyframe_point, keyframe_point_cloud);
+        ros_utils::ros_publish(pub_keyframe_point, keyframe_point_msg);
     }
 }

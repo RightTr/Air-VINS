@@ -398,6 +398,38 @@ void FeatureManager::updateMappointDescriptors(const std::vector<int> &ids, cons
     }
 }
 
+KeyframeGoodPointRecordList FeatureManager::collectGoodKeyframePoints() const
+{
+    KeyframeGoodPointRecordList records;
+    records.reserve(std::min<size_t>(local_mappoints.size(), 1024));
+
+    for (const auto &it_per_id : feature)
+    {
+        if (!useFeatureForOptimization(it_per_id))
+            continue;
+        if (it_per_id.solve_flag != 1 || it_per_id.feature_per_frame.empty())
+            continue;
+
+        auto mpt_it = local_mappoints.find(it_per_id.feature_id);
+        if (mpt_it == local_mappoints.end() || !mpt_it->second)
+            continue;
+        const auto &mappoint = mpt_it->second;
+        if (!mappoint->IsGood() || !mappoint->HasPosition() || !mappoint->HasDescriptor())
+            continue;
+
+        const auto &obs = it_per_id.feature_per_frame.back();
+        KeyframeGoodPointRecord record;
+        record.feature_id = it_per_id.feature_id;
+        record.point_w = mappoint->GetPosition();
+        record.point_uv = obs.uv;
+        record.point_norm = obs.point.head<2>();
+        record.descriptor = mappoint->GetDescriptor().segment<256>(3);
+        records.push_back(record);
+    }
+
+    return records;
+}
+
 void FeatureManager::markMappointFromFeature(FeaturePerId &feature_per_id)
 {
     auto &mappoint = local_mappoints[feature_per_id.feature_id];

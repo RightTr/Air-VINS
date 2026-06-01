@@ -22,6 +22,7 @@
 using namespace std;
 
 #include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/StdVector>
 using namespace Eigen;
 
 #include <ros/console.h>
@@ -82,6 +83,25 @@ struct ProjectionCandidate
         descriptor.setZero();
     }
 };
+
+struct KeyframeGoodPointRecord
+{
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    int feature_id;
+    Eigen::Vector3d point_w;
+    Eigen::Vector2d point_uv;
+    Eigen::Vector2d point_norm;
+    Eigen::Matrix<float, 256, 1> descriptor;
+
+    KeyframeGoodPointRecord()
+        : feature_id(-1), point_w(Eigen::Vector3d::Zero()), point_uv(Eigen::Vector2d::Zero()), point_norm(Eigen::Vector2d::Zero())
+    {
+        descriptor.setZero();
+    }
+};
+
+using KeyframeGoodPointRecordList = std::vector<KeyframeGoodPointRecord, Eigen::aligned_allocator<KeyframeGoodPointRecord>>;
 
 class FeaturePerFrame
 {
@@ -223,6 +243,7 @@ class FeatureManager
     bool allowDepthInitialization() const;
     bool hasReliableDepth(const FeaturePerId &feature_per_id) const;
     bool useFeatureForOptimization(const FeaturePerId &feature_per_id) const;
+    KeyframeGoodPointRecordList collectGoodKeyframePoints() const;
     void clearState();
     void setWindowState(Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[]);
     void addLocalFrame(int frameCnt, double header,

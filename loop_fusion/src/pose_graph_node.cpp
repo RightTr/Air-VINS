@@ -332,32 +332,45 @@ void process()
                 vector<cv::Point3f> point_3d; 
                 vector<cv::Point2f> point_2d_uv; 
                 vector<cv::Point2f> point_2d_normal;
-                vector<double> point_id;
+                Eigen::Matrix<float, 259, Eigen::Dynamic> good_point_deep_features;
+                good_point_deep_features.resize(259, point_msg->points.size());
+                int good_point_count = 0;
 
                 for (unsigned int i = 0; i < point_msg->points.size(); i++)
                 {
+                    if (i >= point_msg->channels.size() || point_msg->channels[i].values.size() < 261)
+                        continue;
+
                     cv::Point3f p_3d;
                     p_3d.x = point_msg->points[i].x;
                     p_3d.y = point_msg->points[i].y;
                     p_3d.z = point_msg->points[i].z;
-                    point_3d.push_back(p_3d);
 
                     cv::Point2f p_2d_uv, p_2d_normal;
-                    double p_id;
                     p_2d_normal.x = point_msg->channels[i].values[0];
                     p_2d_normal.y = point_msg->channels[i].values[1];
                     p_2d_uv.x = point_msg->channels[i].values[2];
                     p_2d_uv.y = point_msg->channels[i].values[3];
-                    p_id = point_msg->channels[i].values[4];
+                    point_3d.push_back(p_3d);
                     point_2d_normal.push_back(p_2d_normal);
                     point_2d_uv.push_back(p_2d_uv);
-                    point_id.push_back(p_id);
+
+                    good_point_deep_features(0, good_point_count) = 1.0f;
+                    good_point_deep_features(1, good_point_count) = p_2d_uv.x;
+                    good_point_deep_features(2, good_point_count) = p_2d_uv.y;
+                    for (int d = 0; d < 256; ++d)
+                        good_point_deep_features(3 + d, good_point_count) = point_msg->channels[i].values[5 + d];
+                    ++good_point_count;
 
                     //printf("u %f, v %f \n", p_2d_uv.x, p_2d_uv.y);
                 }
 
+                good_point_deep_features.conservativeResize(259, good_point_count);
+
                 KeyFrame* keyframe = new KeyFrame(pose_msg->header.stamp.toSec(), frame_index, T, R, image,
-                                   point_3d, point_2d_uv, point_2d_normal, point_id, sequence);   
+                                   point_3d, point_2d_uv, point_2d_normal, sequence);   
+                keyframe->setGoodPointDeepFeatures(good_point_deep_features);
+                printf("[loop_fusion] keyframe %d good_points=%d\n", frame_index, good_point_count);
                 if (loop_deep_feature) {
                     Eigen::Matrix<float, 259, Eigen::Dynamic> deep_points;
                     if (loop_deep_feature->extractPoints(image, deep_points)) {
@@ -378,6 +391,8 @@ void process()
                 }
                 m_process.lock();
                 start_flag = 1;
+                printf("[loop_fusion] keyframe %d seq=%d pose_t=(%.3f %.3f %.3f) point_num=%zu\n",
+                       frame_index, sequence, T.x(), T.y(), T.z(), point_msg->points.size());
                 posegraph.addKeyFrame(keyframe, 1);
                 m_process.unlock();
                 frame_index++;

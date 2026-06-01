@@ -430,6 +430,16 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
             }
 
         }
+
+    if (ret.size() > 0)
+    {
+        printf("[loop_fusion][bow] frame=%d query_ret=%zu best=%.4f second=%.4f find_loop=%d\n",
+               frame_index, ret.size(), ret[0].Score, ret.size() > 1 ? ret[1].Score : -1.0, find_loop ? 1 : 0);
+    }
+    else
+    {
+        printf("[loop_fusion][bow] frame=%d query_ret=0 find_loop=0\n", frame_index);
+    }
 /*
     if (DEBUG_IMAGE)
     {
@@ -1006,7 +1016,7 @@ void PoseGraph::savePoseGraph()
     list<KeyFrame*>::iterator it;
     for (it = keyframelist.begin(); it != keyframelist.end(); it++)
     {
-        std::string image_path, descriptor_path, brief_path, keypoints_path, vprnet_path, deep_path;
+        std::string image_path, descriptor_path, brief_path, keypoints_path, vprnet_path, deep_path, good_deep_path;
         if (DEBUG_IMAGE)
         {
             image_path = POSE_GRAPH_SAVE_PATH + to_string((*it)->index) + "_image.png";
@@ -1074,6 +1084,25 @@ void PoseGraph::savePoseGraph()
             deep_file.write(reinterpret_cast<const char*>(&cols), sizeof(int));
         }
         deep_file.close();
+
+        good_deep_path = POSE_GRAPH_SAVE_PATH + to_string((*it)->index) + "_gooddeep.dat";
+        std::ofstream good_deep_file(good_deep_path, std::ios::binary);
+        if ((*it)->hasGoodPointDeepFeatures()) {
+            const auto &good_point_deep_features = (*it)->getGoodPointDeepFeatures();
+            int rows = good_point_deep_features.rows();
+            int cols = good_point_deep_features.cols();
+            good_deep_file.write(reinterpret_cast<const char*>(&rows), sizeof(int));
+            good_deep_file.write(reinterpret_cast<const char*>(&cols), sizeof(int));
+            if (rows > 0 && cols > 0) {
+                good_deep_file.write(reinterpret_cast<const char*>(good_point_deep_features.data()), sizeof(float) * rows * cols);
+            }
+        } else {
+            int rows = 0;
+            int cols = 0;
+            good_deep_file.write(reinterpret_cast<const char*>(&rows), sizeof(int));
+            good_deep_file.write(reinterpret_cast<const char*>(&cols), sizeof(int));
+        }
+        good_deep_file.close();
     }
     fclose(pFile);
 
@@ -1225,6 +1254,27 @@ void PoseGraph::loadPoseGraph()
                 }
             }
             deep_file.close();
+        }
+
+        std::string good_deep_path = POSE_GRAPH_SAVE_PATH + to_string(index) + "_gooddeep.dat";
+        std::ifstream good_deep_file(good_deep_path, std::ios::binary);
+        if (good_deep_file.is_open())
+        {
+            int rows = 0;
+            int cols = 0;
+            good_deep_file.read(reinterpret_cast<char*>(&rows), sizeof(int));
+            good_deep_file.read(reinterpret_cast<char*>(&cols), sizeof(int));
+            if (rows == 259 && cols > 0)
+            {
+                Eigen::Matrix<float, 259, Eigen::Dynamic> good_point_deep_features;
+                good_point_deep_features.resize(rows, cols);
+                good_deep_file.read(reinterpret_cast<char*>(good_point_deep_features.data()), sizeof(float) * rows * cols);
+                if (good_deep_file)
+                {
+                    keyframe->setGoodPointDeepFeatures(good_point_deep_features);
+                }
+            }
+            good_deep_file.close();
         }
         loadKeyFrame(keyframe, 0);
         if (cnt % 20 == 0)
