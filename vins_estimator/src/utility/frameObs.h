@@ -5,24 +5,24 @@
 
 #include <eigen3/Eigen/Dense>
 
-struct LocalFrameObservation
+struct FrameObs
 {
     int camera_id;
     Eigen::Matrix<double, 7, 1> feature;
 
-    LocalFrameObservation()
+    FrameObs()
         : camera_id(0)
     {
         feature.setZero();
     }
 
-    LocalFrameObservation(int _camera_id, const Eigen::Matrix<double, 7, 1> & _feature)
+    FrameObs(int _camera_id, const Eigen::Matrix<double, 7, 1> & _feature)
         : camera_id(_camera_id), feature(_feature)
     {
     }
 };
 
-class LocalFrame
+class LocalFrameObs
 {
   public:
     int frame_id;
@@ -30,14 +30,14 @@ class LocalFrame
     int tracking_mode;
     int active_camera_id;
     int track_count;
-    std::map<int, LocalFrameObservation> observations;
+    std::map<int, FrameObs> observations;
 
-    LocalFrame()
+    LocalFrameObs()
         : frame_id(-1), timestamp(0.0), tracking_mode(0), active_camera_id(0), track_count(0)
     {
     }
 
-    LocalFrame(int _frame_id, double _timestamp, int _tracking_mode, int _active_camera_id)
+    LocalFrameObs(int _frame_id, double _timestamp, int _tracking_mode, int _active_camera_id)
         : frame_id(_frame_id), timestamp(_timestamp), tracking_mode(_tracking_mode),
           active_camera_id(_active_camera_id), track_count(0)
     {
@@ -45,7 +45,7 @@ class LocalFrame
 
     void addObservation(int feature_id, int camera_id, const Eigen::Matrix<double, 7, 1> &feature)
     {
-        observations[feature_id] = LocalFrameObservation(camera_id, feature);
+        observations[feature_id] = FrameObs(camera_id, feature);
         track_count = static_cast<int>(observations.size());
     }
 

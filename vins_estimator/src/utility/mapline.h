@@ -10,11 +10,6 @@
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
 
-#include <boost/serialization/serialization.hpp>
-#include <boost/archive/binary_iarchive.hpp>
-#include <boost/archive/binary_oarchive.hpp>
-#include <boost/serialization/map.hpp>
-
 #include "line_geometry.h"
 
 class Mapline
@@ -61,21 +56,6 @@ class Mapline
 
   public:
     int local_map_optimization_frame_id;
-
-  private:
-    friend class boost::serialization::access;
-    template <class Archive>
-    void serialize(Archive &ar, const unsigned int version)
-    {
-        ar & _id;
-        ar & _type;
-        ar & _to_update_endpoints;
-        ar & _endpoints_valid;
-        ar & boost::serialization::make_array(_endpoints.data(), _endpoints.size());
-        ar & boost::serialization::make_array(_line_3d_world.data(), _line_3d_world.size());
-        ar & _obversers;
-        ar & _included_endpoints;
-    }
 
   private:
     int _id;

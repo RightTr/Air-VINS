@@ -217,7 +217,7 @@ void FeatureManager::addLocalFrame(int frameCnt, double header,
                                    VisualTrackingMode tracking_mode, int active_camera_id)
 {
     local_frames.emplace_back(frameCnt, header, static_cast<int>(tracking_mode), active_camera_id);
-    LocalFrame &local_frame = local_frames.back();
+    LocalFrameObs &local_frame = local_frames.back();
     for (const auto &id_pts : image)
     {
         if (id_pts.second.empty())

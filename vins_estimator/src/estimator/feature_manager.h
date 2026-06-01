@@ -29,7 +29,7 @@ using namespace Eigen;
 
 #include "parameters.h"
 #include "../utility/tic_toc.h"
-#include "../utility/localmap_frame.h"
+#include "../utility/frameObs.h"
 #include "../utility/mappoint.h"
 #include "../utility/mapline.h"
 #include "../featureTracker/deepFeature/include/utils.h"
@@ -285,7 +285,7 @@ class FeatureManager
     VisualTrackingMode visual_tracking_mode;
     int active_camera_id;
 
-    std::deque<LocalFrame> local_frames;
+    std::deque<LocalFrameObs> local_frames;
     std::map<int, MappointPtr> local_mappoints;
     Vector3d local_Ps[WINDOW_SIZE + 1];
     Matrix3d local_Rs[WINDOW_SIZE + 1];
