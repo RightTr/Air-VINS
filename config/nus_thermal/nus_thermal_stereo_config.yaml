@@ -67,6 +67,12 @@ line_max_stereo_disparity: 420.0
 line_match_vote_threshold: 2
 line_match_score_threshold: 0.8
 
+loop_descriptor_method: 1   # 1 brief, 2 Vlad/NetVLAD
+netvlad_engine_path: "/workspace/src/VINS-Fusion/output/netvlad.trt"
+netvlad_loop_threshold: 0.75
+netvlad_loop_margin: 0.05
+netvlad_loop_exclude_recent: 50
+
 enable_nuc_handle: 1
 
 max_solver_time: 0.04

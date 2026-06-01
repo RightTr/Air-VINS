@@ -22,6 +22,7 @@
 #include <iostream>
 #include <ros/package.h>
 #include <mutex>
+#include <memory>
 #include <queue>
 #include <thread>
 #include <eigen3/Eigen/Dense>
@@ -32,6 +33,7 @@
 #include "pose_graph.h"
 #include "utility/CameraPoseVisualization.h"
 #include "parameters.h"
+#include "netvlad/netvlad_trt.h"
 #define SKIP_FIRST_CNT 10
 using namespace std;
 
@@ -63,6 +65,7 @@ Eigen::Matrix3d qic;
 ros::Publisher pub_match_img;
 ros::Publisher pub_camera_pose_visual;
 ros::Publisher pub_odometry_rect;
+std::unique_ptr<NetVLADTRT> netvlad_extractor;
 
 std::string BRIEF_PATTERN_FILE;
 std::string POSE_GRAPH_SAVE_PATH;
@@ -362,6 +365,16 @@ void process()
 
                 KeyFrame* keyframe = new KeyFrame(pose_msg->header.stamp.toSec(), frame_index, T, R, image,
                                    point_3d, point_2d_uv, point_2d_normal, point_id, sequence);   
+                if (netvlad_extractor) {
+                    Eigen::VectorXf descriptor;
+                    if (netvlad_extractor->infer(image, descriptor)) {
+                        std::vector<float> netvlad_vector(descriptor.data(), descriptor.data() + descriptor.size());
+                        keyframe->setNetVLADDescriptor(netvlad_vector);
+                        ROS_INFO_STREAM_THROTTLE(5.0, "NetVLAD descriptor computed, dim=" << descriptor.size());
+                    } else {
+                        ROS_WARN_STREAM_THROTTLE(5.0, "NetVLAD inference failed for frame " << frame_index);
+                    }
+                }
                 m_process.lock();
                 start_flag = 1;
                 posegraph.addKeyFrame(keyframe, 1);
@@ -453,11 +466,49 @@ int main(int argc, char **argv)
     fsSettings["pose_graph_save_path"] >> POSE_GRAPH_SAVE_PATH;
     fsSettings["output_path"] >> VINS_RESULT_PATH;
     fsSettings["save_image"] >> DEBUG_IMAGE;
+    std::string output_dir = VINS_RESULT_PATH;
 
     LOAD_PREVIOUS_POSE_GRAPH = fsSettings["load_previous_pose_graph"];
     VINS_RESULT_PATH = VINS_RESULT_PATH + "/vio_loop.csv";
     std::ofstream fout(VINS_RESULT_PATH, std::ios::out);
     fout.close();
+
+    int loop_descriptor_method = 1;
+    if (!fsSettings["loop_descriptor_method"].empty()) {
+        fsSettings["loop_descriptor_method"] >> loop_descriptor_method;
+    }
+    posegraph.setLoopDescriptorType(loop_descriptor_method);
+    double netvlad_loop_threshold = 0.75;
+    double netvlad_loop_margin = 0.05;
+    int netvlad_loop_exclude_recent = 50;
+    if (!fsSettings["netvlad_loop_threshold"].empty()) {
+        fsSettings["netvlad_loop_threshold"] >> netvlad_loop_threshold;
+    }
+    if (!fsSettings["netvlad_loop_margin"].empty()) {
+        fsSettings["netvlad_loop_margin"] >> netvlad_loop_margin;
+    }
+    if (!fsSettings["netvlad_loop_exclude_recent"].empty()) {
+        fsSettings["netvlad_loop_exclude_recent"] >> netvlad_loop_exclude_recent;
+    }
+    posegraph.setNetVLADLoopParams(netvlad_loop_threshold, netvlad_loop_margin, netvlad_loop_exclude_recent);
+
+    if (loop_descriptor_method == 2) {
+        std::string netvlad_engine_path = output_dir + "/netvlad.trt";
+        if (!fsSettings["netvlad_engine_path"].empty()) {
+            fsSettings["netvlad_engine_path"] >> netvlad_engine_path;
+        }
+        NetVLADTRT::Options options;
+        options.engine_path = netvlad_engine_path;
+        options.input_width = 640;
+        options.input_height = 480;
+        options.verbose = false;
+        netvlad_extractor.reset(new NetVLADTRT(options));
+        if (!netvlad_extractor->build()) {
+            ROS_WARN_STREAM("Failed to load NetVLAD TensorRT engine: " << netvlad_engine_path);
+            netvlad_extractor.reset();
+            posegraph.setLoopDescriptorType("brief");
+        }
+    }
 
     int USE_IMU = fsSettings["imu"];
     posegraph.setIMUFlag(USE_IMU);

@@ -24,11 +24,32 @@ find_package(Ceres REQUIRED)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 find_package(Eigen3)
 
-include_directories(${catkin_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS}  ${EIGEN3_INCLUDE_DIR})
+find_path(TENSORRT_INCLUDE_DIR NvInfer.h
+    PATHS /usr/include /usr/local/include /usr/src/tensorrt/include
+          /usr/include/aarch64-linux-gnu /usr/include/x86_64-linux-gnu
+)
+find_path(CUDA_INCLUDE_DIR cuda_runtime_api.h
+    PATHS /usr/local/cuda/include /usr/include /usr/include/aarch64-linux-gnu
+          /usr/include/x86_64-linux-gnu
+)
+find_library(NVINFER_LIBRARY nvinfer
+    PATHS /usr/lib /usr/local/lib /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu
+)
+find_library(NVINFER_PLUGIN_LIBRARY nvinfer_plugin
+    PATHS /usr/lib /usr/local/lib /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu
+)
+find_library(CUDART_LIBRARY cudart
+    PATHS /usr/local/cuda/lib64 /usr/lib /usr/local/lib /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu
+)
+
+include_directories(${catkin_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS}  ${EIGEN3_INCLUDE_DIR}
+                    ${PROJECT_SOURCE_DIR}/src
+                    ${TENSORRT_INCLUDE_DIR}
+                    ${CUDA_INCLUDE_DIR})
 
 catkin_package()
 
-add_executable(loop_fusion_node
+set(LOOP_FUSION_SOURCES
     src/pose_graph_node.cpp
     src/pose_graph.cpp
     src/keyframe.cpp
@@ -42,6 +63,15 @@ add_executable(loop_fusion_node
     src/ThirdParty/DUtils/Timestamp.cpp
     src/ThirdParty/DVision/BRIEF.cpp
     src/ThirdParty/VocabularyBinary.cpp
+    src/netvlad/netvlad_trt.cpp
     )
 
-target_link_libraries(loop_fusion_node ${catkin_LIBRARIES}  ${OpenCV_LIBS} ${CERES_LIBRARIES}) 
+add_executable(loop_fusion_node ${LOOP_FUSION_SOURCES})
+
+set(LOOP_FUSION_TRT_LIBS ${NVINFER_LIBRARY} ${CUDART_LIBRARY})
+if(NVINFER_PLUGIN_LIBRARY)
+    list(APPEND LOOP_FUSION_TRT_LIBS ${NVINFER_PLUGIN_LIBRARY})
+endif()
+
+target_link_libraries(loop_fusion_node ${catkin_LIBRARIES}  ${OpenCV_LIBS} ${CERES_LIBRARIES}
+                      ${LOOP_FUSION_TRT_LIBS})

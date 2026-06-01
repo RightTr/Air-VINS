@@ -46,12 +46,20 @@ using namespace DBoW2;
 class PoseGraph
 {
 public:
+	enum class LoopDescriptorType
+	{
+		BriefBow = 0,
+		NetVLAD = 1
+	};
+
 	PoseGraph();
 	~PoseGraph();
 	void registerPub(ros::NodeHandle &n);
 	void addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop);
 	void loadKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop);
 	void loadVocabulary(std::string voc_path);
+	void setLoopDescriptorType(int method);
+	void setNetVLADLoopParams(double threshold, double margin, int exclude_recent);
 	void setIMUFlag(bool _use_imu);
 	KeyFrame* getKeyFrame(int index);
 	nav_msgs::Path path[10];
@@ -70,6 +78,7 @@ public:
 
 private:
 	int detectLoop(KeyFrame* keyframe, int frame_index);
+	int detectLoopNetVLAD(KeyFrame* keyframe, int frame_index);
 	void addKeyFrameIntoVoc(KeyFrame* keyframe);
 	void optimize4DoF();
 	void optimize6DoF();
@@ -89,6 +98,10 @@ private:
 	int earliest_loop_index;
 	int base_sequence;
 	bool use_imu;
+	LoopDescriptorType loop_descriptor_type;
+	double netvlad_loop_threshold;
+	double netvlad_loop_margin;
+	int netvlad_loop_exclude_recent;
 
 	BriefDatabase db;
 	BriefVocabulary* voc;

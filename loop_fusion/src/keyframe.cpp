@@ -43,6 +43,7 @@ KeyFrame::KeyFrame(double _time_stamp, int _index, Vector3d &_vio_T_w_i, Matrix3
 	has_loop = false;
 	loop_index = -1;
 	has_fast_point = false;
+	has_netvlad_descriptor = false;
 	loop_info << 0, 0, 0, 0, 0, 0, 0, 0;
 	sequence = _sequence;
 	computeWindowBRIEFPoint();
@@ -76,10 +77,27 @@ KeyFrame::KeyFrame(double _time_stamp, int _index, Vector3d &_vio_T_w_i, Matrix3
 	loop_index = _loop_index;
 	loop_info = _loop_info;
 	has_fast_point = false;
+	has_netvlad_descriptor = false;
 	sequence = 0;
 	keypoints = _keypoints;
 	keypoints_norm = _keypoints_norm;
 	brief_descriptors = _brief_descriptors;
+}
+
+void KeyFrame::setNetVLADDescriptor(const std::vector<float> &descriptor)
+{
+	netvlad_descriptor = descriptor;
+	has_netvlad_descriptor = !netvlad_descriptor.empty();
+}
+
+bool KeyFrame::hasNetVLADDescriptor() const
+{
+	return has_netvlad_descriptor;
+}
+
+const std::vector<float> &KeyFrame::getNetVLADDescriptor() const
+{
+	return netvlad_descriptor;
 }
 
 
@@ -582,5 +600,4 @@ BriefExtractor::BriefExtractor(const std::string &pattern_file)
 
   m_brief.importPairs(x1, y1, x2, y2);
 }
-
 
