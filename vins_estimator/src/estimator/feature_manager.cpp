@@ -736,11 +736,13 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
     }
 }
 
-vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_count_l, int frame_count_r)
+vector<pair<Vector3d, Vector3d>> FeatureManager::getCorresponding(int frame_count_l, int frame_count_r, bool only_good)
 {
     vector<pair<Vector3d, Vector3d>> corres;
     for (auto &it : feature)
     {
+        if (only_good && !hasGoodMappoint(it.feature_id))
+            continue;
         if (it.start_frame <= frame_count_l && it.endFrame() >= frame_count_r)
         {
             Vector3d a = Vector3d::Zero(), b = Vector3d::Zero();
@@ -918,7 +920,7 @@ bool FeatureManager::solvePoseByPnP(Eigen::Matrix3d &R, Eigen::Vector3d &P,
     return true;
 }
 
-void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[], int active_camera_id_)
+void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[], int active_camera_id_, bool prefer_good_points)
 {
 
     if(frameCnt > 0)
@@ -927,7 +929,9 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
         vector<cv::Point3f> pts3D;
         for (auto &it_per_id : feature)
         {
-            const bool usable_depth = knownLandmarksOnly() ? hasReliableDepth(it_per_id) : it_per_id.estimated_depth > 0;
+            const bool usable_depth = prefer_good_points
+                                           ? (hasGoodMappoint(it_per_id.feature_id) && hasReliableDepth(it_per_id))
+                                           : (knownLandmarksOnly() ? hasReliableDepth(it_per_id) : it_per_id.estimated_depth > 0);
             if (usable_depth)
             {
                 int index = frameCnt - it_per_id.start_frame;
@@ -948,6 +952,8 @@ void FeatureManager::initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs
                 }
             }
         }
+        if (prefer_good_points && pts3D.size() < 6)
+            return;
         Eigen::Matrix3d RCam;
         Eigen::Vector3d PCam;
         // trans to w_T_cam

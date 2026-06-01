@@ -233,7 +233,7 @@ class FeatureManager
     int getLineFeatureCount();
     bool addFeatureCheckParallax(int frame_count, const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td);
     void addLineFeature(int frame_count, const LineFeatureFrameMap &lines, double td);
-    vector<pair<Vector3d, Vector3d>> getCorresponding(int frame_count_l, int frame_count_r);
+    vector<pair<Vector3d, Vector3d>> getCorresponding(int frame_count_l, int frame_count_r, bool only_good = false);
     //void updateDepth(const VectorXd &x);
     void setDepth(const VectorXd &x);
     void removeFailures();
@@ -245,7 +245,7 @@ class FeatureManager
     void triangulateLine(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[]);
     void triangulatePoint(const Eigen::Matrix<double, 3, 4> &Pose0, const Eigen::Matrix<double, 3, 4> &Pose1,
                             const Eigen::Vector2d &point0, const Eigen::Vector2d &point1, Eigen::Vector3d &point_3d) const;
-    void initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[], int active_camera_id);
+    void initFramePoseByPnP(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d ric[], int active_camera_id, bool prefer_good_points = false);
     bool solvePoseByPnP(Eigen::Matrix3d &R_initial, Eigen::Vector3d &P_initial, 
                             vector<cv::Point2f> &pts2D, vector<cv::Point3f> &pts3D);
     void removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::Vector3d back_P0,

@@ -517,11 +517,11 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         // stereo + IMU initilization
         if(STEREO && USE_IMU)
         {
-            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
+            f_manager.setWindowState(Ps, Rs, tic, ric);
             f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
             f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
-            f_manager.setWindowState(Ps, Rs, tic, ric);
             f_manager.updateLocalPoints(frame_count);
+            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id, true);
             ROS_INFO("init stereo+imu line landmarks: %d", f_manager.getLineFeatureCount());
             if (frame_count == WINDOW_SIZE)
             {
@@ -550,11 +550,11 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         // stereo only initilization
         if(STEREO && !USE_IMU)
         {
-            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
+            f_manager.setWindowState(Ps, Rs, tic, ric);
             f_manager.triangulate(frame_count, Ps, Rs, tic, ric);
             f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
-            f_manager.setWindowState(Ps, Rs, tic, ric);
             f_manager.updateLocalPoints(frame_count);
+            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id, true);
             ROS_INFO("init stereo-only line landmarks: %d", f_manager.getLineFeatureCount());
             optimization();
 
@@ -679,7 +679,7 @@ bool Estimator::initialStructure()
             tmp_feature.observation.push_back(make_pair(imu_j, Eigen::Vector2d{pts_j.x(), pts_j.y()}));
         }
         sfm_f.push_back(tmp_feature);
-    } 
+    }
     Matrix3d relative_R;
     Vector3d relative_T;
     int l;
@@ -744,7 +744,7 @@ bool Estimator::initialStructure()
                 }
             }
         }
-        cv::Mat K = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);     
+        cv::Mat K = (cv::Mat_<double>(3, 3) << 1, 0, 0, 0, 1, 0, 0, 0, 1);
         if(pts_3_vector.size() < 6)
         {
             cout << "pts_3_vector size " << pts_3_vector.size() << endl;
@@ -773,7 +773,6 @@ bool Estimator::initialStructure()
         ROS_INFO("misalign visual structure with IMU");
         return false;
     }
-
 }
 
 bool Estimator::visualInitialAlign()
@@ -839,13 +838,13 @@ bool Estimator::visualInitialAlign()
     return true;
 }
 
-bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l)
+bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l, bool only_good)
 {
     // find previous frame which contians enough correspondance and parallex with newest frame
     for (int i = 0; i < WINDOW_SIZE; i++)
     {
         vector<pair<Vector3d, Vector3d>> corres;
-        corres = f_manager.getCorresponding(i, WINDOW_SIZE);
+        corres = f_manager.getCorresponding(i, WINDOW_SIZE, only_good);
         if (corres.size() > 20)
         {
             double sum_parallax = 0;
