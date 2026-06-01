@@ -19,6 +19,7 @@
 #include <sensor_msgs/NavSatFix.h>
 #include "estimator/estimator.h"
 #include "utility/visualization.h"
+#include "utility/ros_utils.h"
 
 using namespace std;
 using namespace Eigen;
@@ -32,7 +33,7 @@ int main(int argc, char** argv)
 	ros::NodeHandle n("~");
 	ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
 
-	pubGPS = n.advertise<sensor_msgs::NavSatFix>("/gps", 1000);
+	pubGPS = ros_utils::ros_advertise<sensor_msgs::NavSatFix>(n, "/gps", 1000);
 
 	if(argc != 3)
 	{
@@ -165,7 +166,7 @@ int main(int argc, char** argv)
 			gps_position.altitude  = alt;
 			gps_position.position_covariance[0] = pos_accuracy;
 			//printf("pos_accuracy %f \n", pos_accuracy);
-			pubGPS.publish(gps_position);
+			ros_utils::ros_publish(pubGPS, gps_position);
 
 			estimator.inputImage(imgTime, imLeft, imRight);
 			

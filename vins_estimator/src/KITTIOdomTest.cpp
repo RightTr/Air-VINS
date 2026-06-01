@@ -19,6 +19,7 @@
 #include <cv_bridge/cv_bridge.h>
 #include "estimator/estimator.h"
 #include "utility/visualization.h"
+#include "utility/ros_utils.h"
 
 using namespace std;
 using namespace Eigen;
@@ -34,8 +35,8 @@ int main(int argc, char** argv)
 	ros::NodeHandle n("~");
 	ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
 
-	ros::Publisher pubLeftImage = n.advertise<sensor_msgs::Image>("/leftImage",1000);
-	ros::Publisher pubRightImage = n.advertise<sensor_msgs::Image>("/rightImage",1000);
+	ros::Publisher pubLeftImage = ros_utils::ros_advertise<sensor_msgs::Image>(n, "/leftImage", 1000);
+	ros::Publisher pubRightImage = ros_utils::ros_advertise<sensor_msgs::Image>(n, "/rightImage", 1000);
 
 	if(argc != 3)
 	{
@@ -95,12 +96,12 @@ int main(int argc, char** argv)
 			imLeft = cv::imread(leftImagePath, cv::IMREAD_GRAYSCALE);
 			sensor_msgs::ImagePtr imLeftMsg = cv_bridge::CvImage(std_msgs::Header(), "mono8", imLeft).toImageMsg();
 			imLeftMsg->header.stamp = ros::Time(imageTimeList[i]);
-			pubLeftImage.publish(imLeftMsg);
+			ros_utils::ros_publish(pubLeftImage, *imLeftMsg);
 
 			imRight = cv::imread(rightImagePath, cv::IMREAD_GRAYSCALE);
 			sensor_msgs::ImagePtr imRightMsg = cv_bridge::CvImage(std_msgs::Header(), "mono8", imRight).toImageMsg();
 			imRightMsg->header.stamp = ros::Time(imageTimeList[i]);
-			pubRightImage.publish(imRightMsg);
+			ros_utils::ros_publish(pubRightImage, *imRightMsg);
 
 
 			estimator.inputImage(imageTimeList[i], imLeft, imRight);

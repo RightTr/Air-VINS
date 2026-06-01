@@ -9,10 +9,7 @@
 
 #pragma once
 
-#include <ros/ros.h>
-#include <std_msgs/ColorRGBA.h>
-#include <visualization_msgs/Marker.h>
-#include <visualization_msgs/MarkerArray.h>
+#include "ros_utils.h"
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 

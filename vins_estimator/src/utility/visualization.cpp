@@ -8,8 +8,11 @@
  *******************************************************/
 
 #include "visualization.h"
+#include "ros_utils.h"
+#include <cv_bridge/cv_bridge.h>
 #include <cstdint>
 #include <map>
+#include <tf/transform_broadcaster.h>
 
 using namespace ros;
 using namespace Eigen;
@@ -99,23 +102,23 @@ void appendLineSegmentColored(visualization_msgs::Marker &marker,
 
 void registerPub(ros::NodeHandle &n)
 {
-    pub_latest_odometry = n.advertise<nav_msgs::Odometry>("imu_propagate", 1000);
-    pub_path = n.advertise<nav_msgs::Path>("path", 1000);
-    pub_odometry = n.advertise<nav_msgs::Odometry>("odometry", 1000);
-    pub_point_cloud = n.advertise<sensor_msgs::PointCloud>("point_cloud", 1000);
-    pub_margin_cloud = n.advertise<sensor_msgs::PointCloud>("margin_cloud", 1000);
-    pub_window_keypose = n.advertise<visualization_msgs::Marker>("window_keypose", 1000);
-    pub_camera_pose = n.advertise<nav_msgs::Odometry>("camera_pose", 1000);
-    pub_camera_pose_visual = n.advertise<visualization_msgs::MarkerArray>("camera_pose_visual", 1000);
-    pub_keyframe_point = n.advertise<sensor_msgs::PointCloud>("keyframe_point", 1000);
-    pub_keyframe_path = n.advertise<nav_msgs::Path>("/keyframe_path", 1000);
-    pub_keyframe_marker = n.advertise<visualization_msgs::Marker>("/global_keypose", 1000);
-    pub_extrinsic = n.advertise<nav_msgs::Odometry>("extrinsic", 1000);
-    pub_image_track = n.advertise<sensor_msgs::Image>("image_track", 1000);
-    pub_deep_match = n.advertise<sensor_msgs::Image>("/deep_match", 1000);
-    pub_line_match = n.advertise<sensor_msgs::Image>("line_match", 1000);
-    pub_map_line = n.advertise<visualization_msgs::Marker>("global_mapline", 1000);
-    pub_window_map_line = n.advertise<visualization_msgs::Marker>("window_mapline", 1000);
+    pub_latest_odometry = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "imu_propagate", 1000);
+    pub_path = ros_utils::ros_advertise<nav_msgs::Path>(n, "path", 1000);
+    pub_odometry = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "odometry", 1000);
+    pub_point_cloud = ros_utils::ros_advertise<sensor_msgs::PointCloud>(n, "point_cloud", 1000);
+    pub_margin_cloud = ros_utils::ros_advertise<sensor_msgs::PointCloud>(n, "margin_cloud", 1000);
+    pub_window_keypose = ros_utils::ros_advertise<visualization_msgs::Marker>(n, "window_keypose", 1000);
+    pub_camera_pose = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "camera_pose", 1000);
+    pub_camera_pose_visual = ros_utils::ros_advertise<visualization_msgs::MarkerArray>(n, "camera_pose_visual", 1000);
+    pub_keyframe_point = ros_utils::ros_advertise<sensor_msgs::PointCloud>(n, "keyframe_point", 1000);
+    pub_keyframe_path = ros_utils::ros_advertise<nav_msgs::Path>(n, "/keyframe_path", 1000);
+    pub_keyframe_marker = ros_utils::ros_advertise<visualization_msgs::Marker>(n, "/global_keypose", 1000);
+    pub_extrinsic = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "extrinsic", 1000);
+    pub_image_track = ros_utils::ros_advertise<sensor_msgs::Image>(n, "image_track", 1000);
+    pub_deep_match = ros_utils::ros_advertise<sensor_msgs::Image>(n, "/deep_match", 1000);
+    pub_line_match = ros_utils::ros_advertise<sensor_msgs::Image>(n, "line_match", 1000);
+    pub_map_line = ros_utils::ros_advertise<visualization_msgs::Marker>(n, "global_mapline", 1000);
+    pub_window_map_line = ros_utils::ros_advertise<visualization_msgs::Marker>(n, "window_mapline", 1000);
 
     cameraposevisual.setScale(0.1);
     cameraposevisual.setLineWidth(0.01);
@@ -136,7 +139,7 @@ void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, co
     odometry.twist.twist.linear.x = V.x();
     odometry.twist.twist.linear.y = V.y();
     odometry.twist.twist.linear.z = V.z();
-    pub_latest_odometry.publish(odometry);
+    ros_utils::ros_publish(pub_latest_odometry, odometry);
 }
 
 void pubTrackImage(const cv::Mat &imgTrack, const double t)
@@ -145,7 +148,7 @@ void pubTrackImage(const cv::Mat &imgTrack, const double t)
     header.frame_id = "world";
     header.stamp = ros::Time(t);
     sensor_msgs::ImagePtr imgTrackMsg = cv_bridge::CvImage(header, "bgr8", imgTrack).toImageMsg();
-    pub_image_track.publish(imgTrackMsg);
+    ros_utils::ros_publish(pub_image_track, *imgTrackMsg);
 }
 
 void pubDeepMatchImage(const cv::Mat &imgMatch, const double t)
@@ -156,7 +159,7 @@ void pubDeepMatchImage(const cv::Mat &imgMatch, const double t)
     header.frame_id = "world";
     header.stamp = ros::Time(t);
     sensor_msgs::ImagePtr imgMatchMsg = cv_bridge::CvImage(header, "bgr8", imgMatch).toImageMsg();
-    pub_deep_match.publish(imgMatchMsg);
+    ros_utils::ros_publish(pub_deep_match, *imgMatchMsg);
 }
 
 void pubLineMatchImage(const cv::Mat &imgMatch, const double t)
@@ -167,7 +170,7 @@ void pubLineMatchImage(const cv::Mat &imgMatch, const double t)
     header.frame_id = "world";
     header.stamp = ros::Time(t);
     sensor_msgs::ImagePtr imgMatchMsg = cv_bridge::CvImage(header, "bgr8", imgMatch).toImageMsg();
-    pub_line_match.publish(imgMatchMsg);
+    ros_utils::ros_publish(pub_line_match, *imgMatchMsg);
 }
 
 
@@ -234,7 +237,7 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
         odometry.twist.twist.linear.x = estimator.Vs[WINDOW_SIZE].x();
         odometry.twist.twist.linear.y = estimator.Vs[WINDOW_SIZE].y();
         odometry.twist.twist.linear.z = estimator.Vs[WINDOW_SIZE].z();
-        pub_odometry.publish(odometry);
+        ros_utils::ros_publish(pub_odometry, odometry);
 
         geometry_msgs::PoseStamped pose_stamped;
         pose_stamped.header = header;
@@ -243,7 +246,7 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
         path.header = header;
         path.header.frame_id = "world";
         path.poses.push_back(pose_stamped);
-        pub_path.publish(path);
+    ros_utils::ros_publish(pub_path, path);
 
         // write result to file
         ofstream foutC(VINS_RESULT_PATH, ios::app);
@@ -299,7 +302,7 @@ void pubKeyPoses(const Estimator &estimator, const std_msgs::Header &header)
         pose_marker.z = correct_pose.z();
         key_poses.points.push_back(pose_marker);
     }
-    pub_window_keypose.publish(key_poses);
+    ros_utils::ros_publish(pub_window_keypose, key_poses);
 }
 
 void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header)
@@ -323,7 +326,7 @@ void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header)
         odometry.pose.pose.orientation.z = R.z();
         odometry.pose.pose.orientation.w = R.w();
 
-        pub_camera_pose.publish(odometry);
+        ros_utils::ros_publish(pub_camera_pose, odometry);
 
         cameraposevisual.reset();
         cameraposevisual.add_pose(P, R);
@@ -363,7 +366,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
         p.z = w_pts_i(2);
         point_cloud.points.push_back(p);
     }
-    pub_point_cloud.publish(point_cloud);
+    ros_utils::ros_publish(pub_point_cloud, point_cloud);
 
 
     // pub margined potin
@@ -393,7 +396,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
             margin_cloud.points.push_back(p);
         }
     }
-    pub_margin_cloud.publish(margin_cloud);
+    ros_utils::ros_publish(pub_margin_cloud, margin_cloud);
 }
 
 std_msgs::ColorRGBA markerColorById(int id)
@@ -448,7 +451,7 @@ void pubGolbalMapLine(const Estimator &estimator, const std_msgs::Header &header
     if (map_lines.points.empty())
         map_lines.action = visualization_msgs::Marker::DELETE;
 
-    pub_map_line.publish(map_lines);
+    ros_utils::ros_publish(pub_map_line, map_lines);
 }
 
 void pubWindowMapLine(const Estimator &estimator, const std_msgs::Header &header)
@@ -485,7 +488,7 @@ void pubWindowMapLine(const Estimator &estimator, const std_msgs::Header &header
     if (window_lines.points.empty())
         window_lines.action = visualization_msgs::Marker::DELETE;
 
-    pub_window_map_line.publish(window_lines);
+    ros_utils::ros_publish(pub_window_map_line, window_lines);
 }
 
 
@@ -535,7 +538,7 @@ void pubTF(const Estimator &estimator, const std_msgs::Header &header)
     odometry.pose.pose.orientation.y = tmp_q.y();
     odometry.pose.pose.orientation.z = tmp_q.z();
     odometry.pose.pose.orientation.w = tmp_q.w();
-    pub_extrinsic.publish(odometry);
+    ros_utils::ros_publish(pub_extrinsic, odometry);
 
 }
 
@@ -564,7 +567,7 @@ void pubKeyframe(const Estimator &estimator)
         keyframe_path.header = header;
         keyframe_path.header.frame_id = "world";
         keyframe_path.poses.push_back(pose_stamped);
-        pub_keyframe_path.publish(keyframe_path);
+        ros_utils::ros_publish(pub_keyframe_path, keyframe_path);
 
         keyframe_marker.header = header;
         keyframe_marker.header.frame_id = "world";
@@ -586,7 +589,7 @@ void pubKeyframe(const Estimator &estimator)
         key_pose.y = P.y();
         key_pose.z = P.z();
         keyframe_marker.points.push_back(key_pose);
-        pub_keyframe_marker.publish(keyframe_marker);
+        ros_utils::ros_publish(pub_keyframe_marker, keyframe_marker);
 
 
         keyframe_point_cloud.header = header;
@@ -629,6 +632,6 @@ void pubKeyframe(const Estimator &estimator)
                     keyframe_point_cloud.channels[idx] = p_2d;
             }
         }
-        pub_keyframe_point.publish(keyframe_point_cloud);
+        ros_utils::ros_publish(pub_keyframe_point, keyframe_point_cloud);
     }
 }

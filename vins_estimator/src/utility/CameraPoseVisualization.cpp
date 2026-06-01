@@ -8,6 +8,7 @@
  *******************************************************/
 
 #include "CameraPoseVisualization.h"
+#include "ros_utils.h"
 
 const Eigen::Vector3d CameraPoseVisualization::imlt = Eigen::Vector3d(-1.0, -0.5, 1.0);
 const Eigen::Vector3d CameraPoseVisualization::imrt = Eigen::Vector3d( 1.0, -0.5, 1.0);
@@ -203,5 +204,5 @@ void CameraPoseVisualization::publish_by( ros::Publisher &pub, const std_msgs::H
 		markerArray_msg.markers.push_back(marker);
 	}
 
-	pub.publish(markerArray_msg);
+    ros_utils::ros_publish(pub, markerArray_msg);
 }

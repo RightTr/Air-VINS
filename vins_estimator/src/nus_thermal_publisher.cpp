@@ -16,6 +16,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/Imu.h>
+#include "utility/ros_utils.h"
 
 namespace
 {
@@ -333,11 +334,11 @@ int main(int argc, char **argv)
     if (max_frames > 0)
         end_index = std::min(pair_count, static_cast<size_t>(start_index + max_frames));
 
-    ros::Publisher pub_left = nh.advertise<sensor_msgs::Image>(image0_topic, 10);
-    ros::Publisher pub_right = nh.advertise<sensor_msgs::Image>(image1_topic, 10);
+    ros::Publisher pub_left = ros_utils::ros_advertise<sensor_msgs::Image>(nh, image0_topic, 10);
+    ros::Publisher pub_right = ros_utils::ros_advertise<sensor_msgs::Image>(nh, image1_topic, 10);
     ros::Publisher pub_imu;
     if (publish_imu)
-        pub_imu = nh.advertise<sensor_msgs::Imu>(imu_topic, 2000);
+        pub_imu = ros_utils::ros_advertise<sensor_msgs::Imu>(nh, imu_topic, 2000);
     const Rectifier rectifier = makeNusThermalRectifier(rectify_images, rectify_alpha);
 
     ROS_INFO_STREAM("Publishing NUS thermal stereo sequence"
@@ -357,12 +358,12 @@ int main(int argc, char **argv)
             {
                 while (imu_index < imu_samples.size() && imu_samples[imu_index].stamp < left_frames[i].stamp)
                 {
-                    pub_imu.publish(makeImuMsg(imu_samples[imu_index], imu_frame_id));
+                    ros_utils::ros_publish(pub_imu, makeImuMsg(imu_samples[imu_index], imu_frame_id));
                     ++imu_index;
                 }
                 if (imu_index < imu_samples.size())
                 {
-                    pub_imu.publish(makeImuMsg(imu_samples[imu_index], imu_frame_id));
+                    ros_utils::ros_publish(pub_imu, makeImuMsg(imu_samples[imu_index], imu_frame_id));
                     ++imu_index;
                 }
             }
@@ -371,8 +372,8 @@ int main(int argc, char **argv)
             if (!left_msg || !right_msg)
                 return 1;
 
-            pub_left.publish(left_msg);
-            pub_right.publish(right_msg);
+            ros_utils::ros_publish(pub_left, *left_msg);
+            ros_utils::ros_publish(pub_right, *right_msg);
             ros::spinOnce();
 
             if (i + 1 < end_index)
