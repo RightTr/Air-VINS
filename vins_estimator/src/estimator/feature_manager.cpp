@@ -49,6 +49,7 @@ FeatureManager::FeatureManager(Matrix3d _Rs[])
         local_Ps[i].setZero();
         local_Rs[i].setIdentity();
     }
+    pending_keyframe_next_frame = false;
 }
 
 void FeatureManager::setRic(Matrix3d _ric[])
@@ -124,6 +125,7 @@ void FeatureManager::clearState()
     has_local_window_state = false;
     visual_tracking_mode = TRACKING_MODE_STEREO;
     active_camera_id = 0;
+    pending_keyframe_next_frame = false;
 }
 
 int FeatureManager::getFeatureCount()
@@ -679,10 +681,32 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
         }
     }
 
-    //if (frame_count < 2 || last_track_num < 20)
-    //if (frame_count < 2 || last_track_num < 20 || new_feature_num > 0.5 * last_track_num)
-    if (frame_count < 2 || last_track_num < 20 || long_track_num < 40 || new_feature_num > 0.5 * last_track_num)
+    if (pending_keyframe_next_frame)
+    {
+        pending_keyframe_next_frame = false;
         return true;
+    }
+
+    const int tracked_or_new = last_track_num + new_feature_num;
+    const double tracking_ratio = tracked_or_new > 0 ? static_cast<double>(last_track_num) / tracked_or_new : 0.0;
+
+    if (frame_count < 2)
+        return true;
+
+    if (STEREO && tracked_or_new < KEYFRAME_MIN_INIT_STEREO_FEATURE)
+        return true;
+
+    if (last_track_num <= KEYFRAME_LOST_NUM_MATCH)
+        return true;
+
+    if (last_track_num < KEYFRAME_MIN_NUM_MATCH)
+        return true;
+
+    if (tracking_ratio < KEYFRAME_TRACKING_POINT_RATE || last_track_num < KEYFRAME_MAX_NUM_MATCH)
+    {
+        pending_keyframe_next_frame = true;
+        return false;
+    }
 
     for (auto &it_per_id : feature)
     {
@@ -703,6 +727,11 @@ bool FeatureManager::addFeatureCheckParallax(int frame_count, const map<int, vec
         ROS_DEBUG("parallax_sum: %lf, parallax_num: %d", parallax_sum, parallax_num);
         ROS_DEBUG("current parallax: %lf", parallax_sum / parallax_num * FOCAL_LENGTH);
         last_average_parallax = parallax_sum / parallax_num * FOCAL_LENGTH;
+        if (last_average_parallax >= KEYFRAME_TRACKING_PARALLAX_RATE * FOCAL_LENGTH)
+        {
+            pending_keyframe_next_frame = true;
+            return false;
+        }
         return parallax_sum / parallax_num >= MIN_PARALLAX;
     }
 }

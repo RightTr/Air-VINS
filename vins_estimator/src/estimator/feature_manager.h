@@ -265,6 +265,7 @@ class FeatureManager
     double last_average_parallax;
     int new_feature_num;
     int long_track_num;
+    bool pending_keyframe_next_frame;
 
     bool hasGoodMappoint(int feature_id) const;
 

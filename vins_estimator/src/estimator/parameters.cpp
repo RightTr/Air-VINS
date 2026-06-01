@@ -12,6 +12,12 @@
 
 double INIT_DEPTH;
 double MIN_PARALLAX;
+int KEYFRAME_MIN_INIT_STEREO_FEATURE;
+int KEYFRAME_LOST_NUM_MATCH;
+int KEYFRAME_MIN_NUM_MATCH;
+int KEYFRAME_MAX_NUM_MATCH;
+float KEYFRAME_TRACKING_POINT_RATE;
+double KEYFRAME_TRACKING_PARALLAX_RATE;
 double ACC_N, ACC_W;
 double GYR_N, GYR_W;
 
@@ -160,6 +166,12 @@ void readParameters(std::string config_file)
     FEATURE_MIN_DEPTH = 0.3;
     FEATURE_MAX_DEPTH = 40.0;
     ENABLE_NUC_HANDLE = 0;
+    KEYFRAME_MIN_INIT_STEREO_FEATURE = 10;
+    KEYFRAME_LOST_NUM_MATCH = 10;
+    KEYFRAME_MIN_NUM_MATCH = 30;
+    KEYFRAME_MAX_NUM_MATCH = 80;
+    KEYFRAME_TRACKING_POINT_RATE = 0.7f;
+    KEYFRAME_TRACKING_PARALLAX_RATE = 0.1;
     readOptionalParam(fsSettings, "deep_feature", DEEP_FEATURE);
     readOptionalParam(fsSettings, "deep_feature_model_dir", DEEP_FEATURE_MODEL_DIR);
     readOptionalParam(fsSettings, "deep_feature_matcher", DEEP_FEATURE_MATCHER);
@@ -185,6 +197,12 @@ void readParameters(std::string config_file)
     readOptionalParam(fsSettings, "feature_min_depth", FEATURE_MIN_DEPTH);
     readOptionalParam(fsSettings, "feature_max_depth", FEATURE_MAX_DEPTH);
     readOptionalParam(fsSettings, "enable_nuc_handle", ENABLE_NUC_HANDLE);
+    readOptionalParam(fsSettings, "keyframe_min_init_stereo_feature", KEYFRAME_MIN_INIT_STEREO_FEATURE);
+    readOptionalParam(fsSettings, "keyframe_lost_num_match", KEYFRAME_LOST_NUM_MATCH);
+    readOptionalParam(fsSettings, "keyframe_min_num_match", KEYFRAME_MIN_NUM_MATCH);
+    readOptionalParam(fsSettings, "keyframe_max_num_match", KEYFRAME_MAX_NUM_MATCH);
+    readOptionalParam(fsSettings, "keyframe_tracking_point_rate", KEYFRAME_TRACKING_POINT_RATE);
+    readOptionalParam(fsSettings, "keyframe_tracking_parallax_rate", KEYFRAME_TRACKING_PARALLAX_RATE);
 
     MULTIPLE_THREAD = fsSettings["multiple_thread"];
 

@@ -33,10 +33,17 @@
 extern ros::Publisher pub_odometry;
 extern ros::Publisher pub_path, pub_pose;
 extern ros::Publisher pub_cloud, pub_map;
-extern ros::Publisher pub_key_poses;
+extern ros::Publisher pub_window_keypose;
 extern ros::Publisher pub_ref_pose, pub_cur_pose;
 extern ros::Publisher pub_key;
+extern ros::Publisher pub_keyframe_point;
+extern ros::Publisher pub_keyframe_path;
+extern ros::Publisher pub_keyframe_marker;
 extern nav_msgs::Path path;
+extern nav_msgs::Path keyframe_path;
+extern visualization_msgs::Marker keyframe_marker;
+extern sensor_msgs::PointCloud keyframe_point_cloud;
+extern std::map<int, size_t> keyframe_point_index;
 extern ros::Publisher pub_pose_graph;
 extern ros::Publisher pub_deep_match;
 extern ros::Publisher pub_line_match;

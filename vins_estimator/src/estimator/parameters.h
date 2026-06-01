@@ -28,6 +28,12 @@ const int NUM_OF_LINE_F = 500;
 
 extern double INIT_DEPTH;
 extern double MIN_PARALLAX;
+extern int KEYFRAME_MIN_INIT_STEREO_FEATURE;
+extern int KEYFRAME_LOST_NUM_MATCH;
+extern int KEYFRAME_MIN_NUM_MATCH;
+extern int KEYFRAME_MAX_NUM_MATCH;
+extern float KEYFRAME_TRACKING_POINT_RATE;
+extern double KEYFRAME_TRACKING_PARALLAX_RATE;
 extern int ESTIMATE_EXTRINSIC;
 
 extern double ACC_N, ACC_W;

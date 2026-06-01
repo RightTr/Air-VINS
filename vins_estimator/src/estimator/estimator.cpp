@@ -88,6 +88,11 @@ void Estimator::clearState()
 
     f_manager.clearState();
     featureTracker.clearState();
+    keyframe_path.poses.clear();
+    keyframe_marker.points.clear();
+    keyframe_point_cloud.points.clear();
+    keyframe_point_cloud.channels.clear();
+    keyframe_point_index.clear();
 
     failure_occur = 0;
 

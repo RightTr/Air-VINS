@@ -16,13 +16,18 @@ using namespace Eigen;
 ros::Publisher pub_odometry, pub_latest_odometry;
 ros::Publisher pub_path;
 ros::Publisher pub_point_cloud, pub_margin_cloud;
-ros::Publisher pub_key_poses;
+ros::Publisher pub_window_keypose;
 ros::Publisher pub_camera_pose;
 ros::Publisher pub_camera_pose_visual;
 nav_msgs::Path path;
+nav_msgs::Path keyframe_path;
+visualization_msgs::Marker keyframe_marker;
+sensor_msgs::PointCloud keyframe_point_cloud;
+std::map<int, size_t> keyframe_point_index;
 
-ros::Publisher pub_keyframe_pose;
 ros::Publisher pub_keyframe_point;
+ros::Publisher pub_keyframe_path;
+ros::Publisher pub_keyframe_marker;
 ros::Publisher pub_extrinsic;
 
 ros::Publisher pub_image_track;
@@ -99,11 +104,12 @@ void registerPub(ros::NodeHandle &n)
     pub_odometry = n.advertise<nav_msgs::Odometry>("odometry", 1000);
     pub_point_cloud = n.advertise<sensor_msgs::PointCloud>("point_cloud", 1000);
     pub_margin_cloud = n.advertise<sensor_msgs::PointCloud>("margin_cloud", 1000);
-    pub_key_poses = n.advertise<visualization_msgs::Marker>("key_poses", 1000);
+    pub_window_keypose = n.advertise<visualization_msgs::Marker>("window_keypose", 1000);
     pub_camera_pose = n.advertise<nav_msgs::Odometry>("camera_pose", 1000);
     pub_camera_pose_visual = n.advertise<visualization_msgs::MarkerArray>("camera_pose_visual", 1000);
-    pub_keyframe_pose = n.advertise<nav_msgs::Odometry>("keyframe_pose", 1000);
     pub_keyframe_point = n.advertise<sensor_msgs::PointCloud>("keyframe_point", 1000);
+    pub_keyframe_path = n.advertise<nav_msgs::Path>("/keyframe_path", 1000);
+    pub_keyframe_marker = n.advertise<visualization_msgs::Marker>("/global_keypose", 1000);
     pub_extrinsic = n.advertise<nav_msgs::Odometry>("extrinsic", 1000);
     pub_image_track = n.advertise<sensor_msgs::Image>("image_track", 1000);
     pub_deep_match = n.advertise<sensor_msgs::Image>("/deep_match", 1000);
@@ -269,7 +275,7 @@ void pubKeyPoses(const Estimator &estimator, const std_msgs::Header &header)
     visualization_msgs::Marker key_poses;
     key_poses.header = header;
     key_poses.header.frame_id = "world";
-    key_poses.ns = "key_poses";
+    key_poses.ns = "window_keypose";
     key_poses.type = visualization_msgs::Marker::SPHERE_LIST;
     key_poses.action = visualization_msgs::Marker::ADD;
     key_poses.pose.orientation.w = 1.0;
@@ -293,7 +299,7 @@ void pubKeyPoses(const Estimator &estimator, const std_msgs::Header &header)
         pose_marker.z = correct_pose.z();
         key_poses.points.push_back(pose_marker);
     }
-    pub_key_poses.publish(key_poses);
+    pub_window_keypose.publish(key_poses);
 }
 
 void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header)
@@ -542,52 +548,87 @@ void pubKeyframe(const Estimator &estimator)
         //Vector3d P = estimator.Ps[i] + estimator.Rs[i] * estimator.tic[0];
         Vector3d P = estimator.Ps[i];
         Quaterniond R = Quaterniond(estimator.Rs[i]);
+        std_msgs::Header header;
+        header.stamp = ros::Time(estimator.Headers[WINDOW_SIZE - 2]);
+        header.frame_id = "world";
 
-        nav_msgs::Odometry odometry;
-        odometry.header.stamp = ros::Time(estimator.Headers[WINDOW_SIZE - 2]);
-        odometry.header.frame_id = "world";
-        odometry.pose.pose.position.x = P.x();
-        odometry.pose.pose.position.y = P.y();
-        odometry.pose.pose.position.z = P.z();
-        odometry.pose.pose.orientation.x = R.x();
-        odometry.pose.pose.orientation.y = R.y();
-        odometry.pose.pose.orientation.z = R.z();
-        odometry.pose.pose.orientation.w = R.w();
-        //printf("time: %f t: %f %f %f r: %f %f %f %f\n", odometry.header.stamp.toSec(), P.x(), P.y(), P.z(), R.w(), R.x(), R.y(), R.z());
+        geometry_msgs::PoseStamped pose_stamped;
+        pose_stamped.header = header;
+        pose_stamped.pose.position.x = P.x();
+        pose_stamped.pose.position.y = P.y();
+        pose_stamped.pose.position.z = P.z();
+        pose_stamped.pose.orientation.x = R.x();
+        pose_stamped.pose.orientation.y = R.y();
+        pose_stamped.pose.orientation.z = R.z();
+        pose_stamped.pose.orientation.w = R.w();
+        keyframe_path.header = header;
+        keyframe_path.header.frame_id = "world";
+        keyframe_path.poses.push_back(pose_stamped);
+        pub_keyframe_path.publish(keyframe_path);
 
-        pub_keyframe_pose.publish(odometry);
+        keyframe_marker.header = header;
+        keyframe_marker.header.frame_id = "world";
+        keyframe_marker.ns = "global_keypose";
+        keyframe_marker.id = 0;
+        keyframe_marker.type = visualization_msgs::Marker::SPHERE_LIST;
+        keyframe_marker.action = visualization_msgs::Marker::ADD;
+        keyframe_marker.pose.orientation.w = 1.0;
+        keyframe_marker.scale.x = 0.08;
+        keyframe_marker.scale.y = 0.08;
+        keyframe_marker.scale.z = 0.08;
+        keyframe_marker.color.r = 0.1;
+        keyframe_marker.color.g = 1.0;
+        keyframe_marker.color.b = 0.2;
+        keyframe_marker.color.a = 1.0;
+        keyframe_marker.lifetime = ros::Duration();
+        geometry_msgs::Point key_pose;
+        key_pose.x = P.x();
+        key_pose.y = P.y();
+        key_pose.z = P.z();
+        keyframe_marker.points.push_back(key_pose);
+        pub_keyframe_marker.publish(keyframe_marker);
 
 
-        sensor_msgs::PointCloud point_cloud;
-        point_cloud.header.stamp = ros::Time(estimator.Headers[WINDOW_SIZE - 2]);
-        point_cloud.header.frame_id = "world";
+        keyframe_point_cloud.header = header;
+        keyframe_point_cloud.header.frame_id = "world";
         for (auto &it_per_id : estimator.f_manager.feature)
         {
-            int frame_size = it_per_id.feature_per_frame.size();
-            if(it_per_id.start_frame < WINDOW_SIZE - 2 && it_per_id.start_frame + frame_size - 1 >= WINDOW_SIZE - 2 && it_per_id.solve_flag == 1)
+            if (!estimator.f_manager.useFeatureForOptimization(it_per_id))
+                continue;
+            if (it_per_id.solve_flag != 1 || it_per_id.feature_per_frame.empty())
+                continue;
+
+            int imu_i = it_per_id.start_frame;
+            Vector3d pts_i = it_per_id.feature_per_frame[0].point * it_per_id.estimated_depth;
+            Vector3d w_pts_i = estimator.Rs[imu_i] * (estimator.ric[0] * pts_i + estimator.tic[0])
+                                  + estimator.Ps[imu_i];
+            geometry_msgs::Point32 p;
+            p.x = w_pts_i(0);
+            p.y = w_pts_i(1);
+            p.z = w_pts_i(2);
+
+            sensor_msgs::ChannelFloat32 p_2d;
+            p_2d.values.push_back(it_per_id.feature_per_frame[0].point.x());
+            p_2d.values.push_back(it_per_id.feature_per_frame[0].point.y());
+            p_2d.values.push_back(it_per_id.feature_per_frame[0].uv.x());
+            p_2d.values.push_back(it_per_id.feature_per_frame[0].uv.y());
+            p_2d.values.push_back(it_per_id.feature_id);
+
+            auto idx_it = keyframe_point_index.find(it_per_id.feature_id);
+            if (idx_it == keyframe_point_index.end())
             {
-
-                int imu_i = it_per_id.start_frame;
-                Vector3d pts_i = it_per_id.feature_per_frame[0].point * it_per_id.estimated_depth;
-                Vector3d w_pts_i = estimator.Rs[imu_i] * (estimator.ric[0] * pts_i + estimator.tic[0])
-                                      + estimator.Ps[imu_i];
-                geometry_msgs::Point32 p;
-                p.x = w_pts_i(0);
-                p.y = w_pts_i(1);
-                p.z = w_pts_i(2);
-                point_cloud.points.push_back(p);
-
-                int imu_j = WINDOW_SIZE - 2 - it_per_id.start_frame;
-                sensor_msgs::ChannelFloat32 p_2d;
-                p_2d.values.push_back(it_per_id.feature_per_frame[imu_j].point.x());
-                p_2d.values.push_back(it_per_id.feature_per_frame[imu_j].point.y());
-                p_2d.values.push_back(it_per_id.feature_per_frame[imu_j].uv.x());
-                p_2d.values.push_back(it_per_id.feature_per_frame[imu_j].uv.y());
-                p_2d.values.push_back(it_per_id.feature_id);
-                point_cloud.channels.push_back(p_2d);
+                keyframe_point_index[it_per_id.feature_id] = keyframe_point_cloud.points.size();
+                keyframe_point_cloud.points.push_back(p);
+                keyframe_point_cloud.channels.push_back(p_2d);
             }
-
+            else
+            {
+                const size_t idx = idx_it->second;
+                keyframe_point_cloud.points[idx] = p;
+                if (idx < keyframe_point_cloud.channels.size())
+                    keyframe_point_cloud.channels[idx] = p_2d;
+            }
         }
-        pub_keyframe_point.publish(point_cloud);
+        pub_keyframe_point.publish(keyframe_point_cloud);
     }
 }
