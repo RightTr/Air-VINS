@@ -20,6 +20,7 @@ find_package(OpenCV)
 
 
 find_package(Ceres REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 find_package(Eigen3)
@@ -47,6 +48,11 @@ find_library(CUDART_LIBRARY cudart
 
 include_directories(${catkin_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS}  ${EIGEN3_INCLUDE_DIR}
                     ${PROJECT_SOURCE_DIR}/src
+                    ${PROJECT_SOURCE_DIR}/..
+                    ${PROJECT_SOURCE_DIR}/../vins_estimator/src/featureTracker
+                    ${PROJECT_SOURCE_DIR}/../deepFeature
+                    ${PROJECT_SOURCE_DIR}/../deepFeature/include
+                    ${PROJECT_SOURCE_DIR}/../deepFeature/3rdparty/tensorrtbuffer/include
                     ${TENSORRT_INCLUDE_DIR}
                     ${CUDA_INCLUDE_DIR})
 
@@ -67,6 +73,16 @@ set(LOOP_FUSION_SOURCES
     src/ThirdParty/DVision/BRIEF.cpp
     src/ThirdParty/VocabularyBinary.cpp
     src/vprnet/vprnet.cpp
+    ../vins_estimator/src/featureTracker/deep_feature.cpp
+    ../deepFeature/src/light_glue.cpp
+    ../deepFeature/src/point_matcher.cc
+    ../deepFeature/src/super_glue.cpp
+    ../deepFeature/src/super_point.cpp
+    ../deepFeature/src/utils.cc
+    ../deepFeature/src/plnet.cpp
+    ../deepFeature/3rdparty/tensorrtbuffer/src/logger.cpp
+    ../deepFeature/3rdparty/tensorrtbuffer/src/sample_options.cpp
+    ../deepFeature/3rdparty/tensorrtbuffer/src/sample_utils.cpp
     )
 
 add_executable(loop_fusion_node ${LOOP_FUSION_SOURCES})
@@ -80,4 +96,4 @@ if(NVONNXPARSER_LIBRARY)
 endif()
 
 target_link_libraries(loop_fusion_node ${catkin_LIBRARIES}  ${OpenCV_LIBS} ${CERES_LIBRARIES}
-                      ${LOOP_FUSION_TRT_LIBS})
+                      ${LOOP_FUSION_TRT_LIBS} yaml-cpp)

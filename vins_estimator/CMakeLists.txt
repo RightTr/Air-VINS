@@ -52,7 +52,9 @@ find_library(NVONNXPARSER_LIBRARY nvonnxparser
     /usr/lib/x86_64-linux-gnu
 )
 
-add_subdirectory(${PROJECT_SOURCE_DIR}/src/featureTracker/deepFeature/3rdparty/tensorrtbuffer)
+add_subdirectory(
+  ${PROJECT_SOURCE_DIR}/../deepFeature/3rdparty/tensorrtbuffer
+  ${CMAKE_CURRENT_BINARY_DIR}/deepFeature_tensorrtbuffer)
 
 include_directories(${catkin_INCLUDE_DIRS} ${CERES_INCLUDE_DIRS})
 
@@ -63,9 +65,10 @@ include_directories(
   ${EIGEN3_INCLUDE_DIR}
   ${CUDA_INCLUDE_DIRS}
   ${TENSORRT_INCLUDE_DIR}
-  ${PROJECT_SOURCE_DIR}/src/featureTracker/deepFeature
-  ${PROJECT_SOURCE_DIR}/src/featureTracker/deepFeature/include
-  ${PROJECT_SOURCE_DIR}/src/featureTracker/deepFeature/3rdparty/tensorrtbuffer/include
+  ${PROJECT_SOURCE_DIR}/..
+  ${PROJECT_SOURCE_DIR}/../deepFeature
+  ${PROJECT_SOURCE_DIR}/../deepFeature/include
+  ${PROJECT_SOURCE_DIR}/../deepFeature/3rdparty/tensorrtbuffer/include
 )
 
 catkin_package()
@@ -93,12 +96,12 @@ add_library(vins_lib
     src/initial/initial_ex_rotation.cpp
     src/featureTracker/feature_tracker.cpp
     src/featureTracker/deep_feature.cpp
-    src/featureTracker/deepFeature/src/super_point.cpp
-    src/featureTracker/deepFeature/src/super_glue.cpp
-    src/featureTracker/deepFeature/src/light_glue.cpp
-    src/featureTracker/deepFeature/src/plnet.cpp
-    src/featureTracker/deepFeature/src/point_matcher.cc
-    src/featureTracker/deepFeature/src/utils.cc)
+    ../deepFeature/src/super_point.cpp
+    ../deepFeature/src/super_glue.cpp
+    ../deepFeature/src/light_glue.cpp
+    ../deepFeature/src/plnet.cpp
+    ../deepFeature/src/point_matcher.cc
+    ../deepFeature/src/utils.cc)
 target_link_libraries(vins_lib ${catkin_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES} ${CUDA_LIBRARIES} ${NVINFER_LIBRARY} ${NVONNXPARSER_LIBRARY} tensorrtbuffer)
 
 

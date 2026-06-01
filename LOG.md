@@ -2,7 +2,7 @@
 
 ## 2026-05-22
 
-- Migrated the deep feature frontend code from AirSLAM into `vins_estimator/src/featureTracker/deepFeature/`
+- Migrated the deep feature frontend code from AirSLAM into `deepFeature/`
 - Migrated model files into the repo `output/`
 - Added a `deep_feature` switch in `FeatureTracker`
 - When enabled, replaced the original KLT optical flow frontend with `SuperPoint + PointMatcher`

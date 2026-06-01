@@ -58,7 +58,7 @@ feature_max_depth: 8.0
 
 # line_ba is the single switch for PLNet line inference, temporal/stereo line
 # matching, line BA, and 2D/3D line visualization.
-line_ba: 0
+line_ba: 1
 line_threshold: 0.7
 line_min_track_cnt: 2
 line_max_cnt: 100
@@ -75,7 +75,7 @@ keyframe_min_num_match: 30
 keyframe_max_num_match: 80
 keyframe_tracking_point_rate: 0.7
 keyframe_tracking_parallax_rate: 0.1
-loop_descriptor_method: 2   # 1 brief, 2 VPRNet
+loop_descriptor_method: 1   # 1 brief, 2 VPRNet
 vprnet_engine_path: "/workspace/src/VINS-Fusion/output/ResNet50_512_eigenplaces.engine"
 vprnet_onnx_path: "/workspace/src/VINS-Fusion/output/ResNet50_512_eigenplaces.onnx"
 vprnet_loop_threshold: 0.75

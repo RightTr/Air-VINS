@@ -40,6 +40,8 @@ public:
   DVision::BRIEF m_brief;
 };
 
+class DeepFeature;
+
 class KeyFrame
 {
 public:
@@ -49,7 +51,10 @@ public:
 	KeyFrame(double _time_stamp, int _index, Vector3d &_vio_T_w_i, Matrix3d &_vio_R_w_i, Vector3d &_T_w_i, Matrix3d &_R_w_i,
 			 cv::Mat &_image, int _loop_index, Eigen::Matrix<double, 8, 1 > &_loop_info,
 			 vector<cv::KeyPoint> &_keypoints, vector<cv::KeyPoint> &_keypoints_norm, vector<BRIEF::bitset> &_brief_descriptors);
-	bool findConnection(KeyFrame* old_kf);
+	void setDeepFeatures(const Eigen::Matrix<float, 259, Eigen::Dynamic> &features);
+	bool hasDeepFeatures() const;
+	const Eigen::Matrix<float, 259, Eigen::Dynamic> &getDeepFeatures() const;
+	bool findConnection(KeyFrame* old_kf, DeepFeature* deep_feature = nullptr);
 	void computeWindowBRIEFPoint();
 	void computeBRIEFPoint();
 	//void extractBrief();
@@ -108,7 +113,9 @@ public:
 	vector<cv::KeyPoint> window_keypoints;
 	vector<BRIEF::bitset> brief_descriptors;
 	vector<BRIEF::bitset> window_brief_descriptors;
+	Eigen::Matrix<float, 259, Eigen::Dynamic> deep_features;
 	std::vector<float> vprnet_descriptor;
+	bool has_deep_features;
 	bool has_vprnet_descriptor;
 	bool has_fast_point;
 	int sequence;

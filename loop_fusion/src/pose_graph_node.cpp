@@ -33,6 +33,7 @@
 #include "pose_graph.h"
 #include "utility/CameraPoseVisualization.h"
 #include "parameters.h"
+#include "deep_feature.h"
 #include "vprnet/vprnet.h"
 #define SKIP_FIRST_CNT 10
 using namespace std;
@@ -66,6 +67,7 @@ ros::Publisher pub_match_img;
 ros::Publisher pub_camera_pose_visual;
 ros::Publisher pub_odometry_rect;
 std::unique_ptr<VPRNet> vprnet_extractor;
+std::unique_ptr<DeepFeature> loop_deep_feature;
 
 std::string BRIEF_PATTERN_FILE;
 std::string POSE_GRAPH_SAVE_PATH;
@@ -181,15 +183,6 @@ void pose_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     m_buf.lock();
     pose_buf.push(pose_msg);
     m_buf.unlock();
-    /*
-    printf("pose t: %f, %f, %f   q: %f, %f, %f %f \n", pose_msg->pose.pose.position.x,
-                                                       pose_msg->pose.pose.position.y,
-                                                       pose_msg->pose.pose.position.z,
-                                                       pose_msg->pose.pose.orientation.w,
-                                                       pose_msg->pose.pose.orientation.x,
-                                                       pose_msg->pose.pose.orientation.y,
-                                                       pose_msg->pose.pose.orientation.z);
-    */
 }
 
 void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
@@ -365,6 +358,14 @@ void process()
 
                 KeyFrame* keyframe = new KeyFrame(pose_msg->header.stamp.toSec(), frame_index, T, R, image,
                                    point_3d, point_2d_uv, point_2d_normal, point_id, sequence);   
+                if (loop_deep_feature) {
+                    Eigen::Matrix<float, 259, Eigen::Dynamic> deep_points;
+                    if (loop_deep_feature->extractPoints(image, deep_points)) {
+                        keyframe->setDeepFeatures(deep_points);
+                    } else {
+                        ROS_WARN_STREAM_THROTTLE(5.0, "Loop deep feature extraction failed for frame " << frame_index);
+                    }
+                }
                 if (vprnet_extractor) {
                     Eigen::VectorXf descriptor;
                     if (vprnet_extractor->infer(image, descriptor)) {
@@ -512,6 +513,26 @@ int main(int argc, char **argv)
             ROS_WARN_STREAM("Failed to load VPRNet TensorRT engine: " << vprnet_engine_path);
             vprnet_extractor.reset();
             posegraph.setLoopDescriptorType(1);
+        }
+    }
+
+    {
+        DeepFeatureOptions deep_options;
+        deep_options.model_dir = output_dir;
+        deep_options.matcher = 0;
+        deep_options.max_keypoints = 1024;
+        deep_options.keypoint_threshold = 0.004f;
+        deep_options.remove_borders = 4;
+        deep_options.image_width = COL;
+        deep_options.image_height = ROW;
+        loop_deep_feature.reset(new DeepFeature());
+        if (loop_deep_feature->init(1, deep_options)) {
+            posegraph.setLoopDeepFeature(loop_deep_feature.get());
+            ROS_INFO_STREAM("Loop deep feature matcher initialized with model_dir=" << output_dir);
+        } else {
+            ROS_WARN_STREAM("Loop deep feature matcher failed to initialize, loop closure will fall back to BRIEF if needed");
+            loop_deep_feature.reset();
+            posegraph.setLoopDeepFeature(nullptr);
         }
     }
 

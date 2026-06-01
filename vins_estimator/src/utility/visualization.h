@@ -23,6 +23,7 @@ extern ros::Publisher pub_window_keypose;
 extern ros::Publisher pub_ref_pose, pub_cur_pose;
 extern ros::Publisher pub_key;
 extern ros::Publisher pub_keyframe_point;
+extern ros::Publisher pub_keyframe_pose;
 extern ros::Publisher pub_keyframe_path;
 extern ros::Publisher pub_keyframe_marker;
 extern nav_msgs::Path path;

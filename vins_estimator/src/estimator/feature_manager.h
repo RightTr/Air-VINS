@@ -32,7 +32,7 @@ using namespace Eigen;
 #include "../utility/frameObs.h"
 #include "../utility/mappoint.h"
 #include "../utility/mapline.h"
-#include "../featureTracker/deepFeature/include/utils.h"
+#include "deepFeature/include/utils.h"
 
 enum VisualTrackingMode
 {

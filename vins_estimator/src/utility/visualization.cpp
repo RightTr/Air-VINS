@@ -29,6 +29,7 @@ sensor_msgs::PointCloud keyframe_point_cloud;
 std::map<int, size_t> keyframe_point_index;
 
 ros::Publisher pub_keyframe_point;
+ros::Publisher pub_keyframe_pose;
 ros::Publisher pub_keyframe_path;
 ros::Publisher pub_keyframe_marker;
 ros::Publisher pub_extrinsic;
@@ -111,6 +112,7 @@ void registerPub(ros::NodeHandle &n)
     pub_camera_pose = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "camera_pose", 1000);
     pub_camera_pose_visual = ros_utils::ros_advertise<visualization_msgs::MarkerArray>(n, "camera_pose_visual", 1000);
     pub_keyframe_point = ros_utils::ros_advertise<sensor_msgs::PointCloud>(n, "keyframe_point", 1000);
+    pub_keyframe_pose = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "/vins_estimator/keyframe_pose", 1000);
     pub_keyframe_path = ros_utils::ros_advertise<nav_msgs::Path>(n, "/keyframe_path", 1000);
     pub_keyframe_marker = ros_utils::ros_advertise<visualization_msgs::Marker>(n, "/global_keypose", 1000);
     pub_extrinsic = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "extrinsic", 1000);
@@ -265,9 +267,6 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
               << estimator.Vs[WINDOW_SIZE].y() << ","
               << estimator.Vs[WINDOW_SIZE].z() << "," << endl;
         foutC.close();
-        Eigen::Vector3d tmp_T = estimator.Ps[WINDOW_SIZE];
-        printf("time: %f, t: %f %f %f q: %f %f %f %f \n", header.stamp.toSec(), tmp_T.x(), tmp_T.y(), tmp_T.z(),
-                                                          tmp_Q.w(), tmp_Q.x(), tmp_Q.y(), tmp_Q.z());
     }
 }
 
@@ -591,6 +590,17 @@ void pubKeyframe(const Estimator &estimator)
         keyframe_marker.points.push_back(key_pose);
         ros_utils::ros_publish(pub_keyframe_marker, keyframe_marker);
 
+        nav_msgs::Odometry keyframe_pose;
+        keyframe_pose.header = header;
+        keyframe_pose.header.frame_id = "world";
+        keyframe_pose.pose.pose.position.x = P.x();
+        keyframe_pose.pose.pose.position.y = P.y();
+        keyframe_pose.pose.pose.position.z = P.z();
+        keyframe_pose.pose.pose.orientation.x = R.x();
+        keyframe_pose.pose.pose.orientation.y = R.y();
+        keyframe_pose.pose.pose.orientation.z = R.z();
+        keyframe_pose.pose.pose.orientation.w = R.w();
+        ros_utils::ros_publish(pub_keyframe_pose, keyframe_pose);
 
         keyframe_point_cloud.header = header;
         keyframe_point_cloud.header.frame_id = "world";

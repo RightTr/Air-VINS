@@ -15,7 +15,7 @@
 #include "camodocal/camera_models/CameraFactory.h"
 #include "../utility/line_geometry.h"
 #include "../utility/mapline.h"
-#include "../featureTracker/deepFeature/include/utils.h"
+#include "deepFeature/include/utils.h"
 
 namespace
 {

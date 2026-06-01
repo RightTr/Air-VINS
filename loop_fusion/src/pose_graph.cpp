@@ -35,6 +35,7 @@ PoseGraph::PoseGraph()
     vprnet_loop_threshold = 0.75;
     vprnet_loop_margin = 0.05;
     vprnet_loop_exclude_recent = 50;
+    loop_deep_feature = nullptr;
 }
 
 PoseGraph::~PoseGraph()
@@ -91,6 +92,11 @@ void PoseGraph::setVPRNetLoopParams(double threshold, double margin, int exclude
     vprnet_loop_exclude_recent = exclude_recent;
 }
 
+void PoseGraph::setLoopDeepFeature(DeepFeature *deep_feature)
+{
+    loop_deep_feature = deep_feature;
+}
+
 void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
 {
     //shift to base frame
@@ -129,7 +135,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
         //printf(" %d detect loop with %d \n", cur_kf->index, loop_index);
         KeyFrame* old_kf = getKeyFrame(loop_index);
 
-        if (cur_kf->findConnection(old_kf))
+        if (cur_kf->findConnection(old_kf, loop_deep_feature))
         {
             if (earliest_loop_index > loop_index || earliest_loop_index == -1)
                 earliest_loop_index = loop_index;
@@ -282,7 +288,7 @@ void PoseGraph::loadKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
     {
         printf(" %d detect loop with %d \n", cur_kf->index, loop_index);
         KeyFrame* old_kf = getKeyFrame(loop_index);
-        if (cur_kf->findConnection(old_kf))
+        if (cur_kf->findConnection(old_kf, loop_deep_feature))
         {
             if (earliest_loop_index > loop_index || earliest_loop_index == -1)
                 earliest_loop_index = loop_index;
@@ -1000,7 +1006,7 @@ void PoseGraph::savePoseGraph()
     list<KeyFrame*>::iterator it;
     for (it = keyframelist.begin(); it != keyframelist.end(); it++)
     {
-        std::string image_path, descriptor_path, brief_path, keypoints_path, vprnet_path;
+        std::string image_path, descriptor_path, brief_path, keypoints_path, vprnet_path, deep_path;
         if (DEBUG_IMAGE)
         {
             image_path = POSE_GRAPH_SAVE_PATH + to_string((*it)->index) + "_image.png";
@@ -1049,6 +1055,25 @@ void PoseGraph::savePoseGraph()
             vprnet_file.write(reinterpret_cast<const char*>(&dim), sizeof(int));
         }
         vprnet_file.close();
+
+        deep_path = POSE_GRAPH_SAVE_PATH + to_string((*it)->index) + "_deepfeat.dat";
+        std::ofstream deep_file(deep_path, std::ios::binary);
+        if ((*it)->hasDeepFeatures()) {
+            const auto &deep_features = (*it)->getDeepFeatures();
+            int rows = deep_features.rows();
+            int cols = deep_features.cols();
+            deep_file.write(reinterpret_cast<const char*>(&rows), sizeof(int));
+            deep_file.write(reinterpret_cast<const char*>(&cols), sizeof(int));
+            if (rows > 0 && cols > 0) {
+                deep_file.write(reinterpret_cast<const char*>(deep_features.data()), sizeof(float) * rows * cols);
+            }
+        } else {
+            int rows = 0;
+            int cols = 0;
+            deep_file.write(reinterpret_cast<const char*>(&rows), sizeof(int));
+            deep_file.write(reinterpret_cast<const char*>(&cols), sizeof(int));
+        }
+        deep_file.close();
     }
     fclose(pFile);
 
@@ -1179,6 +1204,27 @@ void PoseGraph::loadPoseGraph()
                 }
             }
             vprnet_file.close();
+        }
+
+        std::string deep_path = POSE_GRAPH_SAVE_PATH + to_string(index) + "_deepfeat.dat";
+        std::ifstream deep_file(deep_path, std::ios::binary);
+        if (deep_file.is_open())
+        {
+            int rows = 0;
+            int cols = 0;
+            deep_file.read(reinterpret_cast<char*>(&rows), sizeof(int));
+            deep_file.read(reinterpret_cast<char*>(&cols), sizeof(int));
+            if (rows == 259 && cols > 0)
+            {
+                Eigen::Matrix<float, 259, Eigen::Dynamic> deep_features;
+                deep_features.resize(rows, cols);
+                deep_file.read(reinterpret_cast<char*>(deep_features.data()), sizeof(float) * rows * cols);
+                if (deep_file)
+                {
+                    keyframe->setDeepFeatures(deep_features);
+                }
+            }
+            deep_file.close();
         }
         loadKeyFrame(keyframe, 0);
         if (cnt % 20 == 0)

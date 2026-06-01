@@ -43,6 +43,8 @@
 using namespace DVision;
 using namespace DBoW2;
 
+class DeepFeature;
+
 class PoseGraph
 {
 public:
@@ -60,6 +62,7 @@ public:
 	void loadVocabulary(std::string voc_path);
 	void setLoopDescriptorType(int method);
 	void setVPRNetLoopParams(double threshold, double margin, int exclude_recent);
+	void setLoopDeepFeature(class DeepFeature* deep_feature);
 	void setIMUFlag(bool _use_imu);
 	KeyFrame* getKeyFrame(int index);
 	nav_msgs::Path path[10];
@@ -102,6 +105,7 @@ private:
 	double vprnet_loop_threshold;
 	double vprnet_loop_margin;
 	int vprnet_loop_exclude_recent;
+	class DeepFeature* loop_deep_feature;
 
 	BriefDatabase db;
 	BriefVocabulary* voc;

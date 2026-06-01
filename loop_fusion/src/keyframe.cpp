@@ -10,6 +10,10 @@
  *******************************************************/
 
 #include "keyframe.h"
+#include "deep_feature.h"
+
+#include <cmath>
+#include <limits>
 
 template <typename Derived>
 static void reduceVector(vector<Derived> &v, vector<uchar> status)
@@ -43,6 +47,7 @@ KeyFrame::KeyFrame(double _time_stamp, int _index, Vector3d &_vio_T_w_i, Matrix3
 	has_loop = false;
 	loop_index = -1;
 	has_fast_point = false;
+	has_deep_features = false;
 	has_vprnet_descriptor = false;
 	loop_info << 0, 0, 0, 0, 0, 0, 0, 0;
 	sequence = _sequence;
@@ -77,11 +82,28 @@ KeyFrame::KeyFrame(double _time_stamp, int _index, Vector3d &_vio_T_w_i, Matrix3
 	loop_index = _loop_index;
 	loop_info = _loop_info;
 	has_fast_point = false;
+	has_deep_features = false;
 	has_vprnet_descriptor = false;
 	sequence = 0;
 	keypoints = _keypoints;
 	keypoints_norm = _keypoints_norm;
 	brief_descriptors = _brief_descriptors;
+}
+
+void KeyFrame::setDeepFeatures(const Eigen::Matrix<float, 259, Eigen::Dynamic> &features)
+{
+	deep_features = features;
+	has_deep_features = deep_features.cols() > 0;
+}
+
+bool KeyFrame::hasDeepFeatures() const
+{
+	return has_deep_features;
+}
+
+const Eigen::Matrix<float, 259, Eigen::Dynamic> &KeyFrame::getDeepFeatures() const
+{
+	return deep_features;
 }
 
 void KeyFrame::setVPRNetDescriptor(const std::vector<float> &descriptor)
@@ -285,15 +307,106 @@ void KeyFrame::PnPRANSAC(const vector<cv::Point2f> &matched_2d_old_norm,
 }
 
 
-bool KeyFrame::findConnection(KeyFrame* old_kf)
+bool KeyFrame::findConnection(KeyFrame* old_kf, DeepFeature* deep_feature)
 {
 	TicToc tmp_t;
-	//printf("find Connection\n");
 	vector<cv::Point2f> matched_2d_cur, matched_2d_old;
 	vector<cv::Point2f> matched_2d_cur_norm, matched_2d_old_norm;
 	vector<cv::Point3f> matched_3d;
 	vector<double> matched_id;
 	vector<uchar> status;
+	bool use_deep_match = deep_feature && hasDeepFeatures() && old_kf->hasDeepFeatures();
+
+	if (use_deep_match)
+	{
+		std::vector<cv::DMatch> deep_matches;
+		if (deep_feature->matchPoints(old_kf->getDeepFeatures(), getDeepFeatures(), deep_matches, true))
+		{
+			const double assoc_threshold = 8.0;
+			for (const auto &match : deep_matches)
+			{
+				const int old_idx = match.queryIdx;
+				const int cur_idx = match.trainIdx;
+				if (old_idx < 0 || old_idx >= old_kf->getDeepFeatures().cols())
+					continue;
+				if (cur_idx < 0 || cur_idx >= getDeepFeatures().cols())
+					continue;
+
+				const cv::Point2f old_uv(old_kf->getDeepFeatures()(1, old_idx), old_kf->getDeepFeatures()(2, old_idx));
+				const cv::Point2f cur_uv(getDeepFeatures()(1, cur_idx), getDeepFeatures()(2, cur_idx));
+				Eigen::Vector3d old_norm_p, cur_norm_p;
+				m_camera->liftProjective(Eigen::Vector2d(old_uv.x, old_uv.y), old_norm_p);
+				m_camera->liftProjective(Eigen::Vector2d(cur_uv.x, cur_uv.y), cur_norm_p);
+				const cv::Point2f old_uv_norm(old_norm_p.x() / old_norm_p.z(), old_norm_p.y() / old_norm_p.z());
+				const cv::Point2f cur_uv_norm(cur_norm_p.x() / cur_norm_p.z(), cur_norm_p.y() / cur_norm_p.z());
+
+				int best_point_idx = -1;
+				double best_dist = std::numeric_limits<double>::max();
+				for (size_t i = 0; i < old_kf->point_2d_uv.size(); ++i)
+				{
+					const double dx = old_kf->point_2d_uv[i].x - old_uv.x;
+					const double dy = old_kf->point_2d_uv[i].y - old_uv.y;
+					const double dist = std::sqrt(dx * dx + dy * dy);
+					if (dist < best_dist)
+					{
+						best_dist = dist;
+						best_point_idx = static_cast<int>(i);
+					}
+				}
+				if (best_point_idx < 0 || best_dist > assoc_threshold)
+					continue;
+
+				matched_3d.push_back(old_kf->point_3d[best_point_idx]);
+				matched_2d_old.push_back(old_uv);
+				matched_2d_old_norm.push_back(old_uv_norm);
+				matched_2d_cur.push_back(cur_uv);
+				matched_2d_cur_norm.push_back(cur_uv_norm);
+				matched_id.push_back(old_kf->point_id[best_point_idx]);
+			}
+		}
+	}
+
+	Eigen::Vector3d relative_t;
+	Quaterniond relative_q;
+	double relative_yaw;
+	if (use_deep_match)
+	{
+		if ((int)matched_2d_cur.size() <= MIN_LOOP_NUM)
+			return false;
+
+		Eigen::Vector3d PnP_T_cur;
+		Eigen::Matrix3d PnP_R_cur;
+		status.clear();
+	    PnPRANSAC(matched_2d_cur_norm, matched_3d, status, PnP_T_cur, PnP_R_cur);
+	    reduceVector(matched_2d_cur, status);
+	    reduceVector(matched_2d_old, status);
+	    reduceVector(matched_2d_cur_norm, status);
+	    reduceVector(matched_2d_old_norm, status);
+	    reduceVector(matched_3d, status);
+	    reduceVector(matched_id, status);
+
+	    if ((int)matched_2d_cur.size() > MIN_LOOP_NUM)
+	    {
+	        Vector3d old_T, cur_T;
+	        Matrix3d old_R, cur_R;
+	        old_kf->getPose(old_T, old_R);
+	        cur_T = PnP_T_cur;
+	        cur_R = PnP_R_cur;
+	        relative_t = old_R.transpose() * (cur_T - old_T);
+	        relative_q = old_R.transpose() * cur_R;
+	        relative_yaw = Utility::normalizeAngle(Utility::R2ypr(cur_R).x() - Utility::R2ypr(old_R).x());
+	        if (abs(relative_yaw) < 30.0 && relative_t.norm() < 20.0)
+	        {
+	        	has_loop = true;
+	        	loop_index = old_kf->index;
+	        	loop_info << relative_t.x(), relative_t.y(), relative_t.z(),
+	        	             relative_q.w(), relative_q.x(), relative_q.y(), relative_q.z(),
+	        	             relative_yaw;
+	            return true;
+	        }
+	    }
+	    return false;
+	}
 
 	matched_3d = point_3d;
 	matched_2d_cur = point_2d_uv;
@@ -326,7 +439,6 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	        cv::imwrite( path.str().c_str(), loop_match_img);
 	    }
 	#endif
-	//printf("search by des\n");
 	searchByBRIEFDes(matched_2d_old, matched_2d_old_norm, status, old_kf->brief_descriptors, old_kf->keypoints, old_kf->keypoints_norm);
 	reduceVector(matched_2d_cur, status);
 	reduceVector(matched_2d_old, status);
@@ -334,107 +446,12 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	reduceVector(matched_2d_old_norm, status);
 	reduceVector(matched_3d, status);
 	reduceVector(matched_id, status);
-	//printf("search by des finish\n");
 
-	#if 0 
-		if (DEBUG_IMAGE)
-	    {
-			int gap = 10;
-        	cv::Mat gap_image(ROW, gap, CV_8UC1, cv::Scalar(255, 255, 255));
-            cv::Mat gray_img, loop_match_img;
-            cv::Mat old_img = old_kf->image;
-            cv::hconcat(image, gap_image, gap_image);
-            cv::hconcat(gap_image, old_img, gray_img);
-            cvtColor(gray_img, loop_match_img, CV_GRAY2RGB);
-	        for(int i = 0; i< (int)matched_2d_cur.size(); i++)
-	        {
-	            cv::Point2f cur_pt = matched_2d_cur[i];
-	            cv::circle(loop_match_img, cur_pt, 5, cv::Scalar(0, 255, 0));
-	        }
-	        for(int i = 0; i< (int)matched_2d_old.size(); i++)
-	        {
-	            cv::Point2f old_pt = matched_2d_old[i];
-	            old_pt.x += (COL + gap);
-	            cv::circle(loop_match_img, old_pt, 5, cv::Scalar(0, 255, 0));
-	        }
-	        for (int i = 0; i< (int)matched_2d_cur.size(); i++)
-	        {
-	            cv::Point2f old_pt = matched_2d_old[i];
-	            old_pt.x +=  (COL + gap);
-	            cv::line(loop_match_img, matched_2d_cur[i], old_pt, cv::Scalar(0, 255, 0), 1, 8, 0);
-	        }
-
-	        ostringstream path, path1, path2;
-	        path <<  "/home/tony-ws1/raw_data/loop_image/"
-	                << index << "-"
-	                << old_kf->index << "-" << "1descriptor_match.jpg";
-	        cv::imwrite( path.str().c_str(), loop_match_img);
-	        /*
-	        path1 <<  "/home/tony-ws1/raw_data/loop_image/"
-	                << index << "-"
-	                << old_kf->index << "-" << "1descriptor_match_1.jpg";
-	        cv::imwrite( path1.str().c_str(), image);
-	        path2 <<  "/home/tony-ws1/raw_data/loop_image/"
-	                << index << "-"
-	                << old_kf->index << "-" << "1descriptor_match_2.jpg";
-	        cv::imwrite( path2.str().c_str(), old_img);	        
-	        */
-	        
-	    }
-	#endif
 	status.clear();
-	/*
-	FundmantalMatrixRANSAC(matched_2d_cur_norm, matched_2d_old_norm, status);
-	reduceVector(matched_2d_cur, status);
-	reduceVector(matched_2d_old, status);
-	reduceVector(matched_2d_cur_norm, status);
-	reduceVector(matched_2d_old_norm, status);
-	reduceVector(matched_3d, status);
-	reduceVector(matched_id, status);
-	*/
-	#if 0
-		if (DEBUG_IMAGE)
-	    {
-			int gap = 10;
-        	cv::Mat gap_image(ROW, gap, CV_8UC1, cv::Scalar(255, 255, 255));
-            cv::Mat gray_img, loop_match_img;
-            cv::Mat old_img = old_kf->image;
-            cv::hconcat(image, gap_image, gap_image);
-            cv::hconcat(gap_image, old_img, gray_img);
-            cvtColor(gray_img, loop_match_img, CV_GRAY2RGB);
-	        for(int i = 0; i< (int)matched_2d_cur.size(); i++)
-	        {
-	            cv::Point2f cur_pt = matched_2d_cur[i];
-	            cv::circle(loop_match_img, cur_pt, 5, cv::Scalar(0, 255, 0));
-	        }
-	        for(int i = 0; i< (int)matched_2d_old.size(); i++)
-	        {
-	            cv::Point2f old_pt = matched_2d_old[i];
-	            old_pt.x += (COL + gap);
-	            cv::circle(loop_match_img, old_pt, 5, cv::Scalar(0, 255, 0));
-	        }
-	        for (int i = 0; i< (int)matched_2d_cur.size(); i++)
-	        {
-	            cv::Point2f old_pt = matched_2d_old[i];
-	            old_pt.x +=  (COL + gap) ;
-	            cv::line(loop_match_img, matched_2d_cur[i], old_pt, cv::Scalar(0, 255, 0), 1, 8, 0);
-	        }
-
-	        ostringstream path;
-	        path <<  "/home/tony-ws1/raw_data/loop_image/"
-	                << index << "-"
-	                << old_kf->index << "-" << "2fundamental_match.jpg";
-	        cv::imwrite( path.str().c_str(), loop_match_img);
-	    }
-	#endif
 	Eigen::Vector3d PnP_T_old;
 	Eigen::Matrix3d PnP_R_old;
-	Eigen::Vector3d relative_t;
-	Quaterniond relative_q;
-	double relative_yaw;
 	if ((int)matched_2d_cur.size() > MIN_LOOP_NUM)
 	{
-		status.clear();
 	    PnPRANSAC(matched_2d_old_norm, matched_3d, status, PnP_T_old, PnP_R_old);
 	    reduceVector(matched_2d_cur, status);
 	    reduceVector(matched_2d_old, status);
@@ -442,60 +459,6 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	    reduceVector(matched_2d_old_norm, status);
 	    reduceVector(matched_3d, status);
 	    reduceVector(matched_id, status);
-	    #if 1
-	    	if (DEBUG_IMAGE)
-	        {
-	        	int gap = 10;
-	        	cv::Mat gap_image(ROW, gap, CV_8UC1, cv::Scalar(255, 255, 255));
-	            cv::Mat gray_img, loop_match_img;
-	            cv::Mat old_img = old_kf->image;
-	            cv::hconcat(image, gap_image, gap_image);
-	            cv::hconcat(gap_image, old_img, gray_img);
-	            cvtColor(gray_img, loop_match_img, CV_GRAY2RGB);
-	            for(int i = 0; i< (int)matched_2d_cur.size(); i++)
-	            {
-	                cv::Point2f cur_pt = matched_2d_cur[i];
-	                cv::circle(loop_match_img, cur_pt, 5, cv::Scalar(0, 255, 0));
-	            }
-	            for(int i = 0; i< (int)matched_2d_old.size(); i++)
-	            {
-	                cv::Point2f old_pt = matched_2d_old[i];
-	                old_pt.x += (COL + gap);
-	                cv::circle(loop_match_img, old_pt, 5, cv::Scalar(0, 255, 0));
-	            }
-	            for (int i = 0; i< (int)matched_2d_cur.size(); i++)
-	            {
-	                cv::Point2f old_pt = matched_2d_old[i];
-	                old_pt.x += (COL + gap) ;
-	                cv::line(loop_match_img, matched_2d_cur[i], old_pt, cv::Scalar(0, 255, 0), 2, 8, 0);
-	            }
-	            cv::Mat notation(50, COL + gap + COL, CV_8UC3, cv::Scalar(255, 255, 255));
-	            putText(notation, "current frame: " + to_string(index) + "  sequence: " + to_string(sequence), cv::Point2f(20, 30), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255), 3);
-
-	            putText(notation, "previous frame: " + to_string(old_kf->index) + "  sequence: " + to_string(old_kf->sequence), cv::Point2f(20 + COL + gap, 30), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255), 3);
-	            cv::vconcat(notation, loop_match_img, loop_match_img);
-
-	            /*
-	            ostringstream path;
-	            path <<  "/home/tony-ws1/raw_data/loop_image/"
-	                    << index << "-"
-	                    << old_kf->index << "-" << "3pnp_match.jpg";
-	            cv::imwrite( path.str().c_str(), loop_match_img);
-	            */
-	            if ((int)matched_2d_cur.size() > MIN_LOOP_NUM)
-	            {
-	            	/*
-	            	cv::imshow("loop connection",loop_match_img);  
-	            	cv::waitKey(10);  
-	            	*/
-	            	cv::Mat thumbimage;
-	            	cv::resize(loop_match_img, thumbimage, cv::Size(loop_match_img.cols / 2, loop_match_img.rows / 2));
-	    	    	sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", thumbimage).toImageMsg();
-	                msg->header.stamp = ros::Time(time_stamp);
-	    	    	pub_match_img.publish(msg);
-	            }
-	        }
-	    #endif
 	}
 
 	if ((int)matched_2d_cur.size() > MIN_LOOP_NUM)
@@ -503,23 +466,16 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	    relative_t = PnP_R_old.transpose() * (origin_vio_T - PnP_T_old);
 	    relative_q = PnP_R_old.transpose() * origin_vio_R;
 	    relative_yaw = Utility::normalizeAngle(Utility::R2ypr(origin_vio_R).x() - Utility::R2ypr(PnP_R_old).x());
-	    //printf("PNP relative\n");
-	    //cout << "pnp relative_t " << relative_t.transpose() << endl;
-	    //cout << "pnp relative_yaw " << relative_yaw << endl;
 	    if (abs(relative_yaw) < 30.0 && relative_t.norm() < 20.0)
 	    {
-
 	    	has_loop = true;
 	    	loop_index = old_kf->index;
 	    	loop_info << relative_t.x(), relative_t.y(), relative_t.z(),
 	    	             relative_q.w(), relative_q.x(), relative_q.y(), relative_q.z(),
 	    	             relative_yaw;
-	    	//cout << "pnp relative_t " << relative_t.transpose() << endl;
-	    	//cout << "pnp relative_q " << relative_q.w() << " " << relative_q.vec().transpose() << endl;
 	        return true;
 	    }
 	}
-	//printf("loop final use num %d %lf--------------- \n", (int)matched_2d_cur.size(), t_match.toc());
 	return false;
 }
 

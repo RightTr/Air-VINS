@@ -5,7 +5,6 @@
 #include <Eigen/Dense>
 #include <opencv2/opencv.hpp>
 
-#include "../estimator/parameters.h"
 #include "deepFeature/include/super_point.h"
 #include "deepFeature/include/super_glue.h"
 #include "deepFeature/include/light_glue.h"
