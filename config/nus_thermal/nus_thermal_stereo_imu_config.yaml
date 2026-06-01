@@ -43,7 +43,7 @@ F_threshold: 1.0
 show_track: 1
 flow_back: 1
 # deep_feature: 0=KLT, 1=SuperPoint+Glue, 2=PLNET+Glue
-deep_feature: 1
+deep_feature: 2
 deep_feature_model_dir: "/workspace/src/VINS-Fusion/output"
 # deep_feature_matcher: 0=LightGlue, 1=SuperGlue
 deep_feature_matcher: 0
