@@ -32,9 +32,9 @@ PoseGraph::PoseGraph()
     base_sequence = 1;
     use_imu = 0;
     loop_descriptor_type = LoopDescriptorType::BriefBow;
-    netvlad_loop_threshold = 0.75;
-    netvlad_loop_margin = 0.05;
-    netvlad_loop_exclude_recent = 50;
+    vprnet_loop_threshold = 0.75;
+    vprnet_loop_margin = 0.05;
+    vprnet_loop_exclude_recent = 50;
 }
 
 PoseGraph::~PoseGraph()
@@ -76,19 +76,19 @@ void PoseGraph::loadVocabulary(std::string voc_path)
 void PoseGraph::setLoopDescriptorType(int method)
 {
     if (method == 2) {
-        loop_descriptor_type = LoopDescriptorType::NetVLAD;
-        printf("loop descriptor method: NetVLAD\n");
+        loop_descriptor_type = LoopDescriptorType::VPRNet;
+        printf("loop descriptor method: VPRNet\n");
     } else {
         loop_descriptor_type = LoopDescriptorType::BriefBow;
         printf("loop descriptor method: BriefBoW\n");
     }
 }
 
-void PoseGraph::setNetVLADLoopParams(double threshold, double margin, int exclude_recent)
+void PoseGraph::setVPRNetLoopParams(double threshold, double margin, int exclude_recent)
 {
-    netvlad_loop_threshold = threshold;
-    netvlad_loop_margin = margin;
-    netvlad_loop_exclude_recent = exclude_recent;
+    vprnet_loop_threshold = threshold;
+    vprnet_loop_margin = margin;
+    vprnet_loop_exclude_recent = exclude_recent;
 }
 
 void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
@@ -360,8 +360,8 @@ KeyFrame* PoseGraph::getKeyFrame(int index)
 
 int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
 {
-    if (loop_descriptor_type == LoopDescriptorType::NetVLAD) {
-        return detectLoopNetVLAD(keyframe, frame_index);
+    if (loop_descriptor_type == LoopDescriptorType::VPRNet) {
+        return detectLoopVPRNet(keyframe, frame_index);
     }
 
     // put image into image_pool; for visualization
@@ -370,7 +370,7 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
     {
         int feature_num = keyframe->keypoints.size();
         cv::resize(keyframe->image, compressed_image, cv::Size(376, 240));
-        putText(compressed_image, "feature_num:" + to_string(feature_num), cv::Point2f(10, 10), CV_FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255));
+        putText(compressed_image, "feature_num:" + to_string(feature_num), cv::Point2f(10, 10), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255));
         image_pool[frame_index] = compressed_image;
     }
     TicToc tmp_t;
@@ -391,7 +391,7 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
     {
         loop_result = compressed_image.clone();
         if (ret.size() > 0)
-            putText(loop_result, "neighbour score:" + to_string(ret[0].Score), cv::Point2f(10, 50), CV_FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255));
+            putText(loop_result, "neighbour score:" + to_string(ret[0].Score), cv::Point2f(10, 50), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255));
     }
     // visual loop result 
     if (DEBUG_IMAGE)
@@ -401,7 +401,7 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
             int tmp_index = ret[i].Id;
             auto it = image_pool.find(tmp_index);
             cv::Mat tmp_image = (it->second).clone();
-            putText(tmp_image, "index:  " + to_string(tmp_index) + "loop score:" + to_string(ret[i].Score), cv::Point2f(10, 50), CV_FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255));
+                    putText(tmp_image, "index:  " + to_string(tmp_index) + "loop score:" + to_string(ret[i].Score), cv::Point2f(10, 50), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255));
             cv::hconcat(loop_result, tmp_image, loop_result);
         }
     }
@@ -418,7 +418,7 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
                 {
                     auto it = image_pool.find(tmp_index);
                     cv::Mat tmp_image = (it->second).clone();
-                    putText(tmp_image, "loop score:" + to_string(ret[i].Score), cv::Point2f(10, 50), CV_FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255));
+                    putText(tmp_image, "loop score:" + to_string(ret[i].Score), cv::Point2f(10, 50), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255));
                     cv::hconcat(loop_result, tmp_image, loop_result);
                 }
             }
@@ -446,13 +446,13 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
 
 }
 
-int PoseGraph::detectLoopNetVLAD(KeyFrame* keyframe, int frame_index)
+int PoseGraph::detectLoopVPRNet(KeyFrame* keyframe, int frame_index)
 {
-    if (!keyframe || !keyframe->hasNetVLADDescriptor()) {
+    if (!keyframe || !keyframe->hasVPRNetDescriptor()) {
         return -1;
     }
 
-    const std::vector<float>& query = keyframe->getNetVLADDescriptor();
+    const std::vector<float>& query = keyframe->getVPRNetDescriptor();
     if (query.empty()) {
         return -1;
     }
@@ -462,13 +462,13 @@ int PoseGraph::detectLoopNetVLAD(KeyFrame* keyframe, int frame_index)
         std::lock_guard<std::mutex> lock(m_keyframelist);
         for (auto it = keyframelist.begin(); it != keyframelist.end(); ++it) {
             KeyFrame* old_kf = *it;
-            if (!old_kf || old_kf->index >= frame_index - netvlad_loop_exclude_recent) {
+            if (!old_kf || old_kf->index >= frame_index - vprnet_loop_exclude_recent) {
                 continue;
             }
-            if (!old_kf->hasNetVLADDescriptor()) {
+            if (!old_kf->hasVPRNetDescriptor()) {
                 continue;
             }
-            const std::vector<float>& cand = old_kf->getNetVLADDescriptor();
+            const std::vector<float>& cand = old_kf->getVPRNetDescriptor();
             if (cand.size() != query.size()) {
                 continue;
             }
@@ -488,17 +488,17 @@ int PoseGraph::detectLoopNetVLAD(KeyFrame* keyframe, int frame_index)
 
     const double best_score = scores.front().second;
     const double second_score = scores.size() > 1 ? scores[1].second : -1.0;
-    if (best_score < netvlad_loop_threshold) {
+    if (best_score < vprnet_loop_threshold) {
         return -1;
     }
-    if (scores.size() > 1 && (best_score - second_score) < netvlad_loop_margin) {
+    if (scores.size() > 1 && (best_score - second_score) < vprnet_loop_margin) {
         return -1;
     }
 
     if (DEBUG_IMAGE) {
         cv::Mat compressed_image;
         cv::resize(keyframe->image, compressed_image, cv::Size(376, 240));
-        putText(compressed_image, "netvlad best:" + to_string(best_score), cv::Point2f(10, 10), CV_FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255));
+        putText(compressed_image, "vprnet best:" + to_string(best_score), cv::Point2f(10, 10), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255));
         image_pool[frame_index] = compressed_image;
     }
 
@@ -508,7 +508,7 @@ int PoseGraph::detectLoopNetVLAD(KeyFrame* keyframe, int frame_index)
 void PoseGraph::addKeyFrameIntoVoc(KeyFrame* keyframe)
 {
     // put image into image_pool; for visualization
-    if (loop_descriptor_type == LoopDescriptorType::NetVLAD) {
+    if (loop_descriptor_type == LoopDescriptorType::VPRNet) {
         return;
     }
     cv::Mat compressed_image;
@@ -516,7 +516,7 @@ void PoseGraph::addKeyFrameIntoVoc(KeyFrame* keyframe)
     {
         int feature_num = keyframe->keypoints.size();
         cv::resize(keyframe->image, compressed_image, cv::Size(376, 240));
-        putText(compressed_image, "feature_num:" + to_string(feature_num), cv::Point2f(10, 10), CV_FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255));
+        putText(compressed_image, "feature_num:" + to_string(feature_num), cv::Point2f(10, 10), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255));
         image_pool[keyframe->index] = compressed_image;
     }
 
@@ -1000,7 +1000,7 @@ void PoseGraph::savePoseGraph()
     list<KeyFrame*>::iterator it;
     for (it = keyframelist.begin(); it != keyframelist.end(); it++)
     {
-        std::string image_path, descriptor_path, brief_path, keypoints_path, netvlad_path;
+        std::string image_path, descriptor_path, brief_path, keypoints_path, vprnet_path;
         if (DEBUG_IMAGE)
         {
             image_path = POSE_GRAPH_SAVE_PATH + to_string((*it)->index) + "_image.png";
@@ -1037,18 +1037,18 @@ void PoseGraph::savePoseGraph()
         brief_file.close();
         fclose(keypoints_file);
 
-        netvlad_path = POSE_GRAPH_SAVE_PATH + to_string((*it)->index) + "_netvlad.dat";
-        std::ofstream netvlad_file(netvlad_path, std::ios::binary);
-        if ((*it)->hasNetVLADDescriptor()) {
-            const std::vector<float>& descriptor = (*it)->getNetVLADDescriptor();
+        vprnet_path = POSE_GRAPH_SAVE_PATH + to_string((*it)->index) + "_vprnet.dat";
+        std::ofstream vprnet_file(vprnet_path, std::ios::binary);
+        if ((*it)->hasVPRNetDescriptor()) {
+            const std::vector<float>& descriptor = (*it)->getVPRNetDescriptor();
             int dim = static_cast<int>(descriptor.size());
-            netvlad_file.write(reinterpret_cast<const char*>(&dim), sizeof(int));
-            netvlad_file.write(reinterpret_cast<const char*>(descriptor.data()), dim * sizeof(float));
+            vprnet_file.write(reinterpret_cast<const char*>(&dim), sizeof(int));
+            vprnet_file.write(reinterpret_cast<const char*>(descriptor.data()), dim * sizeof(float));
         } else {
             int dim = 0;
-            netvlad_file.write(reinterpret_cast<const char*>(&dim), sizeof(int));
+            vprnet_file.write(reinterpret_cast<const char*>(&dim), sizeof(int));
         }
-        netvlad_file.close();
+        vprnet_file.close();
     }
     fclose(pFile);
 
@@ -1163,22 +1163,22 @@ void PoseGraph::loadPoseGraph()
         fclose(keypoints_file);
 
         KeyFrame* keyframe = new KeyFrame(time_stamp, index, VIO_T, VIO_R, PG_T, PG_R, image, loop_index, loop_info, keypoints, keypoints_norm, brief_descriptors);
-        std::string netvlad_path = POSE_GRAPH_SAVE_PATH + to_string(index) + "_netvlad.dat";
-        std::ifstream netvlad_file(netvlad_path, std::ios::binary);
-        if (netvlad_file.is_open())
+        std::string vprnet_path = POSE_GRAPH_SAVE_PATH + to_string(index) + "_vprnet.dat";
+        std::ifstream vprnet_file(vprnet_path, std::ios::binary);
+        if (vprnet_file.is_open())
         {
             int dim = 0;
-            netvlad_file.read(reinterpret_cast<char*>(&dim), sizeof(int));
+            vprnet_file.read(reinterpret_cast<char*>(&dim), sizeof(int));
             if (dim > 0)
             {
                 std::vector<float> descriptor(dim, 0.0f);
-                netvlad_file.read(reinterpret_cast<char*>(descriptor.data()), dim * sizeof(float));
-                if (netvlad_file)
+                vprnet_file.read(reinterpret_cast<char*>(descriptor.data()), dim * sizeof(float));
+                if (vprnet_file)
                 {
-                    keyframe->setNetVLADDescriptor(descriptor);
+                    keyframe->setVPRNetDescriptor(descriptor);
                 }
             }
-            netvlad_file.close();
+            vprnet_file.close();
         }
         loadKeyFrame(keyframe, 0);
         if (cnt % 20 == 0)

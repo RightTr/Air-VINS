@@ -20,6 +20,9 @@ output/plnet_s1.engine
 output/superglue_indoor_sim_int32.engine
 output/superpoint_lightglue.engine
 output/superpoint_v1_sim_int32.engine
+output/ResNet50_512_eigenplaces.engine
+output/vio.csv
+output/vio_loop.csv
 
 output/stereo_line_match
 

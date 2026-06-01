@@ -49,7 +49,7 @@ public:
 	enum class LoopDescriptorType
 	{
 		BriefBow = 0,
-		NetVLAD = 1
+		VPRNet = 1
 	};
 
 	PoseGraph();
@@ -59,7 +59,7 @@ public:
 	void loadKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop);
 	void loadVocabulary(std::string voc_path);
 	void setLoopDescriptorType(int method);
-	void setNetVLADLoopParams(double threshold, double margin, int exclude_recent);
+	void setVPRNetLoopParams(double threshold, double margin, int exclude_recent);
 	void setIMUFlag(bool _use_imu);
 	KeyFrame* getKeyFrame(int index);
 	nav_msgs::Path path[10];
@@ -78,7 +78,7 @@ public:
 
 private:
 	int detectLoop(KeyFrame* keyframe, int frame_index);
-	int detectLoopNetVLAD(KeyFrame* keyframe, int frame_index);
+	int detectLoopVPRNet(KeyFrame* keyframe, int frame_index);
 	void addKeyFrameIntoVoc(KeyFrame* keyframe);
 	void optimize4DoF();
 	void optimize6DoF();
@@ -99,9 +99,9 @@ private:
 	int base_sequence;
 	bool use_imu;
 	LoopDescriptorType loop_descriptor_type;
-	double netvlad_loop_threshold;
-	double netvlad_loop_margin;
-	int netvlad_loop_exclude_recent;
+	double vprnet_loop_threshold;
+	double vprnet_loop_margin;
+	int vprnet_loop_exclude_recent;
 
 	BriefDatabase db;
 	BriefVocabulary* voc;

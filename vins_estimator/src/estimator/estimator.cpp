@@ -1239,8 +1239,6 @@ void Estimator::optimization()
     }
 
     ROS_DEBUG("visual measurement count: %d", f_m_cnt);
-    ROS_WARN("line BA stats: features=%d mono_factors=%d stereo_factors=%d line_measurements=%d",
-             line_feature_cnt, line_mono_factor_cnt, line_stereo_factor_cnt, line_m_cnt);
     //printf("prepare for ceres: %f \n", t_prepare.toc());
 
     ceres::Solver::Options options;
@@ -1821,8 +1819,6 @@ void Estimator::lineOutliersRejection(std::map<int, std::set<int>> &removeObserv
         removed_line_cnt++;
         removed_observation_cnt += static_cast<int>(kv.second.size());
     }
-    ROS_WARN("line outlier stats: optimized_lines=%d removed_lines=%d removed_observations=%d",
-             optimized_line_cnt, removed_line_cnt, removed_observation_cnt);
 }
 
 void Estimator::fastPredictIMU(double t, Eigen::Vector3d linear_acceleration, Eigen::Vector3d angular_velocity)

@@ -33,7 +33,7 @@
 #include "pose_graph.h"
 #include "utility/CameraPoseVisualization.h"
 #include "parameters.h"
-#include "netvlad/netvlad_trt.h"
+#include "vprnet/vprnet.h"
 #define SKIP_FIRST_CNT 10
 using namespace std;
 
@@ -65,7 +65,7 @@ Eigen::Matrix3d qic;
 ros::Publisher pub_match_img;
 ros::Publisher pub_camera_pose_visual;
 ros::Publisher pub_odometry_rect;
-std::unique_ptr<NetVLADTRT> netvlad_extractor;
+std::unique_ptr<VPRNet> vprnet_extractor;
 
 std::string BRIEF_PATTERN_FILE;
 std::string POSE_GRAPH_SAVE_PATH;
@@ -365,14 +365,14 @@ void process()
 
                 KeyFrame* keyframe = new KeyFrame(pose_msg->header.stamp.toSec(), frame_index, T, R, image,
                                    point_3d, point_2d_uv, point_2d_normal, point_id, sequence);   
-                if (netvlad_extractor) {
+                if (vprnet_extractor) {
                     Eigen::VectorXf descriptor;
-                    if (netvlad_extractor->infer(image, descriptor)) {
-                        std::vector<float> netvlad_vector(descriptor.data(), descriptor.data() + descriptor.size());
-                        keyframe->setNetVLADDescriptor(netvlad_vector);
-                        ROS_INFO_STREAM_THROTTLE(5.0, "NetVLAD descriptor computed, dim=" << descriptor.size());
+                    if (vprnet_extractor->infer(image, descriptor)) {
+                        std::vector<float> vprnet_vector(descriptor.data(), descriptor.data() + descriptor.size());
+                        keyframe->setVPRNetDescriptor(vprnet_vector);
+                        ROS_INFO_STREAM_THROTTLE(5.0, "VPRNet descriptor computed, dim=" << descriptor.size());
                     } else {
-                        ROS_WARN_STREAM_THROTTLE(5.0, "NetVLAD inference failed for frame " << frame_index);
+                        ROS_WARN_STREAM_THROTTLE(5.0, "VPRNet inference failed for frame " << frame_index);
                     }
                 }
                 m_process.lock();
@@ -478,35 +478,40 @@ int main(int argc, char **argv)
         fsSettings["loop_descriptor_method"] >> loop_descriptor_method;
     }
     posegraph.setLoopDescriptorType(loop_descriptor_method);
-    double netvlad_loop_threshold = 0.75;
-    double netvlad_loop_margin = 0.05;
-    int netvlad_loop_exclude_recent = 50;
-    if (!fsSettings["netvlad_loop_threshold"].empty()) {
-        fsSettings["netvlad_loop_threshold"] >> netvlad_loop_threshold;
+    double vprnet_loop_threshold = 0.75;
+    double vprnet_loop_margin = 0.05;
+    int vprnet_loop_exclude_recent = 50;
+    if (!fsSettings["vprnet_loop_threshold"].empty()) {
+        fsSettings["vprnet_loop_threshold"] >> vprnet_loop_threshold;
     }
-    if (!fsSettings["netvlad_loop_margin"].empty()) {
-        fsSettings["netvlad_loop_margin"] >> netvlad_loop_margin;
+    if (!fsSettings["vprnet_loop_margin"].empty()) {
+        fsSettings["vprnet_loop_margin"] >> vprnet_loop_margin;
     }
-    if (!fsSettings["netvlad_loop_exclude_recent"].empty()) {
-        fsSettings["netvlad_loop_exclude_recent"] >> netvlad_loop_exclude_recent;
+    if (!fsSettings["vprnet_loop_exclude_recent"].empty()) {
+        fsSettings["vprnet_loop_exclude_recent"] >> vprnet_loop_exclude_recent;
     }
-    posegraph.setNetVLADLoopParams(netvlad_loop_threshold, netvlad_loop_margin, netvlad_loop_exclude_recent);
+    posegraph.setVPRNetLoopParams(vprnet_loop_threshold, vprnet_loop_margin, vprnet_loop_exclude_recent);
 
     if (loop_descriptor_method == 2) {
-        std::string netvlad_engine_path = output_dir + "/netvlad.trt";
-        if (!fsSettings["netvlad_engine_path"].empty()) {
-            fsSettings["netvlad_engine_path"] >> netvlad_engine_path;
+        std::string vprnet_engine_path = output_dir + "/ResNet50_512_eigenplaces.engine";
+        std::string vprnet_onnx_path = output_dir + "/ResNet50_512_eigenplaces.onnx";
+        if (!fsSettings["vprnet_engine_path"].empty()) {
+            fsSettings["vprnet_engine_path"] >> vprnet_engine_path;
         }
-        NetVLADTRT::Options options;
-        options.engine_path = netvlad_engine_path;
+        if (!fsSettings["vprnet_onnx_path"].empty()) {
+            fsSettings["vprnet_onnx_path"] >> vprnet_onnx_path;
+        }
+        VPRNet::Options options;
+        options.engine_path = vprnet_engine_path;
+        options.onnx_path = vprnet_onnx_path;
         options.input_width = 640;
         options.input_height = 480;
         options.verbose = false;
-        netvlad_extractor.reset(new NetVLADTRT(options));
-        if (!netvlad_extractor->build()) {
-            ROS_WARN_STREAM("Failed to load NetVLAD TensorRT engine: " << netvlad_engine_path);
-            netvlad_extractor.reset();
-            posegraph.setLoopDescriptorType("brief");
+        vprnet_extractor.reset(new VPRNet(options));
+        if (!vprnet_extractor->build()) {
+            ROS_WARN_STREAM("Failed to load VPRNet TensorRT engine: " << vprnet_engine_path);
+            vprnet_extractor.reset();
+            posegraph.setLoopDescriptorType(1);
         }
     }
 

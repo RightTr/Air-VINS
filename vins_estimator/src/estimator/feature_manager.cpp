@@ -635,18 +635,6 @@ void FeatureManager::updateLocalPoints(int frameCnt)
     }
     pruneStaleLocalMappoints();
 
-    if (frameCnt >= 0 && frameCnt % 10 == 0)
-    {
-        const int feature_ba_count = getFeatureCount();
-        ROS_INFO_STREAM("local map stats frame=" << frameCnt
-                                                 << " untriangulated=" << untriangulated_count
-                                                 << " good=" << good_count
-                                                 << " supported_good=" << supported_good_count
-                                                 << " bad=" << bad_count
-                                                 << " ba_features=" << feature_ba_count
-                                                 << " total_features=" << feature.size()
-                                                 << " local_mappoints=" << local_mappoints.size());
-    }
 }
 
 

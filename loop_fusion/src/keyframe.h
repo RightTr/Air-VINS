@@ -78,9 +78,9 @@ public:
 	void updatePose(const Eigen::Vector3d &_T_w_i, const Eigen::Matrix3d &_R_w_i);
 	void updateVioPose(const Eigen::Vector3d &_T_w_i, const Eigen::Matrix3d &_R_w_i);
 	void updateLoop(Eigen::Matrix<double, 8, 1 > &_loop_info);
-	void setNetVLADDescriptor(const std::vector<float> &descriptor);
-	bool hasNetVLADDescriptor() const;
-	const std::vector<float> &getNetVLADDescriptor() const;
+	void setVPRNetDescriptor(const std::vector<float> &descriptor);
+	bool hasVPRNetDescriptor() const;
+	const std::vector<float> &getVPRNetDescriptor() const;
 
 	Eigen::Vector3d getLoopRelativeT();
 	double getLoopRelativeYaw();
@@ -108,8 +108,8 @@ public:
 	vector<cv::KeyPoint> window_keypoints;
 	vector<BRIEF::bitset> brief_descriptors;
 	vector<BRIEF::bitset> window_brief_descriptors;
-	std::vector<float> netvlad_descriptor;
-	bool has_netvlad_descriptor;
+	std::vector<float> vprnet_descriptor;
+	bool has_vprnet_descriptor;
 	bool has_fast_point;
 	int sequence;
 

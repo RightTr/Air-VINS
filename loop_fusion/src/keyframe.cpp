@@ -43,7 +43,7 @@ KeyFrame::KeyFrame(double _time_stamp, int _index, Vector3d &_vio_T_w_i, Matrix3
 	has_loop = false;
 	loop_index = -1;
 	has_fast_point = false;
-	has_netvlad_descriptor = false;
+	has_vprnet_descriptor = false;
 	loop_info << 0, 0, 0, 0, 0, 0, 0, 0;
 	sequence = _sequence;
 	computeWindowBRIEFPoint();
@@ -77,27 +77,27 @@ KeyFrame::KeyFrame(double _time_stamp, int _index, Vector3d &_vio_T_w_i, Matrix3
 	loop_index = _loop_index;
 	loop_info = _loop_info;
 	has_fast_point = false;
-	has_netvlad_descriptor = false;
+	has_vprnet_descriptor = false;
 	sequence = 0;
 	keypoints = _keypoints;
 	keypoints_norm = _keypoints_norm;
 	brief_descriptors = _brief_descriptors;
 }
 
-void KeyFrame::setNetVLADDescriptor(const std::vector<float> &descriptor)
+void KeyFrame::setVPRNetDescriptor(const std::vector<float> &descriptor)
 {
-	netvlad_descriptor = descriptor;
-	has_netvlad_descriptor = !netvlad_descriptor.empty();
+	vprnet_descriptor = descriptor;
+	has_vprnet_descriptor = !vprnet_descriptor.empty();
 }
 
-bool KeyFrame::hasNetVLADDescriptor() const
+bool KeyFrame::hasVPRNetDescriptor() const
 {
-	return has_netvlad_descriptor;
+	return has_vprnet_descriptor;
 }
 
-const std::vector<float> &KeyFrame::getNetVLADDescriptor() const
+const std::vector<float> &KeyFrame::getVPRNetDescriptor() const
 {
-	return netvlad_descriptor;
+	return vprnet_descriptor;
 }
 
 
@@ -470,9 +470,9 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	                cv::line(loop_match_img, matched_2d_cur[i], old_pt, cv::Scalar(0, 255, 0), 2, 8, 0);
 	            }
 	            cv::Mat notation(50, COL + gap + COL, CV_8UC3, cv::Scalar(255, 255, 255));
-	            putText(notation, "current frame: " + to_string(index) + "  sequence: " + to_string(sequence), cv::Point2f(20, 30), CV_FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255), 3);
+	            putText(notation, "current frame: " + to_string(index) + "  sequence: " + to_string(sequence), cv::Point2f(20, 30), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255), 3);
 
-	            putText(notation, "previous frame: " + to_string(old_kf->index) + "  sequence: " + to_string(old_kf->sequence), cv::Point2f(20 + COL + gap, 30), CV_FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255), 3);
+	            putText(notation, "previous frame: " + to_string(old_kf->index) + "  sequence: " + to_string(old_kf->sequence), cv::Point2f(20 + COL + gap, 30), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(255), 3);
 	            cv::vconcat(notation, loop_match_img, loop_match_img);
 
 	            /*
@@ -600,4 +600,3 @@ BriefExtractor::BriefExtractor(const std::string &pattern_file)
 
   m_brief.importPairs(x1, y1, x2, y2);
 }
-

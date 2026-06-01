@@ -35,6 +35,9 @@ find_path(CUDA_INCLUDE_DIR cuda_runtime_api.h
 find_library(NVINFER_LIBRARY nvinfer
     PATHS /usr/lib /usr/local/lib /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu
 )
+find_library(NVONNXPARSER_LIBRARY nvonnxparser
+    PATHS /usr/lib /usr/local/lib /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu
+)
 find_library(NVINFER_PLUGIN_LIBRARY nvinfer_plugin
     PATHS /usr/lib /usr/local/lib /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu
 )
@@ -63,7 +66,7 @@ set(LOOP_FUSION_SOURCES
     src/ThirdParty/DUtils/Timestamp.cpp
     src/ThirdParty/DVision/BRIEF.cpp
     src/ThirdParty/VocabularyBinary.cpp
-    src/netvlad/netvlad_trt.cpp
+    src/vprnet/vprnet.cpp
     )
 
 add_executable(loop_fusion_node ${LOOP_FUSION_SOURCES})
@@ -71,6 +74,9 @@ add_executable(loop_fusion_node ${LOOP_FUSION_SOURCES})
 set(LOOP_FUSION_TRT_LIBS ${NVINFER_LIBRARY} ${CUDART_LIBRARY})
 if(NVINFER_PLUGIN_LIBRARY)
     list(APPEND LOOP_FUSION_TRT_LIBS ${NVINFER_PLUGIN_LIBRARY})
+endif()
+if(NVONNXPARSER_LIBRARY)
+    list(APPEND LOOP_FUSION_TRT_LIBS ${NVONNXPARSER_LIBRARY})
 endif()
 
 target_link_libraries(loop_fusion_node ${catkin_LIBRARIES}  ${OpenCV_LIBS} ${CERES_LIBRARIES}
