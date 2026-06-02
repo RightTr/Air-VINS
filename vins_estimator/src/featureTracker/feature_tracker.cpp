@@ -13,6 +13,7 @@
 
 #include "../utility/visualization.h"
 #include "deep_feature.h"
+#include "deepFeature/include/utils.h"
 #include <algorithm>
 #include <set>
 #include <cmath>
@@ -858,7 +859,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
 
         for (const auto &candidate : projection_candidates_local)
         {
-            if (candidate.feature_id < 0 || candidate.camera_id != primary_camera_id_)
+            if (candidate.point_feature_id < 0 || candidate.camera_id != primary_camera_id_)
                 continue;
 
             if (!std::isfinite(candidate.point_cam.x()) || !std::isfinite(candidate.point_cam.y()) ||
@@ -911,7 +912,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
                  best_desc_dist <= projection_descriptor_ratio * second_desc_dist))
             {
                 current_prev_index[best_idx] = -2;
-                current_feature_ids[best_idx] = candidate.feature_id;
+                current_feature_ids[best_idx] = candidate.point_feature_id;
                 current_feature_track_cnt[best_idx] = std::max(1, candidate.track_count + 1);
                 current_feature_taken[best_idx] = true;
             }

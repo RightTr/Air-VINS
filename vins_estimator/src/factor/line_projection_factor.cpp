@@ -1,5 +1,5 @@
 #include "line_projection_factor.h"
-#include "../utility/line_geometry.h"
+#include "utility/line_geometry.h"
 #include "line_parameterization.h"
 #include "../utility/utility.h"
 #include <cmath>

@@ -119,12 +119,12 @@ const Vector6d &Mapline::GetLine3D() const
     return _line_3d_world;
 }
 
-void Mapline::AddObverser(const int &frame_id, const int &line_index)
+void Mapline::AddObserver(const int &frame_id, const int &line_index)
 {
     _obversers[frame_id] = line_index;
 }
 
-void Mapline::RemoveObverser(const int &frame_id)
+void Mapline::RemoveObserver(const int &frame_id)
 {
     auto it = _obversers.find(frame_id);
     if (it != _obversers.end())
@@ -135,7 +135,7 @@ void Mapline::RemoveObverser(const int &frame_id)
         _included_endpoints.erase(it);
 }
 
-int Mapline::ObverserNum()
+int Mapline::ObserverNum()
 {
     int obverser_num = 0;
     for (const auto &kv : _obversers)
@@ -146,7 +146,7 @@ int Mapline::ObverserNum()
     return obverser_num;
 }
 
-const std::map<int, int> &Mapline::GetAllObversers()
+const std::map<int, int> &Mapline::GetAllObservers()
 {
     return _obversers;
 }
@@ -158,12 +158,12 @@ int Mapline::GetLineIdx(int frame_id)
     return -1;
 }
 
-void Mapline::SetObverserEndpointStatus(int frame_id, int status)
+void Mapline::SetObserverEndpointStatus(int frame_id, int status)
 {
     _included_endpoints[frame_id] = status;
 }
 
-int Mapline::GetObverserEndpointStatus(int frame_id)
+int Mapline::GetObserverEndpointStatus(int frame_id)
 {
     auto it = _included_endpoints.find(frame_id);
     if (it == _included_endpoints.end())
@@ -171,7 +171,7 @@ int Mapline::GetObverserEndpointStatus(int frame_id)
     return it->second;
 }
 
-const std::map<int, int> &Mapline::GetAllObverserEndpointStatus()
+const std::map<int, int> &Mapline::GetAllObserverEndpointStatus()
 {
     return _included_endpoints;
 }

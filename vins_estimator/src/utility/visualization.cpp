@@ -345,16 +345,16 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
     loop_point_cloud.header = header;
 
 
-    for (auto &it_per_id : estimator.f_manager.feature)
+    for (auto &it_per_id : estimator.f_manager.points().pointFeature)
     {
         int used_num;
-        used_num = it_per_id.feature_per_frame.size();
+        used_num = it_per_id.point_feature_frame.size();
         if (!(used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
             continue;
         if (it_per_id.start_frame > WINDOW_SIZE * 3.0 / 4.0 || it_per_id.solve_flag != 1)
             continue;
         int imu_i = it_per_id.start_frame;
-        Vector3d pts_i = it_per_id.feature_per_frame[0].point * it_per_id.estimated_depth;
+        Vector3d pts_i = it_per_id.point_feature_frame[0].point * it_per_id.estimated_depth;
         Vector3d w_pts_i = estimator.Rs[imu_i] * (estimator.ric[0] * pts_i + estimator.tic[0]) + estimator.Ps[imu_i];
 
         geometry_msgs::Point32 p;
@@ -370,20 +370,20 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
     sensor_msgs::PointCloud margin_cloud;
     margin_cloud.header = header;
 
-    for (auto &it_per_id : estimator.f_manager.feature)
+    for (auto &it_per_id : estimator.f_manager.points().pointFeature)
     { 
         int used_num;
-        used_num = it_per_id.feature_per_frame.size();
+        used_num = it_per_id.point_feature_frame.size();
         if (!(used_num >= 2 && it_per_id.start_frame < WINDOW_SIZE - 2))
             continue;
         //if (it_per_id->start_frame > WINDOW_SIZE * 3.0 / 4.0 || it_per_id->solve_flag != 1)
         //        continue;
 
-        if (it_per_id.start_frame == 0 && it_per_id.feature_per_frame.size() <= 2 
+        if (it_per_id.start_frame == 0 && it_per_id.point_feature_frame.size() <= 2 
             && it_per_id.solve_flag == 1 )
         {
             int imu_i = it_per_id.start_frame;
-            Vector3d pts_i = it_per_id.feature_per_frame[0].point * it_per_id.estimated_depth;
+            Vector3d pts_i = it_per_id.point_feature_frame[0].point * it_per_id.estimated_depth;
             Vector3d w_pts_i = estimator.Rs[imu_i] * (estimator.ric[0] * pts_i + estimator.tic[0]) + estimator.Ps[imu_i];
 
             geometry_msgs::Point32 p;
@@ -429,15 +429,18 @@ void pubGolbalMapLine(const Estimator &estimator, const std_msgs::Header &header
                line_it.endFrame() <= WINDOW_SIZE - 3;
     };
 
-    for (const auto &line_it : estimator.f_manager.line_feature)
+    if (auto *line_manager = estimator.f_manager.lines())
     {
-        if (!isStableForGlobal(line_it))
-            continue;
-        Eigen::Vector3d seg_start;
-        Eigen::Vector3d seg_end;
-        if (!::lineToSegment(line_it.line_3d_world, seg_start, seg_end))
-            continue;
-        persistent_map_lines[line_it.line_id] = std::make_pair(seg_start, seg_end);
+        for (const auto &line_it : line_manager->line_feature)
+        {
+            if (!isStableForGlobal(line_it))
+                continue;
+            Eigen::Vector3d seg_start;
+            Eigen::Vector3d seg_end;
+            if (!::lineToSegment(line_it.line_3d_world, seg_start, seg_end))
+                continue;
+            persistent_map_lines[line_it.line_id] = std::make_pair(seg_start, seg_end);
+        }
     }
 
     for (const auto &line_it : persistent_map_lines)
@@ -468,18 +471,21 @@ void pubWindowMapLine(const Estimator &estimator, const std_msgs::Header &header
     window_lines.color.a = 1.0;
     window_lines.lifetime = ros::Duration();
 
-    for (const auto &line_it : estimator.f_manager.line_feature)
+    if (const auto *line_manager = estimator.f_manager.lines())
     {
-        if (!estimator.f_manager.useLineForOptimization(line_it))
-            continue;
-        const Eigen::Vector3d moment = line_it.line_3d_world.head<3>();
-        const Eigen::Vector3d direction = line_it.line_3d_world.tail<3>();
-        const double dir_norm = direction.norm();
-        if (!moment.allFinite() || !direction.allFinite() || dir_norm < 1e-9)
-            continue;
-        const Eigen::Vector3d anchor = direction.cross(moment) / (dir_norm * dir_norm);
-        const Eigen::Vector3d offset = direction.normalized() * 0.5;
-        appendLineSegment(window_lines, anchor - offset, anchor + offset);
+        for (const auto &line_it : line_manager->line_feature)
+        {
+            if (!estimator.f_manager.useLineForOptimization(line_it))
+                continue;
+            const Eigen::Vector3d moment = line_it.line_3d_world.head<3>();
+            const Eigen::Vector3d direction = line_it.line_3d_world.tail<3>();
+            const double dir_norm = direction.norm();
+            if (!moment.allFinite() || !direction.allFinite() || dir_norm < 1e-9)
+                continue;
+            const Eigen::Vector3d anchor = direction.cross(moment) / (dir_norm * dir_norm);
+            const Eigen::Vector3d offset = direction.normalized() * 0.5;
+            appendLineSegment(window_lines, anchor - offset, anchor + offset);
+        }
     }
 
     if (window_lines.points.empty())
@@ -600,7 +606,7 @@ void pubKeyframe(const Estimator &estimator)
         keyframe_pose.pose.pose.orientation.w = R.w();
         ros_utils::ros_publish(pub_keyframe_pose, keyframe_pose);
 
-        const auto good_points = estimator.f_manager.collectGoodKeyframePoints();
+        const auto good_points = estimator.f_manager.points().collectGoodKeyframePoints();
         ROS_INFO_STREAM_THROTTLE(5.0, "[vins_estimator] keyframe good points=" << good_points.size());
         sensor_msgs::PointCloud keyframe_point_msg;
         keyframe_point_msg.header = header;
@@ -621,7 +627,7 @@ void pubKeyframe(const Estimator &estimator)
             channel.values.push_back(good_point.point_norm.y());
             channel.values.push_back(good_point.point_uv.x());
             channel.values.push_back(good_point.point_uv.y());
-            channel.values.push_back(static_cast<float>(good_point.feature_id));
+            channel.values.push_back(static_cast<float>(good_point.point_feature_id));
             for (int i = 0; i < good_point.descriptor.size(); ++i)
                 channel.values.push_back(good_point.descriptor(i));
             keyframe_point_msg.channels.push_back(channel);

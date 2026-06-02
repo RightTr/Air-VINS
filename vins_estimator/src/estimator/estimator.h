@@ -21,7 +21,7 @@
 #include <eigen3/Eigen/Geometry>
 
 #include "parameters.h"
-#include "feature_manager.h"
+#include "../manager/feature_manager.h"
 #include "../utility/utility.h"
 #include "../utility/tic_toc.h"
 #include "../initial/solve_5pts.h"

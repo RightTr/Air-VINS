@@ -66,6 +66,7 @@ include_directories(
   ${CUDA_INCLUDE_DIRS}
   ${TENSORRT_INCLUDE_DIR}
   ${PROJECT_SOURCE_DIR}/..
+  ${PROJECT_SOURCE_DIR}/src
   ${PROJECT_SOURCE_DIR}/../deepFeature
   ${PROJECT_SOURCE_DIR}/../deepFeature/include
   ${PROJECT_SOURCE_DIR}/../deepFeature/3rdparty/tensorrtbuffer/include
@@ -76,7 +77,8 @@ catkin_package()
 add_library(vins_lib
     src/estimator/parameters.cpp
     src/estimator/estimator.cpp
-    src/estimator/feature_manager.cpp
+    src/manager/feature_manager.cpp
+    src/manager/point_feature_manager.cpp
     src/factor/line_parameterization.cpp
     src/factor/line_projection_factor.cpp
     src/factor/pose_local_parameterization.cpp
@@ -90,6 +92,7 @@ add_library(vins_lib
     src/utility/mappoint.cpp
     src/utility/visualization.cpp
     src/utility/CameraPoseVisualization.cpp
+    src/manager/line_feature_manager.cpp
     src/initial/solve_5pts.cpp
     src/initial/initial_aligment.cpp
     src/initial/initial_sfm.cpp

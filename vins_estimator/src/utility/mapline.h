@@ -44,15 +44,15 @@ class Mapline
     void SetLine3D(const Vector6d &line_3d);
     const Vector6d &GetLine3D() const;
 
-    void AddObverser(const int &frame_id, const int &line_index);
-    void RemoveObverser(const int &frame_id);
-    int ObverserNum();
-    const std::map<int, int> &GetAllObversers();
+    void AddObserver(const int &frame_id, const int &line_index);
+    void RemoveObserver(const int &frame_id);
+    int ObserverNum();
+    const std::map<int, int> &GetAllObservers();
     int GetLineIdx(int frame_id);
 
-    void SetObverserEndpointStatus(int frame_id, int status = 1);
-    int GetObverserEndpointStatus(int frame_id);
-    const std::map<int, int> &GetAllObverserEndpointStatus();
+    void SetObserverEndpointStatus(int frame_id, int status = 1);
+    int GetObserverEndpointStatus(int frame_id);
+    const std::map<int, int> &GetAllObserverEndpointStatus();
 
   public:
     int local_map_optimization_frame_id;

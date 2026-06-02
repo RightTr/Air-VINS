@@ -16,7 +16,7 @@
 #include "../utility/utility.h"
 #include <ros/ros.h>
 #include <map>
-#include "../estimator/feature_manager.h"
+#include "../manager/feature_manager.h"
 
 using namespace Eigen;
 using namespace std;

@@ -24,7 +24,7 @@
 #include "camodocal/camera_models/CataCamera.h"
 #include "camodocal/camera_models/PinholeCamera.h"
 #include "../estimator/parameters.h"
-#include "../estimator/feature_manager.h"
+#include "../manager/feature_manager.h"
 #include "../utility/tic_toc.h"
 
 using namespace std;
