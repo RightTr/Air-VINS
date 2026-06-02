@@ -606,7 +606,7 @@ void pubKeyframe(const Estimator &estimator)
         keyframe_pose.pose.pose.orientation.w = R.w();
         ros_utils::ros_publish(pub_keyframe_pose, keyframe_pose);
 
-        const auto good_points = estimator.f_manager.points().collectGoodKeyframePoints();
+        const auto good_points = estimator.f_manager.collectGoodKeyframePoints();
         ROS_INFO_STREAM_THROTTLE(5.0, "[vins_estimator] keyframe good points=" << good_points.size());
         sensor_msgs::PointCloud keyframe_point_msg;
         keyframe_point_msg.header = header;
