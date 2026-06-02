@@ -71,31 +71,31 @@ class FeatureManager
     void removeLineFront(int frame_count);
     void removeLineFailures();
 
-    PointFeatureManager &points();
-    const PointFeatureManager &points() const;
-    LineFeatureManager *lines();
-    const LineFeatureManager *lines() const;
+    PointFeatureManager &points() { return *point_manager; }
+    const PointFeatureManager &points() const { return *point_manager; }
+    LineFeatureManager *lines() { return line_manager.get(); }
+    const LineFeatureManager *lines() const { return line_manager.get(); }
 
-    Eigen::Matrix3d (&trackingRic())[2];
-    const Eigen::Matrix3d (&trackingRic() const)[2];
-    VisualTrackingMode &trackingMode();
-    const VisualTrackingMode &trackingMode() const;
-    int &activeCameraId();
-    const int &activeCameraId() const;
-    std::deque<LocalFrameObs> &localFrames();
-    const std::deque<LocalFrameObs> &localFrames() const;
-    std::map<int, MappointPtr> &localMappoints();
-    const std::map<int, MappointPtr> &localMappoints() const;
-    Eigen::Vector3d (&localPs())[WINDOW_SIZE + 1];
-    const Eigen::Vector3d (&localPs() const)[WINDOW_SIZE + 1];
-    Eigen::Matrix3d (&localRs())[WINDOW_SIZE + 1];
-    const Eigen::Matrix3d (&localRs() const)[WINDOW_SIZE + 1];
-    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &localTic();
-    const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &localTic() const;
-    std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> &localRic();
-    const std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> &localRic() const;
-    bool &hasLocalWindowState();
-    const bool &hasLocalWindowState() const;
+    Eigen::Matrix3d (&trackingRic())[2] { return ric; }
+    const Eigen::Matrix3d (&trackingRic() const)[2] { return ric; }
+    VisualTrackingMode &trackingMode() { return visual_tracking_mode; }
+    const VisualTrackingMode &trackingMode() const { return visual_tracking_mode; }
+    int &activeCameraId() { return active_camera_id; }
+    const int &activeCameraId() const { return active_camera_id; }
+    std::deque<LocalFrameObs> &localFrames() { return local_frames; }
+    const std::deque<LocalFrameObs> &localFrames() const { return local_frames; }
+    std::map<int, MappointPtr> &localMappoints() { return local_mappoints; }
+    const std::map<int, MappointPtr> &localMappoints() const { return local_mappoints; }
+    Eigen::Vector3d (&localPs())[WINDOW_SIZE + 1] { return local_Ps; }
+    const Eigen::Vector3d (&localPs() const)[WINDOW_SIZE + 1] { return local_Ps; }
+    Eigen::Matrix3d (&localRs())[WINDOW_SIZE + 1] { return local_Rs; }
+    const Eigen::Matrix3d (&localRs() const)[WINDOW_SIZE + 1] { return local_Rs; }
+    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &localTic() { return local_tic; }
+    const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &localTic() const { return local_tic; }
+    std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> &localRic() { return local_ric; }
+    const std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> &localRic() const { return local_ric; }
+    bool &hasLocalWindowState() { return has_local_window_state; }
+    const bool &hasLocalWindowState() const { return has_local_window_state; }
 
   private:
     Eigen::Matrix3d ric[2];
@@ -108,6 +108,7 @@ class FeatureManager
     std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> local_tic;
     std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> local_ric;
     bool has_local_window_state;
+    bool line_ba_enabled;
     std::unique_ptr<PointFeatureManager> point_manager;
     std::unique_ptr<LineFeatureManager> line_manager;
 };

@@ -364,8 +364,9 @@ FeatureManager::FeatureManager(Eigen::Matrix3d _Rs[])
     : visual_tracking_mode(TRACKING_MODE_STEREO),
       active_camera_id(0),
       has_local_window_state(false),
+      line_ba_enabled(false),
       point_manager(std::make_unique<PointFeatureManager>(this, _Rs)),
-      line_manager(nullptr)
+      line_manager(std::make_unique<LineFeatureManager>(this))
 {
     for (int i = 0; i < 2; ++i)
         ric[i].setIdentity();
@@ -394,8 +395,7 @@ void FeatureManager::clearState()
     local_ric.assign(NUM_OF_CAM, Eigen::Matrix3d::Identity());
 
     point_manager->clearState();
-    if (line_manager)
-        line_manager->clearState();
+    line_manager->clearState();
 }
 
 void FeatureManager::setRic(Eigen::Matrix3d _ric[])
@@ -406,20 +406,14 @@ void FeatureManager::setRic(Eigen::Matrix3d _ric[])
 
 void FeatureManager::setLineBA(bool enabled)
 {
+    line_ba_enabled = enabled;
     if (!enabled)
-    {
-        line_manager.reset();
-        return;
-    }
-
-    if (!line_manager)
-        line_manager = std::make_unique<LineFeatureManager>(this);
+        line_manager->clearState();
 }
 
 void FeatureManager::setLineCameraIntrinsics(const Eigen::Vector4d intrinsics[])
 {
-    if (line_manager)
-        line_manager->setLineCameraIntrinsics(intrinsics);
+    line_manager->setLineCameraIntrinsics(intrinsics);
 }
 
 void FeatureManager::setVisualTrackingMode(VisualTrackingMode mode)
@@ -964,7 +958,7 @@ void FeatureManager::removeBack()
                 point_manager->pointFeature.erase(it);
         }
     }
-    if (line_manager)
+    if (line_ba_enabled)
         line_manager->removeBack();
 }
 
@@ -988,7 +982,7 @@ void FeatureManager::removeFront(int frame_count)
                 point_manager->pointFeature.erase(it);
         }
     }
-    if (line_manager)
+    if (line_ba_enabled)
         line_manager->removeFront(frame_count);
 }
 
@@ -1055,7 +1049,7 @@ std::pair<int, int> FeatureManager::windowSupportStats(int point_feature_id) con
 
 bool FeatureManager::useLineForOptimization(const LinePerId &line_feature) const
 {
-    return LINE_BA && line_feature.mapline && line_feature.mapline->IsValid() &&
+    return line_ba_enabled && line_feature.mapline && line_feature.mapline->IsValid() &&
            line_feature.solve_flag == 1 &&
            line_feature.used_num >= LINE_MIN_OBS &&
            line_feature.start_frame < WINDOW_SIZE - 2 &&
@@ -1064,181 +1058,69 @@ bool FeatureManager::useLineForOptimization(const LinePerId &line_feature) const
 
 void FeatureManager::addLineFeature(int frame_count, const LineFeatureFrameMap &lines, double td)
 {
-    if (line_manager)
-        line_manager->addLineFeature(frame_count, lines, td);
+    if (!line_ba_enabled)
+        return;
+    line_manager->addLineFeature(frame_count, lines, td);
 }
 
 int FeatureManager::getLineFeatureCount() const
 {
-    return line_manager ? line_manager->getLineFeatureCount() : 0;
+    return line_ba_enabled ? line_manager->getLineFeatureCount() : 0;
 }
 
 void FeatureManager::triangulateLine(int frameCnt, Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[])
 {
-    if (line_manager)
-        line_manager->triangulateLine(frameCnt, Ps, Rs, tic, window_ric);
+    if (!line_ba_enabled)
+        return;
+    line_manager->triangulateLine(frameCnt, Ps, Rs, tic, window_ric);
 }
 
 Eigen::Matrix<double, Eigen::Dynamic, 4> FeatureManager::getLineFeatureVector() const
 {
-    return line_manager ? line_manager->getLineFeatureVector() : Eigen::Matrix<double, Eigen::Dynamic, 4>(0, 4);
+    return line_ba_enabled ? line_manager->getLineFeatureVector() : Eigen::Matrix<double, Eigen::Dynamic, 4>(0, 4);
 }
 
 void FeatureManager::setLineFeature(const Eigen::Matrix<double, Eigen::Dynamic, 4> &x,
                                     int frameCnt, Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[])
 {
-    if (line_manager)
-        line_manager->setLineFeature(x, frameCnt, Ps, Rs, tic, window_ric);
+    if (!line_ba_enabled)
+        return;
+    line_manager->setLineFeature(x, frameCnt, Ps, Rs, tic, window_ric);
 }
 
 void FeatureManager::removeLineOutliers(const std::map<int, std::set<int>> &outlier_observers)
 {
-    if (line_manager)
-        line_manager->removeLineOutliers(outlier_observers);
+    if (!line_ba_enabled)
+        return;
+    line_manager->removeLineOutliers(outlier_observers);
 }
 
 void FeatureManager::removeLineBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::Vector3d back_P0,
                                               Eigen::Matrix3d new_R0, Eigen::Vector3d new_P0,
                                               Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[])
 {
-    if (line_manager)
-        line_manager->removeBackShiftDepth(back_R0, back_P0, new_R0, new_P0, tic, window_ric);
+    if (!line_ba_enabled)
+        return;
+    line_manager->removeBackShiftDepth(back_R0, back_P0, new_R0, new_P0, tic, window_ric);
 }
 
 void FeatureManager::removeLineBack()
 {
-    if (line_manager)
-        line_manager->removeBack();
+    if (!line_ba_enabled)
+        return;
+    line_manager->removeBack();
 }
 
 void FeatureManager::removeLineFront(int frame_count)
 {
-    if (line_manager)
-        line_manager->removeFront(frame_count);
+    if (!line_ba_enabled)
+        return;
+    line_manager->removeFront(frame_count);
 }
 
 void FeatureManager::removeLineFailures()
 {
-    if (line_manager)
-        line_manager->removeFailures();
-}
-
-PointFeatureManager &FeatureManager::points()
-{
-    return *point_manager;
-}
-
-const PointFeatureManager &FeatureManager::points() const
-{
-    return *point_manager;
-}
-
-LineFeatureManager *FeatureManager::lines()
-{
-    return line_manager.get();
-}
-
-const LineFeatureManager *FeatureManager::lines() const
-{
-    return line_manager.get();
-}
-
-Eigen::Matrix3d (&FeatureManager::trackingRic())[2]
-{
-    return ric;
-}
-
-const Eigen::Matrix3d (&FeatureManager::trackingRic() const)[2]
-{
-    return ric;
-}
-
-VisualTrackingMode &FeatureManager::trackingMode()
-{
-    return visual_tracking_mode;
-}
-
-const VisualTrackingMode &FeatureManager::trackingMode() const
-{
-    return visual_tracking_mode;
-}
-
-int &FeatureManager::activeCameraId()
-{
-    return active_camera_id;
-}
-
-const int &FeatureManager::activeCameraId() const
-{
-    return active_camera_id;
-}
-
-std::deque<LocalFrameObs> &FeatureManager::localFrames()
-{
-    return local_frames;
-}
-
-const std::deque<LocalFrameObs> &FeatureManager::localFrames() const
-{
-    return local_frames;
-}
-
-std::map<int, MappointPtr> &FeatureManager::localMappoints()
-{
-    return local_mappoints;
-}
-
-const std::map<int, MappointPtr> &FeatureManager::localMappoints() const
-{
-    return local_mappoints;
-}
-
-Eigen::Vector3d (&FeatureManager::localPs())[WINDOW_SIZE + 1]
-{
-    return local_Ps;
-}
-
-const Eigen::Vector3d (&FeatureManager::localPs() const)[WINDOW_SIZE + 1]
-{
-    return local_Ps;
-}
-
-Eigen::Matrix3d (&FeatureManager::localRs())[WINDOW_SIZE + 1]
-{
-    return local_Rs;
-}
-
-const Eigen::Matrix3d (&FeatureManager::localRs() const)[WINDOW_SIZE + 1]
-{
-    return local_Rs;
-}
-
-std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &FeatureManager::localTic()
-{
-    return local_tic;
-}
-
-const std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &FeatureManager::localTic() const
-{
-    return local_tic;
-}
-
-std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> &FeatureManager::localRic()
-{
-    return local_ric;
-}
-
-const std::vector<Eigen::Matrix3d, Eigen::aligned_allocator<Eigen::Matrix3d>> &FeatureManager::localRic() const
-{
-    return local_ric;
-}
-
-bool &FeatureManager::hasLocalWindowState()
-{
-    return has_local_window_state;
-}
-
-const bool &FeatureManager::hasLocalWindowState() const
-{
-    return has_local_window_state;
+    if (!line_ba_enabled)
+        return;
+    line_manager->removeFailures();
 }
