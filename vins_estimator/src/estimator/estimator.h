@@ -116,6 +116,10 @@ class Estimator
     void fastPredictIMU(double t, Eigen::Vector3d linear_acceleration, Eigen::Vector3d angular_velocity);
     bool IMUAvailable(double t);
     void initFirstIMUPose(vector<pair<double, Eigen::Vector3d>> &accVector);
+    bool stereoInitializationReady() const;
+    void updateLoopKeyframeDecision();
+    bool should_marginalize_old;
+    bool is_loop_keyframe;
 
     enum SolverFlag
     {
@@ -179,6 +183,9 @@ class Estimator
     bool first_imu;
     bool is_valid, is_key;
     bool failure_occur;
+    int last_loop_keyframe_frame_count;
+    double last_loop_keyframe_parallax;
+    int processed_frame_count;
 
     vector<Vector3d> point_cloud;
     vector<Vector3d> margin_cloud;

@@ -548,7 +548,7 @@ void pubTF(const Estimator &estimator, const std_msgs::Header &header)
 void pubKeyframe(const Estimator &estimator)
 {
     // pub camera pose, 2D-3D points of keyframe
-    if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR && estimator.marginalization_flag == 0)
+    if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR && estimator.is_loop_keyframe)
     {
         int i = WINDOW_SIZE - 2;
         //Vector3d P = estimator.Ps[i] + estimator.Rs[i] * estimator.tic[0];

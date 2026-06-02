@@ -35,6 +35,8 @@ class FeatureManager
     void updateLocalPoints(int frameCnt);
     bool addPointFeatureCheckParallax(int frame_count, const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td);
     KeyframeGoodPointRecordList collectGoodKeyframePoints() const;
+    int countGoodLocalMappoints() const;
+    int countCurrentStereoObservations() const;
     std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> getCorresponding(int frame_count_l, int frame_count_r, bool only_good = false);
     void setPointFeatureDepth(const Eigen::VectorXd &x);
     void removeFailures();

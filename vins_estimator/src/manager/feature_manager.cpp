@@ -618,6 +618,31 @@ KeyframeGoodPointRecordList FeatureManager::collectGoodKeyframePoints() const
     return records;
 }
 
+int FeatureManager::countGoodLocalMappoints() const
+{
+    int count = 0;
+    for (const auto &kv : local_mappoints)
+    {
+        if (kv.second && kv.second->IsGood())
+            ++count;
+    }
+    return count;
+}
+
+int FeatureManager::countCurrentStereoObservations() const
+{
+    int count = 0;
+    for (const auto &it_per_id : point_manager->pointFeature)
+    {
+        if (it_per_id.point_feature_frame.empty())
+            continue;
+        const PointFeatureFrame &obs = it_per_id.point_feature_frame.back();
+        if (obs.camera_id == 0 && obs.is_stereo)
+            ++count;
+    }
+    return count;
+}
+
 std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> FeatureManager::getCorresponding(int frame_count_l, int frame_count_r, bool only_good)
 {
     std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> corres;

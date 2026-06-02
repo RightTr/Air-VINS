@@ -273,8 +273,8 @@ int main(int argc, char **argv)
     double rectify_alpha = 0.0;
 
     pnh.param<std::string>("data_root", data_root, "/mnt/Data/homebrew_thermal/Nus/run_20250912_180927");
-    pnh.param<std::string>("left_dir", left_dir, "left_thermal/left_motion");
-    pnh.param<std::string>("right_dir", right_dir, "right_thermal/right_motion");
+    pnh.param<std::string>("left_dir", left_dir, "left_thermal/associated_left");
+    pnh.param<std::string>("right_dir", right_dir, "right_thermal/associated_right");
     pnh.param<std::string>("imu_file", imu_file, "realsense/imu/imu_synced.txt");
     pnh.param<std::string>("image0_topic", image0_topic, "/cam0/image_raw");
     pnh.param<std::string>("image1_topic", image1_topic, "/cam1/image_raw");

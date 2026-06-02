@@ -84,7 +84,7 @@ vprnet_loop_exclude_recent: 50
 
 enable_nuc_handle: 1
 
-max_solver_time: 0.08
+max_solver_time: 0.04
 max_num_iterations: 8
 keyframe_parallax: 5.0
 

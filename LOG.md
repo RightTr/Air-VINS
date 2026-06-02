@@ -1,37 +1,46 @@
 # LOG
 
-## 2026-05-22
+## Current Work
 
-- Migrated the deep feature frontend code from AirSLAM into `deepFeature/`
-- Migrated model files into the repo `output/`
-- Added a `deep_feature` switch in `FeatureTracker`
-- When enabled, replaced the original KLT optical flow frontend with `SuperPoint + PointMatcher`
-- Kept the backend `Estimator` and `FeatureManager` interfaces unchanged
-- Added frontend state cleanup in `Estimator::clearState()`
-- Updated `vins_estimator/CMakeLists.txt` to include TensorRT and the deep frontend sources
-- Added `deep_feature: 0` to the example configs
-- Updated image loading and track display code in `vins_estimator` to OpenCV4 APIs
-- Added C++17 compatibility settings for `camera_models`, `loop_fusion`, and `global_fusion`
-- Replaced remaining legacy OpenCV macros in `camera_models` with OpenCV4-compatible code so it builds in the current Docker environment
-- Switched the EuRoC stereo and stereo-IMU deep feature configs to `deep_feature_matcher: 0` so they use LightGlue by default.
+- Refactoring `FeatureManager` into a thin coordinator that owns shared tracking state and window state.
+- Splitting point and line logic into `PointFeatureManager` and `LineFeatureManager` under `vins_estimator/src/manager/`.
+- Keeping point-only and line-only algorithms in their own managers, while moving shared state queries and common policy checks to the top-level manager.
+- Removing redundant wrapper macros and duplicate guards, and tightening the manager layer logic.
+- Renaming the mapline observer API from `Obverser` to `Observer`.
+- Moving `deep_feature` header ownership into `deepFeature/` and removing the old copy from `featureTracker/`.
+- Stabilizing NUS thermal stereo-IMU handling, including NUC fallback, stereo rectification, and right-camera monocular fallback.
+- Keeping `line_ba` as the single switch for line inference, line BA, and line visualization.
 
-## NUS Thermal Stereo Updates
+## Loop Closure Work
 
-- Added a NUS thermal sequence publisher for `run_20250912_180927`.
-- Added launch and config files for pure stereo thermal VINS using `/cam0/image_raw` and `/cam1/image_raw`.
-- Added NUS thermal camera calibration files under `config/nus_thermal/`.
-- Added stereo rectification before feature detection, using the NUS thermal intrinsics and left-right extrinsics.
-- Updated the SLAM camera model to use the rectified virtual stereo intrinsics with zero distortion.
-- Updated the rectified stereo extrinsics so VINS receives a consistent virtual stereo rig.
-- Added optional IMU publishing from `realsense/imu/imu_synced.txt` on `/imu0`.
-- Added a NUS thermal stereo-IMU config and launch file.
-- Kept the raw D455f IMU frame as the VINS body frame and computed `body_T_cam0/body_T_cam1` for the rectified thermal virtual cameras.
-- Fixed IMU replay ordering so every image frame is preceded by IMU samples through the first sample at or after the image timestamp.
-- Added NUC/freeze handling for thermal stereo.
-- When one thermal camera freezes, VINS falls back to monocular tracking using the other camera.
-- When both thermal cameras freeze, visual updates are skipped and IMU propagation continues.
-- Disabled stereo observations during NUC fallback so same-frame stereo triangulation is not used on frozen frames.
-- Propagated the primary observation camera id through feature tracking, feature management, PnP, triangulation, reprojection checks, and visual residual construction.
-- Ensured right-camera monocular fallback uses `body_T_cam1` instead of treating right images as left-camera observations.
-- Enabled NUC handling in both NUS thermal stereo and stereo-IMU configs.
-- Verified the updated package builds inside the `vinsfusion` Docker environment with `catkin_make`.
+- Integrating VPRNet / EigenPlaces as the loop descriptor path.
+- Updating ONNX export to use `640x480` input.
+- Aligning the TensorRT model export path with the loop_fusion runtime.
+- Adding VPRNet loop-candidate debug logging.
+- Adding a cooldown mechanism so the same old keyframe is not reused repeatedly in a short interval.
+- Keeping VPRNet loop closure as an additional retrieval path on top of the existing keyframe verification flow.
+
+## Frontend and Tracking Work
+
+- Migrating the deep feature frontend into `deepFeature/` and keeping the `FeatureTracker` interface stable.
+- Adding a `deep_feature` switch in the tracker frontend.
+- When deep feature inference is enabled but fails, skipping that frame instead of falling back to KLT.
+- Adjusting keyframe selection so it is less tightly coupled to windowed BA.
+- Maintaining thermal stereo-IMU replay and feature tracking under the NUS thermal dataset.
+
+## Recent Milestones
+
+- Added loop-closure cooldown logic.
+- Tightened the code logic in the manager and loop-fusion layers.
+- Optimized the `FeatureManager` code structure.
+- Removed deep feature code from `featureTracker`.
+- Migrated files into the manager folder.
+- Fixed the deep-feature loop-closure PGO bug.
+- Added deep-feature-based PGO.
+- Decoupled keyframe selection from windowed BA.
+- Added stereo-IMU good-point initialization.
+- Simplified the code structure around `ros_utils.h`.
+- Added the AirSLAM-style keyframe selection strategy.
+- Added TensorRT inference for the EigenPlaces / EightPlaces engine.
+- Initialized NetVLAD support.
+- Added mapline lifecycle handling from AirSLAM.
