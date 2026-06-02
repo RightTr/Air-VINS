@@ -101,11 +101,13 @@ private:
 	int earliest_loop_index;
 	int base_sequence;
 	bool use_imu;
-	LoopDescriptorType loop_descriptor_type;
-	double vprnet_loop_threshold;
-	double vprnet_loop_margin;
-	int vprnet_loop_exclude_recent;
-	class DeepFeature* loop_deep_feature;
+		LoopDescriptorType loop_descriptor_type;
+		double vprnet_loop_threshold;
+		double vprnet_loop_margin;
+		int vprnet_loop_exclude_recent;
+		int vprnet_loop_cooldown;
+		map<int, int> vprnet_last_loop_frame;
+		class DeepFeature* loop_deep_feature;
 
 	BriefDatabase db;
 	BriefVocabulary* voc;

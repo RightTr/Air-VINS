@@ -370,7 +370,6 @@ void process()
                 KeyFrame* keyframe = new KeyFrame(pose_msg->header.stamp.toSec(), frame_index, T, R, image,
                                    point_3d, point_2d_uv, point_2d_normal, sequence);   
                 keyframe->setGoodPointDeepFeatures(good_point_deep_features);
-                printf("[loop_fusion] keyframe %d good_points=%d\n", frame_index, good_point_count);
                 if (loop_deep_feature) {
                     Eigen::Matrix<float, 259, Eigen::Dynamic> deep_points;
                     if (loop_deep_feature->extractPoints(image, deep_points)) {
@@ -384,15 +383,12 @@ void process()
                     if (vprnet_extractor->infer(image, descriptor)) {
                         std::vector<float> vprnet_vector(descriptor.data(), descriptor.data() + descriptor.size());
                         keyframe->setVPRNetDescriptor(vprnet_vector);
-                        ROS_INFO_STREAM_THROTTLE(5.0, "VPRNet descriptor computed, dim=" << descriptor.size());
                     } else {
                         ROS_WARN_STREAM_THROTTLE(5.0, "VPRNet inference failed for frame " << frame_index);
                     }
                 }
                 m_process.lock();
                 start_flag = 1;
-                printf("[loop_fusion] keyframe %d seq=%d pose_t=(%.3f %.3f %.3f) point_num=%zu\n",
-                       frame_index, sequence, T.x(), T.y(), T.z(), point_msg->points.size());
                 posegraph.addKeyFrame(keyframe, 1);
                 m_process.unlock();
                 frame_index++;
@@ -495,7 +491,7 @@ int main(int argc, char **argv)
     }
     posegraph.setLoopDescriptorType(loop_descriptor_method);
     double vprnet_loop_threshold = 0.75;
-    double vprnet_loop_margin = 0.05;
+    double vprnet_loop_margin = 0.0;
     int vprnet_loop_exclude_recent = 50;
     if (!fsSettings["vprnet_loop_threshold"].empty()) {
         fsSettings["vprnet_loop_threshold"] >> vprnet_loop_threshold;

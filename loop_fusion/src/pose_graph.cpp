@@ -35,6 +35,7 @@ PoseGraph::PoseGraph()
     vprnet_loop_threshold = 0.75;
     vprnet_loop_margin = 0.05;
     vprnet_loop_exclude_recent = 50;
+    vprnet_loop_cooldown = 50;
     loop_deep_feature = nullptr;
 }
 
@@ -137,6 +138,9 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
 
         if (cur_kf->findConnection(old_kf, loop_deep_feature))
         {
+            if (loop_descriptor_type == LoopDescriptorType::VPRNet)
+                vprnet_last_loop_frame[old_kf->index] = cur_kf->index;
+
             if (earliest_loop_index > loop_index || earliest_loop_index == -1)
                 earliest_loop_index = loop_index;
 
@@ -481,6 +485,11 @@ int PoseGraph::detectLoopVPRNet(KeyFrame* keyframe, int frame_index)
             if (!old_kf || old_kf->index >= frame_index - vprnet_loop_exclude_recent) {
                 continue;
             }
+            const auto last_loop_it = vprnet_last_loop_frame.find(old_kf->index);
+            if (last_loop_it != vprnet_last_loop_frame.end() &&
+                frame_index - last_loop_it->second < vprnet_loop_cooldown) {
+                continue;
+            }
             if (!old_kf->hasVPRNetDescriptor()) {
                 continue;
             }
@@ -494,6 +503,7 @@ int PoseGraph::detectLoopVPRNet(KeyFrame* keyframe, int frame_index)
     }
 
     if (scores.empty()) {
+        printf("[loop_fusion][vprnet] frame=%d candidates=0 result=-1\n", frame_index);
         return -1;
     }
 
@@ -505,9 +515,13 @@ int PoseGraph::detectLoopVPRNet(KeyFrame* keyframe, int frame_index)
     const double best_score = scores.front().second;
     const double second_score = scores.size() > 1 ? scores[1].second : -1.0;
     if (best_score < vprnet_loop_threshold) {
+        printf("[loop_fusion][vprnet] frame=%d candidates=%zu best=%.4f second=%.4f threshold=%.4f margin=%.4f result=-1\n",
+               frame_index, scores.size(), best_score, second_score, vprnet_loop_threshold, vprnet_loop_margin);
         return -1;
     }
     if (scores.size() > 1 && (best_score - second_score) < vprnet_loop_margin) {
+        printf("[loop_fusion][vprnet] frame=%d candidates=%zu best=%.4f second=%.4f threshold=%.4f margin=%.4f result=-1\n",
+               frame_index, scores.size(), best_score, second_score, vprnet_loop_threshold, vprnet_loop_margin);
         return -1;
     }
 
@@ -518,6 +532,8 @@ int PoseGraph::detectLoopVPRNet(KeyFrame* keyframe, int frame_index)
         image_pool[frame_index] = compressed_image;
     }
 
+    printf("[loop_fusion][vprnet] frame=%d candidates=%zu best=%.4f second=%.4f threshold=%.4f margin=%.4f result=%d\n",
+           frame_index, scores.size(), best_score, second_score, vprnet_loop_threshold, vprnet_loop_margin, scores.front().first);
     return scores.front().first;
 }
 
