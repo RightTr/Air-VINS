@@ -350,163 +350,93 @@ bool KeyFrame::findConnection(KeyFrame* old_kf, DeepFeature* deep_feature)
 	vector<uchar> status;
 	bool use_deep_match = deep_feature && hasDeepFeatures() && old_kf->hasGoodPointDeepFeatures();
 
-	if (use_deep_match)
+	Eigen::Vector3d relative_t = Eigen::Vector3d::Zero();
+	Quaterniond relative_q = Quaterniond::Identity();
+	double relative_yaw = 0.0;
+	if (!use_deep_match)
 	{
-		std::vector<cv::DMatch> deep_matches;
-		if (deep_feature->matchPoints(old_kf->getGoodPointDeepFeatures(), getDeepFeatures(), deep_matches, true))
-		{
-			for (const auto &match : deep_matches)
-			{
-				const int old_idx = match.queryIdx;
-				const int cur_idx = match.trainIdx;
-				if (old_idx < 0 || old_idx >= old_kf->getGoodPointDeepFeatures().cols())
-					continue;
-				if (cur_idx < 0 || cur_idx >= getDeepFeatures().cols())
-					continue;
-
-				const cv::Point2f old_uv(
-					old_kf->getGoodPointDeepFeatures()(1, old_idx),
-					old_kf->getGoodPointDeepFeatures()(2, old_idx));
-				const cv::Point2f cur_uv(
-					getDeepFeatures()(1, cur_idx),
-					getDeepFeatures()(2, cur_idx));
-				Eigen::Vector3d old_norm_p, cur_norm_p;
-				m_camera->liftProjective(Eigen::Vector2d(old_uv.x, old_uv.y), old_norm_p);
-				m_camera->liftProjective(Eigen::Vector2d(cur_uv.x, cur_uv.y), cur_norm_p);
-				const cv::Point2f old_uv_norm(old_norm_p.x() / old_norm_p.z(), old_norm_p.y() / old_norm_p.z());
-				const cv::Point2f cur_uv_norm(cur_norm_p.x() / cur_norm_p.z(), cur_norm_p.y() / cur_norm_p.z());
-
-				if (old_idx < 0 || old_idx >= static_cast<int>(old_kf->point_3d.size()))
-					continue;
-
-				matched_3d.push_back(old_kf->point_3d[old_idx]);
-				matched_2d_old.push_back(old_uv);
-				matched_2d_old_norm.push_back(old_uv_norm);
-				matched_2d_cur.push_back(cur_uv);
-				matched_2d_cur_norm.push_back(cur_uv_norm);
-			}
-		}
-		printf("[loop_fusion][deep] cur=%d old=%d raw_deep_matches=%zu geom_matches=%zu\n",
-		       index, old_kf->index, deep_matches.size(), matched_3d.size());
+		printf("[loop_fusion][deep] cur=%d old=%d skip: deep features unavailable\n",
+		       index, old_kf->index);
+		return false;
 	}
 
-	Eigen::Vector3d relative_t;
-	Quaterniond relative_q;
-	double relative_yaw;
-	if (use_deep_match)
+	std::vector<cv::DMatch> deep_matches;
+	if (deep_feature->matchPoints(old_kf->getGoodPointDeepFeatures(), getDeepFeatures(), deep_matches, true))
 	{
-		if ((int)matched_2d_cur.size() <= MIN_LOOP_NUM)
+		for (const auto &match : deep_matches)
 		{
-			printf("[loop_fusion][deep] cur=%d old=%d fail: matched_2d=%zu <= MIN_LOOP_NUM=%d\n",
-			       index, old_kf->index, matched_2d_cur.size(), MIN_LOOP_NUM);
-			return false;
+			const int old_idx = match.queryIdx;
+			const int cur_idx = match.trainIdx;
+			if (old_idx < 0 || old_idx >= old_kf->getGoodPointDeepFeatures().cols())
+				continue;
+			if (cur_idx < 0 || cur_idx >= getDeepFeatures().cols())
+				continue;
+
+			const cv::Point2f old_uv(
+				old_kf->getGoodPointDeepFeatures()(1, old_idx),
+				old_kf->getGoodPointDeepFeatures()(2, old_idx));
+			const cv::Point2f cur_uv(
+				getDeepFeatures()(1, cur_idx),
+				getDeepFeatures()(2, cur_idx));
+			Eigen::Vector3d old_norm_p, cur_norm_p;
+			m_camera->liftProjective(Eigen::Vector2d(old_uv.x, old_uv.y), old_norm_p);
+			m_camera->liftProjective(Eigen::Vector2d(cur_uv.x, cur_uv.y), cur_norm_p);
+			const cv::Point2f old_uv_norm(old_norm_p.x() / old_norm_p.z(), old_norm_p.y() / old_norm_p.z());
+			const cv::Point2f cur_uv_norm(cur_norm_p.x() / cur_norm_p.z(), cur_norm_p.y() / cur_norm_p.z());
+
+			if (old_idx < 0 || old_idx >= static_cast<int>(old_kf->point_3d.size()))
+				continue;
+
+			matched_3d.push_back(old_kf->point_3d[old_idx]);
+			matched_2d_old.push_back(old_uv);
+			matched_2d_old_norm.push_back(old_uv_norm);
+			matched_2d_cur.push_back(cur_uv);
+			matched_2d_cur_norm.push_back(cur_uv_norm);
 		}
+	}
+	printf("[loop_fusion][deep] cur=%d old=%d raw_deep_matches=%zu geom_matches=%zu\n",
+	       index, old_kf->index, deep_matches.size(), matched_3d.size());
 
-		Eigen::Vector3d PnP_T_cur;
-		Eigen::Matrix3d PnP_R_cur;
-		status.clear();
-	    PnPRANSAC(matched_2d_cur_norm, matched_3d, status, PnP_T_cur, PnP_R_cur);
-	    reduceVector(matched_2d_cur, status);
-	    reduceVector(matched_2d_old, status);
-	    reduceVector(matched_2d_cur_norm, status);
-	    reduceVector(matched_2d_old_norm, status);
-	    reduceVector(matched_3d, status);
-
-	    if ((int)matched_2d_cur.size() > MIN_LOOP_NUM)
-	    {
-	        Vector3d old_T, cur_T;
-	        Matrix3d old_R, cur_R;
-	        old_kf->getPose(old_T, old_R);
-	        cur_T = PnP_T_cur;
-	        cur_R = PnP_R_cur;
-	        relative_t = old_R.transpose() * (cur_T - old_T);
-	        relative_q = old_R.transpose() * cur_R;
-	        relative_yaw = Utility::normalizeAngle(Utility::R2ypr(cur_R).x() - Utility::R2ypr(old_R).x());
-	        if (abs(relative_yaw) < 30.0 && relative_t.norm() < 20.0)
-	        {
-	        	has_loop = true;
-	        	loop_index = old_kf->index;
-	        	loop_info << relative_t.x(), relative_t.y(), relative_t.z(),
-	        	             relative_q.w(), relative_q.x(), relative_q.y(), relative_q.z(),
-	        	             relative_yaw;
-	        	printf("[loop_fusion][deep] cur=%d old=%d success inliers=%zu rel_t_norm=%.3f rel_yaw=%.3f\n",
-	        	       index, old_kf->index, matched_2d_cur.size(), relative_t.norm(), relative_yaw);
-	            return true;
-	        }
-	    }
-	    printf("[loop_fusion][deep] cur=%d old=%d fail after pnp inliers=%zu rel_t_norm=%.3f rel_yaw=%.3f, skip this loop\n",
-	           index, old_kf->index, matched_2d_cur.size(), relative_t.norm(), relative_yaw);
-	    return false;
+	if ((int)matched_2d_cur.size() <= MIN_LOOP_NUM)
+	{
+		printf("[loop_fusion][deep] cur=%d old=%d fail: matched_2d=%zu <= MIN_LOOP_NUM=%d\n",
+		       index, old_kf->index, matched_2d_cur.size(), MIN_LOOP_NUM);
+		return false;
 	}
 
-	matched_3d = point_3d;
-	matched_2d_cur = point_2d_uv;
-	matched_2d_cur_norm = point_2d_norm;
-
-	TicToc t_match;
-	#if 0
-		if (DEBUG_IMAGE)    
-	    {
-	        cv::Mat gray_img, loop_match_img;
-	        cv::Mat old_img = old_kf->image;
-	        cv::hconcat(image, old_img, gray_img);
-	        cvtColor(gray_img, loop_match_img, CV_GRAY2RGB);
-	        for(int i = 0; i< (int)point_2d_uv.size(); i++)
-	        {
-	            cv::Point2f cur_pt = point_2d_uv[i];
-	            cv::circle(loop_match_img, cur_pt, 5, cv::Scalar(0, 255, 0));
-	        }
-	        for(int i = 0; i< (int)old_kf->keypoints.size(); i++)
-	        {
-	            cv::Point2f old_pt = old_kf->keypoints[i].pt;
-	            old_pt.x += COL;
-	            cv::circle(loop_match_img, old_pt, 5, cv::Scalar(0, 255, 0));
-	        }
-	        ostringstream path;
-	        path << "/home/tony-ws1/raw_data/loop_image/"
-	                << index << "-"
-	                << old_kf->index << "-" << "0raw_point.jpg";
-	        cv::imwrite( path.str().c_str(), loop_match_img);
-	    }
-	#endif
-	searchByBRIEFDes(matched_2d_old, matched_2d_old_norm, status, old_kf->brief_descriptors, old_kf->keypoints, old_kf->keypoints_norm);
+	Eigen::Vector3d PnP_T_cur;
+	Eigen::Matrix3d PnP_R_cur;
+	status.clear();
+	PnPRANSAC(matched_2d_cur_norm, matched_3d, status, PnP_T_cur, PnP_R_cur);
 	reduceVector(matched_2d_cur, status);
 	reduceVector(matched_2d_old, status);
 	reduceVector(matched_2d_cur_norm, status);
 	reduceVector(matched_2d_old_norm, status);
 	reduceVector(matched_3d, status);
 
-	status.clear();
-	Eigen::Vector3d PnP_T_old;
-	Eigen::Matrix3d PnP_R_old;
 	if ((int)matched_2d_cur.size() > MIN_LOOP_NUM)
 	{
-	    PnPRANSAC(matched_2d_old_norm, matched_3d, status, PnP_T_old, PnP_R_old);
-	    reduceVector(matched_2d_cur, status);
-	    reduceVector(matched_2d_old, status);
-	    reduceVector(matched_2d_cur_norm, status);
-	    reduceVector(matched_2d_old_norm, status);
-	    reduceVector(matched_3d, status);
+		Vector3d old_T, cur_T;
+		Matrix3d old_R, cur_R;
+		old_kf->getPose(old_T, old_R);
+		cur_T = PnP_T_cur;
+		cur_R = PnP_R_cur;
+		relative_t = old_R.transpose() * (cur_T - old_T);
+		relative_q = old_R.transpose() * cur_R;
+		relative_yaw = Utility::normalizeAngle(Utility::R2ypr(cur_R).x() - Utility::R2ypr(old_R).x());
+		if (abs(relative_yaw) < 30.0 && relative_t.norm() < 20.0)
+		{
+			has_loop = true;
+			loop_index = old_kf->index;
+			loop_info << relative_t.x(), relative_t.y(), relative_t.z(),
+			             relative_q.w(), relative_q.x(), relative_q.y(), relative_q.z(),
+			             relative_yaw;
+			printf("[loop_fusion][deep] cur=%d old=%d success inliers=%zu rel_t_norm=%.3f rel_yaw=%.3f\n",
+			       index, old_kf->index, matched_2d_cur.size(), relative_t.norm(), relative_yaw);
+			return true;
+		}
 	}
-
-	if ((int)matched_2d_cur.size() > MIN_LOOP_NUM)
-	{
-	    relative_t = PnP_R_old.transpose() * (origin_vio_T - PnP_T_old);
-	    relative_q = PnP_R_old.transpose() * origin_vio_R;
-	    relative_yaw = Utility::normalizeAngle(Utility::R2ypr(origin_vio_R).x() - Utility::R2ypr(PnP_R_old).x());
-	    if (abs(relative_yaw) < 30.0 && relative_t.norm() < 20.0)
-	    {
-	    	has_loop = true;
-	    	loop_index = old_kf->index;
-	    	loop_info << relative_t.x(), relative_t.y(), relative_t.z(),
-	    	             relative_q.w(), relative_q.x(), relative_q.y(), relative_q.z(),
-	    	             relative_yaw;
-	        printf("[loop_fusion][brief] cur=%d old=%d success inliers=%zu rel_t_norm=%.3f rel_yaw=%.3f\n",
-	               index, old_kf->index, matched_2d_cur.size(), relative_t.norm(), relative_yaw);
-	        return true;
-	    }
-	}
-	printf("[loop_fusion][brief] cur=%d old=%d fail inliers=%zu rel_t_norm=%.3f rel_yaw=%.3f\n",
+	printf("[loop_fusion][deep] cur=%d old=%d fail after pnp inliers=%zu rel_t_norm=%.3f rel_yaw=%.3f, skip this loop\n",
 	       index, old_kf->index, matched_2d_cur.size(), relative_t.norm(), relative_yaw);
 	return false;
 }
