@@ -1758,6 +1758,11 @@ void Estimator::getPoseInWorldFrame(int index, Eigen::Matrix4d &T)
 
 void Estimator::predictPtsInNextFrame()
 {
+    if (!REPROJECT_ADD_EN)
+    {
+        featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
+        return;
+    }
     if(frame_count < 2)
     {
         featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
