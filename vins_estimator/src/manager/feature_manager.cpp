@@ -98,34 +98,48 @@ bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureI
     if (anchor_camera_id < 0 || anchor_camera_id >= NUM_OF_CAM)
         return false;
 
-    if (STEREO && anchor_camera_id == 0 && point_feature.point_feature_frame[0].is_stereo)
+    const Eigen::Vector3d anchor_t = fm.localPs()[anchor_frame] + fm.localRs()[anchor_frame] * fm.localTic()[anchor_camera_id];
+    const Eigen::Matrix3d anchor_R = fm.localRs()[anchor_frame] * fm.localRic()[anchor_camera_id];
+
+    const PointFeatureFrame &latest_obs = point_feature.point_feature_frame.back();
+    if (STEREO && latest_obs.camera_id == 0 && latest_obs.is_stereo)
     {
+        const int stereo_frame = point_feature.endFrame();
+        if (stereo_frame < 0 || stereo_frame > WINDOW_SIZE)
+            goto multi_view_fallback;
+
         Eigen::Matrix<double, 3, 4> leftPose;
-        Eigen::Vector3d t0 = fm.localPs()[anchor_frame] + fm.localRs()[anchor_frame] * fm.localTic()[0];
-        Eigen::Matrix3d R0 = fm.localRs()[anchor_frame] * fm.localRic()[0];
+        Eigen::Vector3d t0 = fm.localPs()[stereo_frame] + fm.localRs()[stereo_frame] * fm.localTic()[0];
+        Eigen::Matrix3d R0 = fm.localRs()[stereo_frame] * fm.localRic()[0];
         leftPose.leftCols<3>() = R0.transpose();
         leftPose.rightCols<1>() = -R0.transpose() * t0;
 
         Eigen::Matrix<double, 3, 4> rightPose;
-        Eigen::Vector3d t1 = fm.localPs()[anchor_frame] + fm.localRs()[anchor_frame] * fm.localTic()[1];
-        Eigen::Matrix3d R1 = fm.localRs()[anchor_frame] * fm.localRic()[1];
+        Eigen::Vector3d t1 = fm.localPs()[stereo_frame] + fm.localRs()[stereo_frame] * fm.localTic()[1];
+        Eigen::Matrix3d R1 = fm.localRs()[stereo_frame] * fm.localRic()[1];
         rightPose.leftCols<3>() = R1.transpose();
         rightPose.rightCols<1>() = -R1.transpose() * t1;
 
-        const Eigen::Vector2d point0 = point_feature.point_feature_frame[0].point.head(2);
-        const Eigen::Vector2d point1 = point_feature.point_feature_frame[0].pointRight.head(2);
         Eigen::Vector3d point3d;
-        triangulatePoint(leftPose, rightPose, point0, point1, point3d);
+        triangulatePoint(leftPose, rightPose, latest_obs.point.head(2), latest_obs.pointRight.head(2), point3d);
 
         const Eigen::Vector3d localPoint = leftPose.leftCols<3>() * point3d + leftPose.rightCols<1>();
-        depth = localPoint.z();
-        if (!isReliableTriangulatedDepth(depth))
-            return false;
+        if (!point3d.allFinite() || !localPoint.allFinite())
+            goto multi_view_fallback;
 
-        point_w = fm.localRs()[anchor_frame] * (fm.localRic()[0] * localPoint + fm.localTic()[0]) + fm.localPs()[anchor_frame];
-        return point_w.allFinite();
+        point_w = fm.localRs()[stereo_frame] * (fm.localRic()[0] * localPoint + fm.localTic()[0]) + fm.localPs()[stereo_frame];
+        if (!point_w.allFinite())
+            goto multi_view_fallback;
+
+        const Eigen::Vector3d anchor_point_cam = anchor_R.transpose() * (point_w - anchor_t);
+        depth = anchor_point_cam.z();
+        if (isReliableTriangulatedDepth(depth))
+            return true;
+
+        goto multi_view_fallback;
     }
 
+multi_view_fallback:
     if (point_feature.point_feature_frame.size() < 2)
         return false;
 
@@ -164,8 +178,6 @@ bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureI
     if (!point_w.allFinite())
         return false;
 
-    const Eigen::Vector3d anchor_t = fm.localPs()[anchor_frame] + fm.localRs()[anchor_frame] * fm.localTic()[anchor_camera_id];
-    const Eigen::Matrix3d anchor_R = fm.localRs()[anchor_frame] * fm.localRic()[anchor_camera_id];
     const Eigen::Vector3d anchor_point_cam = anchor_R.transpose() * (point_w - anchor_t);
     depth = anchor_point_cam.z();
     if (!isReliableTriangulatedDepth(depth))
@@ -242,23 +254,16 @@ void markMappointFromPointFeature(FeatureManager &fm, PointFeatureId &point_feat
 
     if (mappoint->IsUnTriangulated())
     {
-        if (mappoint->ObverserNum() > 2)
+        Vector3d triangulated_point = Vector3d::Zero();
+        double triangulated_depth = -1.0;
+        if (triangulateMappointWorldPoint(fm, point_feature, triangulated_point, triangulated_depth))
         {
-            Vector3d triangulated_point = Vector3d::Zero();
-            double triangulated_depth = -1.0;
-            if (triangulateMappointWorldPoint(fm, point_feature, triangulated_point, triangulated_depth))
-            {
-                mappoint->SetPosition(triangulated_point);
-                mappoint->SetGood();
-                point_feature.estimated_depth = triangulated_depth;
-                point_feature.reliable_depth = true;
-                point_feature.solve_flag = 1;
-                point_feature.depth_fail_count = 0;
-            }
-            else
-            {
-                mappoint->SetUnTriangulated();
-            }
+            mappoint->SetPosition(triangulated_point);
+            mappoint->SetGood();
+            point_feature.estimated_depth = triangulated_depth;
+            point_feature.reliable_depth = true;
+            point_feature.solve_flag = 1;
+            point_feature.depth_fail_count = 0;
         }
         else
         {

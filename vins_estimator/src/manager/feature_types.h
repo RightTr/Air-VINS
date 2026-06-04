@@ -150,7 +150,7 @@ class PointFeatureId
     {
     }
 
-    int endFrame();
+    int endFrame() const;
 };
 
 class LinePerFrame
