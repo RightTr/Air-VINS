@@ -101,12 +101,10 @@ bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureI
     const Eigen::Vector3d anchor_t = fm.localPs()[anchor_frame] + fm.localRs()[anchor_frame] * fm.localTic()[anchor_camera_id];
     const Eigen::Matrix3d anchor_R = fm.localRs()[anchor_frame] * fm.localRic()[anchor_camera_id];
 
-    const PointFeatureFrame &latest_obs = point_feature.point_feature_frame.back();
-    if (STEREO && latest_obs.camera_id == 0 && latest_obs.is_stereo)
+    const PointFeatureFrame &anchor_obs = point_feature.point_feature_frame.front();
+    if (STEREO && anchor_obs.camera_id == 0 && anchor_obs.is_stereo)
     {
-        const int stereo_frame = point_feature.endFrame();
-        if (stereo_frame < 0 || stereo_frame > WINDOW_SIZE)
-            goto multi_view_fallback;
+        const int stereo_frame = anchor_frame;
 
         Eigen::Matrix<double, 3, 4> leftPose;
         Eigen::Vector3d t0 = fm.localPs()[stereo_frame] + fm.localRs()[stereo_frame] * fm.localTic()[0];
@@ -121,7 +119,7 @@ bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureI
         rightPose.rightCols<1>() = -R1.transpose() * t1;
 
         Eigen::Vector3d point3d;
-        triangulatePoint(leftPose, rightPose, latest_obs.point.head(2), latest_obs.pointRight.head(2), point3d);
+        triangulatePoint(leftPose, rightPose, anchor_obs.point.head(2), anchor_obs.pointRight.head(2), point3d);
 
         const Eigen::Vector3d localPoint = leftPose.leftCols<3>() * point3d + leftPose.rightCols<1>();
         if (!point3d.allFinite() || !localPoint.allFinite())
@@ -254,6 +252,11 @@ void markMappointFromPointFeature(FeatureManager &fm, PointFeatureId &point_feat
 
     if (mappoint->IsUnTriangulated())
     {
+        if (mappoint->ObverserNum() <= 2)
+        {
+            mappoint->SetUnTriangulated();
+            return;
+        }
         Vector3d triangulated_point = Vector3d::Zero();
         double triangulated_depth = -1.0;
         if (triangulateMappointWorldPoint(fm, point_feature, triangulated_point, triangulated_depth))

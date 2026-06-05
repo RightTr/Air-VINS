@@ -106,13 +106,11 @@ bool PointFeatureManager::triangulateMappointWorldPoint(const PointFeatureId &po
     const Eigen::Vector3d anchor_t = owner->localPs()[anchor_frame] + owner->localRs()[anchor_frame] * owner->localTic()[anchor_camera_id];
     const Eigen::Matrix3d anchor_R = owner->localRs()[anchor_frame] * owner->localRic()[anchor_camera_id];
 
-    const PointFeatureFrame &latest_obs = point_feature.point_feature_frame.back();
-    if (STEREO && latest_obs.camera_id == 0 && latest_obs.is_stereo)
+    const PointFeatureFrame &anchor_obs = point_feature.point_feature_frame.front();
+    if (STEREO && anchor_obs.camera_id == 0 && anchor_obs.is_stereo)
     {
         Eigen::Matrix<double, 3, 4> leftPose;
-        const int stereo_frame = point_feature.endFrame();
-        if (stereo_frame < 0 || stereo_frame > WINDOW_SIZE)
-            goto multi_view_fallback;
+        const int stereo_frame = anchor_frame;
 
         Eigen::Vector3d t0 = owner->localPs()[stereo_frame] + owner->localRs()[stereo_frame] * owner->localTic()[0];
         Eigen::Matrix3d R0 = owner->localRs()[stereo_frame] * owner->localRic()[0];
@@ -125,8 +123,8 @@ bool PointFeatureManager::triangulateMappointWorldPoint(const PointFeatureId &po
         rightPose.leftCols<3>() = R1.transpose();
         rightPose.rightCols<1>() = -R1.transpose() * t1;
 
-        const Eigen::Vector2d point0 = latest_obs.point.head(2);
-        const Eigen::Vector2d point1 = latest_obs.pointRight.head(2);
+        const Eigen::Vector2d point0 = anchor_obs.point.head(2);
+        const Eigen::Vector2d point1 = anchor_obs.pointRight.head(2);
         Eigen::Vector3d point3d;
         triangulatePoint(leftPose, rightPose, point0, point1, point3d);
 
@@ -235,6 +233,11 @@ void PointFeatureManager::markMappointFromPointFeature(PointFeatureId &point_fea
 
     if (mappoint->IsUnTriangulated())
     {
+        if (mappoint->ObverserNum() <= 2)
+        {
+            mappoint->SetUnTriangulated();
+            return;
+        }
         Vector3d triangulated_point = Vector3d::Zero();
         double triangulated_depth = -1.0;
         if (triangulateMappointWorldPoint(point_feature, triangulated_point, triangulated_depth))
