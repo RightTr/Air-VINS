@@ -354,7 +354,8 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
         if (it_per_id.start_frame > WINDOW_SIZE * 3.0 / 4.0 || it_per_id.solve_flag != 1)
             continue;
         int imu_i = it_per_id.start_frame;
-        Vector3d pts_i = it_per_id.point_feature_frame[0].point * it_per_id.estimated_depth;
+        const auto &anchor_obs = it_per_id.anchorObservation();
+        Vector3d pts_i = anchor_obs.point * it_per_id.estimated_depth;
         Vector3d w_pts_i = estimator.Rs[imu_i] * (estimator.ric[0] * pts_i + estimator.tic[0]) + estimator.Ps[imu_i];
 
         geometry_msgs::Point32 p;
@@ -383,7 +384,8 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
             && it_per_id.solve_flag == 1 )
         {
             int imu_i = it_per_id.start_frame;
-            Vector3d pts_i = it_per_id.point_feature_frame[0].point * it_per_id.estimated_depth;
+            const auto &anchor_obs = it_per_id.anchorObservation();
+            Vector3d pts_i = anchor_obs.point * it_per_id.estimated_depth;
             Vector3d w_pts_i = estimator.Rs[imu_i] * (estimator.ric[0] * pts_i + estimator.tic[0]) + estimator.Ps[imu_i];
 
             geometry_msgs::Point32 p;

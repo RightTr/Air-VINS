@@ -53,14 +53,14 @@ Vector3d pointFeatureDepthToWorldPoint(const FeatureManager &fm, const PointFeat
     if (!fm.hasLocalWindowState() || point_feature.point_feature_frame.empty())
         return Vector3d::Zero();
 
-    const int anchor_camera_id = point_feature.point_feature_frame[0].camera_id;
-    const int anchor_frame = point_feature.start_frame;
+    const int anchor_camera_id = point_feature.anchorObservation().camera_id;
+    const int anchor_frame = point_feature.anchorFrame();
     if (anchor_camera_id < 0 || anchor_camera_id >= NUM_OF_CAM)
         return Vector3d::Zero();
     if (anchor_frame < 0 || anchor_frame > WINDOW_SIZE)
         return Vector3d::Zero();
     const Vector3d pts_in_cam = fm.localRic()[anchor_camera_id] *
-                                (point_feature.estimated_depth * point_feature.point_feature_frame[0].point) +
+                                (point_feature.estimated_depth * point_feature.anchorObservation().point) +
                                 fm.localTic()[anchor_camera_id];
     return fm.localRs()[anchor_frame] * pts_in_cam + fm.localPs()[anchor_frame];
 }
@@ -70,8 +70,8 @@ double worldPointToPointFeatureDepth(const FeatureManager &fm, const PointFeatur
     if (!fm.hasLocalWindowState() || point_feature.point_feature_frame.empty())
         return -1.0;
 
-    const int anchor_frame = point_feature.start_frame;
-    const int anchor_camera_id = point_feature.point_feature_frame[0].camera_id;
+    const int anchor_frame = point_feature.anchorFrame();
+    const int anchor_camera_id = point_feature.anchorObservation().camera_id;
     if (anchor_frame < 0 || anchor_frame > WINDOW_SIZE)
         return -1.0;
     if (anchor_camera_id < 0 || anchor_camera_id >= NUM_OF_CAM)
@@ -91,8 +91,8 @@ bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureI
     if (!fm.hasLocalWindowState() || point_feature.point_feature_frame.empty())
         return false;
 
-    const int anchor_frame = point_feature.start_frame;
-    const int anchor_camera_id = point_feature.point_feature_frame[0].camera_id;
+    const int anchor_frame = point_feature.anchorFrame();
+    const int anchor_camera_id = point_feature.anchorObservation().camera_id;
     if (anchor_frame < 0 || anchor_frame > WINDOW_SIZE)
         return false;
     if (anchor_camera_id < 0 || anchor_camera_id >= NUM_OF_CAM)
@@ -101,7 +101,7 @@ bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureI
     const Eigen::Vector3d anchor_t = fm.localPs()[anchor_frame] + fm.localRs()[anchor_frame] * fm.localTic()[anchor_camera_id];
     const Eigen::Matrix3d anchor_R = fm.localRs()[anchor_frame] * fm.localRic()[anchor_camera_id];
 
-    const PointFeatureFrame &anchor_obs = point_feature.point_feature_frame.front();
+    const PointFeatureFrame &anchor_obs = point_feature.anchorObservation();
     if (STEREO && anchor_obs.camera_id == 0 && anchor_obs.is_stereo)
     {
         const int stereo_frame = anchor_frame;
@@ -354,12 +354,12 @@ void collectPointFeaturePnPCorrespondences(const FeatureManager &fm, int frameCn
         if (obs_index < 0 || static_cast<int>(point_feature.point_feature_frame.size()) < obs_index + 1)
             continue;
 
-        const int anchor_camera_id = point_feature.point_feature_frame[0].camera_id;
+        const int anchor_camera_id = point_feature.anchorObservation().camera_id;
         const int obs_camera_id = point_feature.point_feature_frame[obs_index].camera_id;
         if (obs_camera_id != active_camera_id_)
             continue;
 
-        const Vector3d point_in_cam = window_ric[anchor_camera_id] * (point_feature.point_feature_frame[0].point * point_feature.estimated_depth) + tic[anchor_camera_id];
+        const Vector3d point_in_cam = window_ric[anchor_camera_id] * (point_feature.anchorObservation().point * point_feature.estimated_depth) + tic[anchor_camera_id];
         const Vector3d point_in_world = Rs[point_feature.start_frame] * point_in_cam + Ps[point_feature.start_frame];
 
         pts3D.emplace_back(point_in_world.x(), point_in_world.y(), point_in_world.z());
@@ -942,8 +942,8 @@ void FeatureManager::removePointFeatureBackShiftDepth(Eigen::Matrix3d back_R0, E
             it->start_frame--;
         else
         {
-            const int old_camera_id = it->point_feature_frame[0].camera_id;
-            Eigen::Vector3d uv_i = it->point_feature_frame[0].point;
+            const int old_camera_id = it->anchorObservation().camera_id;
+            Eigen::Vector3d uv_i = it->anchorObservation().point;
             it->point_feature_frame.erase(it->point_feature_frame.begin());
             if (it->point_feature_frame.size() < 2)
             {
@@ -952,7 +952,7 @@ void FeatureManager::removePointFeatureBackShiftDepth(Eigen::Matrix3d back_R0, E
             }
             else
             {
-                const int new_camera_id = it->point_feature_frame[0].camera_id;
+                const int new_camera_id = it->anchorObservation().camera_id;
                 Eigen::Matrix3d marg_R = back_R0 * window_ric[old_camera_id];
                 Eigen::Vector3d marg_P = back_P0 + back_R0 * tic[old_camera_id];
                 Eigen::Matrix3d new_R = new_R0 * window_ric[new_camera_id];

@@ -519,13 +519,10 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         ROS_WARN_STREAM("invalid primary camera id " << primary_camera_id_ << ", fallback to 0");
         primary_camera_id_ = 0;
     }
-    if (primary_camera_id_ != primary_camera_id && allow_new_features)
-    {
-        resetTrackingState();
-        primary_camera_id = primary_camera_id_;
-    }
     if (DEEP_FEATURE)
     {
+        if (primary_camera_id_ != primary_camera_id)
+            primary_camera_id = primary_camera_id_;
         if (!deep_feature || !deep_feature->ready())
         {
             ROS_ERROR_THROTTLE(1.0, "deep feature is enabled but frontend is not ready; skip image tracking instead of using KLT");

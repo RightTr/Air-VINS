@@ -150,6 +150,21 @@ class PointFeatureId
     {
     }
 
+    int anchorFrame() const
+    {
+        return start_frame;
+    }
+
+    const PointFeatureFrame &anchorObservation() const
+    {
+        return point_feature_frame.front();
+    }
+
+    PointFeatureFrame &anchorObservation()
+    {
+        return point_feature_frame.front();
+    }
+
     int endFrame() const;
 };
 
