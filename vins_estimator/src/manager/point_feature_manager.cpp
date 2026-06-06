@@ -43,7 +43,7 @@ bool PointFeatureManager::knownLandmarksOnly() const
 
 bool PointFeatureManager::allowDepthInitialization() const
 {
-    return !knownLandmarksOnly();
+    return true;
 }
 
 bool PointFeatureManager::hasReliablePointDepth(const PointFeatureId &point_feature) const

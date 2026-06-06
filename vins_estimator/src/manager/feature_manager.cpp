@@ -25,7 +25,8 @@ bool knownLandmarksOnly(const FeatureManager &fm)
 
 bool allowDepthInitialization(const FeatureManager &fm)
 {
-    return !knownLandmarksOnly(fm);
+    (void)fm;
+    return true;
 }
 
 bool hasReliablePointDepth(const PointFeatureId &point_feature)
