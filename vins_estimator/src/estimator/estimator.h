@@ -117,9 +117,7 @@ class Estimator
     bool IMUAvailable(double t);
     void initFirstIMUPose(vector<pair<double, Eigen::Vector3d>> &accVector);
     bool stereoInitializationReady() const;
-    void updateLoopKeyframeDecision();
     bool should_marginalize_old;
-    bool is_loop_keyframe;
 
     enum SolverFlag
     {
@@ -183,9 +181,6 @@ class Estimator
     bool first_imu;
     bool is_valid, is_key;
     bool failure_occur;
-    int last_loop_keyframe_frame_count;
-    double last_loop_keyframe_parallax;
-    int processed_frame_count;
 
     vector<Vector3d> point_cloud;
     vector<Vector3d> margin_cloud;
@@ -201,8 +196,6 @@ class Estimator
     double para_Retrive_Pose[SIZE_POSE];
     double para_Td[1][1];
     double para_Tr[1][1];
-
-    int loop_window_index;
 
     MarginalizationInfo *last_marginalization_info;
     vector<double *> last_marginalization_parameter_blocks;

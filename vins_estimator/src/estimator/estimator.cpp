@@ -11,7 +11,6 @@
 #include "../utility/visualization.h"
 
 #include <algorithm>
-#include <limits>
 
 Estimator::Estimator(): f_manager{Rs}
 {
@@ -96,10 +95,6 @@ void Estimator::clearState()
 
     failure_occur = 0;
     should_marginalize_old = false;
-    is_loop_keyframe = false;
-    last_loop_keyframe_frame_count = -1;
-    last_loop_keyframe_parallax = 0.0;
-    processed_frame_count = 0;
 
     mProcess.unlock();
 }
@@ -469,60 +464,10 @@ bool Estimator::stereoInitializationReady() const
     return ready;
 }
 
-void Estimator::updateLoopKeyframeDecision()
-{
-    is_loop_keyframe = false;
-    if (solver_flag != NON_LINEAR || WINDOW_SIZE < 2)
-        return;
-
-    const int current_frame_count = processed_frame_count;
-    if (last_loop_keyframe_frame_count >= 0 && current_frame_count == last_loop_keyframe_frame_count)
-        return;
-
-    const auto good_points = f_manager.collectGoodKeyframePoints();
-    const int good_point_count = static_cast<int>(good_points.size());
-    const double current_parallax = f_manager.points().last_average_parallax;
-    const int frame_gap = (last_loop_keyframe_frame_count < 0) ? std::numeric_limits<int>::max()
-                                                               : current_frame_count - last_loop_keyframe_frame_count;
-    const bool frame_gate_open = frame_gap >= 5;
-    const bool force_by_frame = last_loop_keyframe_frame_count >= 0 && frame_gap >= 15;
-    const int min_good_points = force_by_frame ? std::max(10, KEYFRAME_MIN_NUM_MATCH / 3) : KEYFRAME_MIN_NUM_MATCH;
-    if (good_point_count < min_good_points)
-        return;
-
-    if (last_loop_keyframe_frame_count < 0)
-    {
-        is_loop_keyframe = true;
-    }
-    else
-    {
-        const int tracking_drop_threshold =
-            std::max(KEYFRAME_LOST_NUM_MATCH, static_cast<int>(KEYFRAME_TRACKING_POINT_RATE * KEYFRAME_MAX_NUM_MATCH));
-        const double parallax_growth_threshold = KEYFRAME_TRACKING_PARALLAX_RATE * MIN_PARALLAX * FOCAL_LENGTH;
-        const bool tracking_dropped = f_manager.points().last_point_feature_track_num <= tracking_drop_threshold;
-        const bool parallax_grew = current_parallax >= last_loop_keyframe_parallax + parallax_growth_threshold;
-        is_loop_keyframe = force_by_frame || frame_gate_open || tracking_dropped || parallax_grew;
-    }
-
-    if (is_loop_keyframe)
-    {
-        last_loop_keyframe_frame_count = current_frame_count;
-        last_loop_keyframe_parallax = current_parallax;
-        ROS_INFO_STREAM_THROTTLE(2.0, "[vins_estimator] loop keyframe selected: good_points="
-                                          << good_point_count
-                                          << " tracked=" << f_manager.points().last_point_feature_track_num
-                                          << " parallax=" << current_parallax
-                                          << " frame_gap=" << frame_gap
-                                          << " force_by_frame=" << force_by_frame);
-    }
-}
-
 void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
                              const LineFeatureFrameMap &lines, const double header, int active_camera_id)
 {
-    processed_frame_count++;
     should_marginalize_old = false;
-    is_loop_keyframe = false;
     ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
     if (f_manager.addPointFeatureCheckParallax(frame_count, image, td))
@@ -634,7 +579,6 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
                 f_manager.removeLineFailures();
                 solver_flag = NON_LINEAR;
                 slideWindow();
-                updateLoopKeyframeDecision();
                 ROS_INFO("Initialization finish!");
             }
         }
@@ -721,7 +665,6 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         last_R0 = Rs[0];
         last_P0 = Ps[0];
         updateLatestStates();
-        updateLoopKeyframeDecision();
     }  
 }
 
