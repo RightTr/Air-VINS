@@ -36,11 +36,6 @@ PointFeatureManager::PointFeatureManager(FeatureManager *owner, Matrix3d _Rs[])
     pending_keyframe_next_frame = false;
 }
 
-bool PointFeatureManager::knownLandmarksOnly() const
-{
-    return owner->trackingMode() != TRACKING_MODE_STEREO;
-}
-
 bool PointFeatureManager::allowDepthInitialization() const
 {
     return true;
@@ -148,17 +143,20 @@ multi_view_fallback:
     if (point_feature.point_feature_frame.size() < 2)
         return false;
 
-    Eigen::MatrixXd svd_A(2 * point_feature.point_feature_frame.size(), 4);
-    int svd_idx = 0;
-
+    size_t equation_rows = 0;
     for (size_t obs_idx = 0; obs_idx < point_feature.point_feature_frame.size(); ++obs_idx)
     {
-        const int frame_idx = point_feature.start_frame + static_cast<int>(obs_idx);
+        const PointFeatureFrame &obs = point_feature.point_feature_frame[obs_idx];
+        equation_rows += 2;
+        if (STEREO && obs.camera_id == 0 && obs.is_stereo)
+            equation_rows += 2;
+    }
+
+    Eigen::MatrixXd svd_A(equation_rows, 4);
+    int svd_idx = 0;
+    auto addObservationEquation = [&](int frame_idx, int camera_id, const Eigen::Vector3d &bearing) -> bool {
         if (frame_idx < 0 || frame_idx > WINDOW_SIZE)
             return false;
-
-        const PointFeatureFrame &obs = point_feature.point_feature_frame[obs_idx];
-        const int camera_id = obs.camera_id;
         if (camera_id < 0 || camera_id >= static_cast<int>(owner->localRic().size()))
             return false;
 
@@ -168,9 +166,23 @@ multi_view_fallback:
         P.leftCols<3>() = R.transpose();
         P.rightCols<1>() = -R.transpose() * t;
 
-        const Eigen::Vector3d f = obs.point.normalized();
+        const Eigen::Vector3d f = bearing.normalized();
         svd_A.row(svd_idx++) = f[0] * P.row(2) - P.row(0);
         svd_A.row(svd_idx++) = f[1] * P.row(2) - P.row(1);
+        return true;
+    };
+
+    for (size_t obs_idx = 0; obs_idx < point_feature.point_feature_frame.size(); ++obs_idx)
+    {
+        const int frame_idx = point_feature.start_frame + static_cast<int>(obs_idx);
+        const PointFeatureFrame &obs = point_feature.point_feature_frame[obs_idx];
+        if (!addObservationEquation(frame_idx, obs.camera_id, obs.point))
+            return false;
+        if (STEREO && obs.camera_id == 0 && obs.is_stereo)
+        {
+            if (!addObservationEquation(frame_idx, 1, obs.pointRight))
+                return false;
+        }
     }
 
     if (svd_idx < 4)
@@ -195,14 +207,28 @@ multi_view_fallback:
     {
         const int frame_idx = point_feature.start_frame + static_cast<int>(obs_idx);
         const PointFeatureFrame &obs = point_feature.point_feature_frame[obs_idx];
-        const Eigen::Vector3d t = owner->localPs()[frame_idx] + owner->localRs()[frame_idx] * owner->localTic()[obs.camera_id];
-        const Eigen::Matrix3d R = owner->localRs()[frame_idx] * owner->localRic()[obs.camera_id];
-        const Eigen::Vector3d point_cam = R.transpose() * (point_w - t);
-        if (!point_cam.allFinite() || point_cam.z() <= 0.0)
+        const auto accumulateReprojection = [&](int camera_id, const Eigen::Vector3d &bearing) -> bool {
+            if (camera_id < 0 || camera_id >= static_cast<int>(owner->localRic().size()))
+                return false;
+
+            const Eigen::Vector3d t = owner->localPs()[frame_idx] + owner->localRs()[frame_idx] * owner->localTic()[camera_id];
+            const Eigen::Matrix3d R = owner->localRs()[frame_idx] * owner->localRic()[camera_id];
+            const Eigen::Vector3d point_cam = R.transpose() * (point_w - t);
+            if (!point_cam.allFinite() || point_cam.z() <= 0.0)
+                return false;
+            const Eigen::Vector2d proj = point_cam.head<2>() / point_cam.z();
+            reproj_sum += (proj - bearing.head<2>()).norm();
+            ++valid_obs;
+            return true;
+        };
+
+        if (!accumulateReprojection(obs.camera_id, obs.point))
             return false;
-        const Eigen::Vector2d proj = point_cam.head<2>() / point_cam.z();
-        reproj_sum += (proj - obs.point.head<2>()).norm();
-        ++valid_obs;
+        if (STEREO && obs.camera_id == 0 && obs.is_stereo)
+        {
+            if (!accumulateReprojection(1, obs.pointRight))
+                return false;
+        }
     }
 
     if (valid_obs < 2)
@@ -386,7 +412,7 @@ bool PointFeatureManager::shouldUsePointFeatureForPnP(const PointFeatureId &poin
 {
     return prefer_good_points
                ? (owner->hasGoodMappoint(point_feature.point_feature_id) && hasReliablePointDepth(point_feature))
-               : (knownLandmarksOnly() ? hasReliablePointDepth(point_feature) : point_feature.estimated_depth > 0);
+               : point_feature.estimated_depth > 0;
 }
 
 void PointFeatureManager::collectPointFeaturePnPCorrespondences(int frameCnt, int active_camera_id_, bool prefer_good_points,

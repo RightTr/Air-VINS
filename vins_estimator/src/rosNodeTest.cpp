@@ -144,7 +144,7 @@ void sync_process()
                 {
                     ROS_WARN_THROTTLE(1.0, "NUC: left thermal camera frozen, use right camera as monocular input");
                     nuc_active_camera_id = 1;
-                    estimator.inputImage(time, image1, cv::Mat(), 1, false, TRACKING_MODE_NUC_LEFT_ONLY);
+                    estimator.inputImage(time, image1, cv::Mat(), 1, true, TRACKING_MODE_NUC_LEFT_ONLY);
                     nuc_mono_fallback = true;
                     nuc_recovery_streak = 0;
                     skipped_visual_update = false;
@@ -153,7 +153,7 @@ void sync_process()
                 {
                     ROS_WARN_THROTTLE(1.0, "NUC: right thermal camera frozen, use left camera as monocular input");
                     nuc_active_camera_id = 0;
-                    estimator.inputImage(time, image0, cv::Mat(), 0, false, TRACKING_MODE_NUC_RIGHT_ONLY);
+                    estimator.inputImage(time, image0, cv::Mat(), 0, true, TRACKING_MODE_NUC_RIGHT_ONLY);
                     nuc_mono_fallback = true;
                     nuc_recovery_streak = 0;
                     skipped_visual_update = false;
@@ -167,9 +167,9 @@ void sync_process()
                         {
                             ROS_WARN_THROTTLE(1.0, "NUC: waiting for stable stereo recovery (%d/%d)", nuc_recovery_streak, nuc_recovery_required);
                             if (nuc_active_camera_id == 1)
-                                estimator.inputImage(time, image1, cv::Mat(), 1, false, TRACKING_MODE_NUC_LEFT_ONLY);
+                                estimator.inputImage(time, image1, cv::Mat(), 1, true, TRACKING_MODE_NUC_LEFT_ONLY);
                             else
-                                estimator.inputImage(time, image0, cv::Mat(), 0, false, TRACKING_MODE_NUC_RIGHT_ONLY);
+                                estimator.inputImage(time, image0, cv::Mat(), 0, true, TRACKING_MODE_NUC_RIGHT_ONLY);
                         }
                         else
                         {

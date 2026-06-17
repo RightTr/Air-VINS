@@ -13,14 +13,18 @@ using namespace Eigen;
 
 namespace
 {
+struct PointFrameStats
+{
+    int stereo_triangulated = 0;
+    int multiview_triangulated = 0;
+    int to_good = 0;
+    int to_bad = 0;
+    int to_untriangulated = 0;
+};
+
 bool isReliableTriangulatedDepth(double depth)
 {
     return depth >= FEATURE_MIN_DEPTH && depth <= FEATURE_MAX_DEPTH;
-}
-
-bool knownLandmarksOnly(const FeatureManager &fm)
-{
-    return fm.getVisualTrackingMode() != TRACKING_MODE_STEREO;
 }
 
 bool allowDepthInitialization(const FeatureManager &fm)
@@ -84,10 +88,13 @@ double worldPointToPointFeatureDepth(const FeatureManager &fm, const PointFeatur
     return point_cam.z();
 }
 
-bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureId &point_feature, Eigen::Vector3d &point_w, double &depth)
+bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureId &point_feature, Eigen::Vector3d &point_w, double &depth,
+                                   bool *used_stereo = nullptr)
 {
     point_w.setZero();
     depth = -1.0;
+    if (used_stereo)
+        *used_stereo = false;
 
     if (!fm.hasLocalWindowState() || point_feature.point_feature_frame.empty())
         return false;
@@ -133,7 +140,11 @@ bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureI
         const Eigen::Vector3d anchor_point_cam = anchor_R.transpose() * (point_w - anchor_t);
         depth = anchor_point_cam.z();
         if (isReliableTriangulatedDepth(depth))
+        {
+            if (used_stereo)
+                *used_stereo = true;
             return true;
+        }
 
         goto multi_view_fallback;
     }
@@ -142,16 +153,20 @@ multi_view_fallback:
     if (point_feature.point_feature_frame.size() < 2)
         return false;
 
-    Eigen::MatrixXd svd_A(2 * point_feature.point_feature_frame.size(), 4);
-    int svd_idx = 0;
+    size_t equation_rows = 0;
     for (size_t obs_idx = 0; obs_idx < point_feature.point_feature_frame.size(); ++obs_idx)
     {
-        const int frame_idx = point_feature.start_frame + static_cast<int>(obs_idx);
+        const PointFeatureFrame &obs = point_feature.point_feature_frame[obs_idx];
+        equation_rows += 2;
+        if (STEREO && obs.camera_id == 0 && obs.is_stereo)
+            equation_rows += 2;
+    }
+
+    Eigen::MatrixXd svd_A(equation_rows, 4);
+    int svd_idx = 0;
+    auto addObservationEquation = [&](int frame_idx, int camera_id, const Eigen::Vector3d &bearing) -> bool {
         if (frame_idx < 0 || frame_idx > WINDOW_SIZE)
             return false;
-
-        const PointFeatureFrame &obs = point_feature.point_feature_frame[obs_idx];
-        const int camera_id = obs.camera_id;
         if (camera_id < 0 || camera_id >= NUM_OF_CAM)
             return false;
 
@@ -161,9 +176,23 @@ multi_view_fallback:
         P.leftCols<3>() = R.transpose();
         P.rightCols<1>() = -R.transpose() * t;
 
-        const Eigen::Vector3d f = obs.point.normalized();
+        const Eigen::Vector3d f = bearing.normalized();
         svd_A.row(svd_idx++) = f[0] * P.row(2) - P.row(0);
         svd_A.row(svd_idx++) = f[1] * P.row(2) - P.row(1);
+        return true;
+    };
+
+    for (size_t obs_idx = 0; obs_idx < point_feature.point_feature_frame.size(); ++obs_idx)
+    {
+        const int frame_idx = point_feature.start_frame + static_cast<int>(obs_idx);
+        const PointFeatureFrame &obs = point_feature.point_feature_frame[obs_idx];
+        if (!addObservationEquation(frame_idx, obs.camera_id, obs.point))
+            return false;
+        if (STEREO && obs.camera_id == 0 && obs.is_stereo)
+        {
+            if (!addObservationEquation(frame_idx, 1, obs.pointRight))
+                return false;
+        }
     }
 
     if (svd_idx < 4)
@@ -188,14 +217,28 @@ multi_view_fallback:
     {
         const int frame_idx = point_feature.start_frame + static_cast<int>(obs_idx);
         const PointFeatureFrame &obs = point_feature.point_feature_frame[obs_idx];
-        const Eigen::Vector3d t = fm.localPs()[frame_idx] + fm.localRs()[frame_idx] * fm.localTic()[obs.camera_id];
-        const Eigen::Matrix3d R = fm.localRs()[frame_idx] * fm.localRic()[obs.camera_id];
-        const Eigen::Vector3d point_cam = R.transpose() * (point_w - t);
-        if (!point_cam.allFinite() || point_cam.z() <= 0.0)
+        const auto accumulateReprojection = [&](int camera_id, const Eigen::Vector3d &bearing) -> bool {
+            if (camera_id < 0 || camera_id >= NUM_OF_CAM)
+                return false;
+
+            const Eigen::Vector3d t = fm.localPs()[frame_idx] + fm.localRs()[frame_idx] * fm.localTic()[camera_id];
+            const Eigen::Matrix3d R = fm.localRs()[frame_idx] * fm.localRic()[camera_id];
+            const Eigen::Vector3d point_cam = R.transpose() * (point_w - t);
+            if (!point_cam.allFinite() || point_cam.z() <= 0.0)
+                return false;
+            const Eigen::Vector2d proj = point_cam.head<2>() / point_cam.z();
+            reproj_sum += (proj - bearing.head<2>()).norm();
+            ++valid_obs;
+            return true;
+        };
+
+        if (!accumulateReprojection(obs.camera_id, obs.point))
             return false;
-        const Eigen::Vector2d proj = point_cam.head<2>() / point_cam.z();
-        reproj_sum += (proj - obs.point.head<2>()).norm();
-        ++valid_obs;
+        if (STEREO && obs.camera_id == 0 && obs.is_stereo)
+        {
+            if (!accumulateReprojection(1, obs.pointRight))
+                return false;
+        }
     }
 
     if (valid_obs < 2)
@@ -233,12 +276,13 @@ void syncMappointFromPointFeature(FeatureManager &fm, PointFeatureId &point_feat
     it->second->SetPosition(pointFeatureDepthToWorldPoint(fm, point_feature));
 }
 
-void markMappointFromPointFeature(FeatureManager &fm, PointFeatureId &point_feature)
+void markMappointFromPointFeature(FeatureManager &fm, PointFeatureId &point_feature, PointFrameStats *stats = nullptr)
 {
     auto &mappoint = fm.localMappoints()[point_feature.point_feature_id];
     if (!mappoint)
         mappoint = std::make_shared<Mappoint>(point_feature.point_feature_id);
 
+    const auto prev_state = mappoint->GetState();
     mappoint->ClearObversers();
     mappoint->SetTrackCount(static_cast<int>(point_feature.point_feature_frame.size()));
     mappoint->ResetStaleCount();
@@ -247,6 +291,8 @@ void markMappointFromPointFeature(FeatureManager &fm, PointFeatureId &point_feat
 
     if (point_feature.solve_flag == 2)
     {
+        if (stats && prev_state != Mappoint::State::Bad)
+            ++stats->to_bad;
         mappoint->SetBad();
         return;
     }
@@ -260,8 +306,17 @@ void markMappointFromPointFeature(FeatureManager &fm, PointFeatureId &point_feat
         }
         Vector3d triangulated_point = Vector3d::Zero();
         double triangulated_depth = -1.0;
-        if (triangulateMappointWorldPoint(fm, point_feature, triangulated_point, triangulated_depth))
+        bool used_stereo = false;
+        if (triangulateMappointWorldPoint(fm, point_feature, triangulated_point, triangulated_depth, &used_stereo))
         {
+            if (stats && prev_state != Mappoint::State::Good)
+            {
+                ++stats->to_good;
+                if (used_stereo)
+                    ++stats->stereo_triangulated;
+                else
+                    ++stats->multiview_triangulated;
+            }
             mappoint->SetPosition(triangulated_point);
             mappoint->SetGood();
             point_feature.estimated_depth = triangulated_depth;
@@ -271,6 +326,8 @@ void markMappointFromPointFeature(FeatureManager &fm, PointFeatureId &point_feat
         }
         else
         {
+            if (stats && prev_state != Mappoint::State::UnTriangulated)
+                ++stats->to_untriangulated;
             mappoint->SetUnTriangulated();
         }
     }
@@ -292,6 +349,8 @@ void markMappointFromPointFeature(FeatureManager &fm, PointFeatureId &point_feat
     }
     else if (!mappoint->IsBad())
     {
+        if (stats && prev_state != Mappoint::State::UnTriangulated)
+            ++stats->to_untriangulated;
         mappoint->SetUnTriangulated();
     }
 }
@@ -339,7 +398,7 @@ bool shouldUsePointFeatureForPnP(const FeatureManager &fm, const PointFeatureId 
 {
     return prefer_good_points
                ? (fm.hasGoodMappoint(point_feature.point_feature_id) && hasReliablePointDepth(point_feature))
-               : (knownLandmarksOnly(fm) ? hasReliablePointDepth(point_feature) : point_feature.estimated_depth > 0);
+               : point_feature.estimated_depth > 0;
 }
 
 void collectPointFeaturePnPCorrespondences(const FeatureManager &fm, int frameCnt, int active_camera_id_, bool prefer_good_points,
@@ -481,15 +540,11 @@ void FeatureManager::addLocalFrame(int frameCnt, double header,
 
 void FeatureManager::updateLocalPoints(int frameCnt)
 {
-    (void)frameCnt;
-    int untriangulated_count = 0;
-    int good_count = 0;
-    int bad_count = 0;
-    int supported_good_count = 0;
+    PointFrameStats frame_stats;
     for (auto &it_per_id : point_manager->pointFeature)
     {
         it_per_id.used_num = static_cast<int>(it_per_id.point_feature_frame.size());
-        markMappointFromPointFeature(*this, it_per_id);
+        markMappointFromPointFeature(*this, it_per_id, &frame_stats);
 
         auto mpt_it = local_mappoints.find(it_per_id.point_feature_id);
         if (mpt_it == local_mappoints.end() || !mpt_it->second)
@@ -497,19 +552,40 @@ void FeatureManager::updateLocalPoints(int frameCnt)
 
         const auto support_stats = windowSupportStats(it_per_id.point_feature_id);
         mpt_it->second->SetWindowSupport(support_stats.first, support_stats.second);
-
-        if (mpt_it->second->IsUnTriangulated())
-            ++untriangulated_count;
-        else if (mpt_it->second->IsGood())
-        {
-            ++good_count;
-            if (mpt_it->second->WindowSupportCount() >= 2)
-                ++supported_good_count;
-        }
-        else if (mpt_it->second->IsBad())
-            ++bad_count;
     }
     pruneStaleLocalMappoints(*this);
+
+    int live_good_count = 0;
+    int live_bad_count = 0;
+    int live_untriangulated_count = 0;
+    int live_supported_good_count = 0;
+    for (const auto &kv : local_mappoints)
+    {
+        const auto &mappoint = kv.second;
+        if (!mappoint)
+            continue;
+        if (mappoint->IsGood())
+        {
+            ++live_good_count;
+            if (mappoint->WindowSupportCount() >= 2)
+                ++live_supported_good_count;
+        }
+        else if (mappoint->IsBad())
+            ++live_bad_count;
+        else
+            ++live_untriangulated_count;
+    }
+
+    ROS_INFO_STREAM_THROTTLE(1.0,
+                             "[vins_estimator][frame " << frameCnt << "] point states: live_good=" << live_good_count
+                                                        << " live_bad=" << live_bad_count
+                                                        << " live_untri=" << live_untriangulated_count
+                                                        << " supported_good=" << live_supported_good_count
+                                                        << " | transitions: to_good=" << frame_stats.to_good
+                                                        << " stereo=" << frame_stats.stereo_triangulated
+                                                        << " multiview=" << frame_stats.multiview_triangulated
+                                                        << " to_bad=" << frame_stats.to_bad
+                                                        << " to_untri=" << frame_stats.to_untriangulated);
 }
 
 bool FeatureManager::addPointFeatureCheckParallax(int frame_count, const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td)
@@ -536,8 +612,6 @@ bool FeatureManager::addPointFeatureCheckParallax(int frame_count, const std::ma
 
         if (it == point_manager->pointFeature.end())
         {
-            if (knownLandmarksOnly(*this))
-                continue;
             point_manager->pointFeature.push_back(PointFeatureId(point_feature_id, frame_count));
             point_manager->pointFeature.back().point_feature_frame.push_back(f_per_fra);
             new_point_feature_num++;
@@ -677,6 +751,9 @@ std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> FeatureManager::getCorr
 void FeatureManager::setPointFeatureDepth(const Eigen::VectorXd &x)
 {
     int point_feature_index = -1;
+    int depth_valid_count = 0;
+    int depth_fail_keep_count = 0;
+    int depth_fail_to_bad_count = 0;
     for (auto &it_per_id : point_manager->pointFeature)
     {
         it_per_id.used_num = it_per_id.point_feature_frame.size();
@@ -694,6 +771,7 @@ void FeatureManager::setPointFeatureDepth(const Eigen::VectorXd &x)
             it_per_id.reliable_depth = true;
             it_per_id.solve_flag = 1;
             it_per_id.depth_fail_count = 0;
+            ++depth_valid_count;
         }
         else
         {
@@ -709,16 +787,23 @@ void FeatureManager::setPointFeatureDepth(const Eigen::VectorXd &x)
                 auto mpt_it = local_mappoints.find(it_per_id.point_feature_id);
                 if (mpt_it != local_mappoints.end() && mpt_it->second)
                     mpt_it->second->SetBad();
+                ++depth_fail_to_bad_count;
             }
             else
             {
                 it_per_id.solve_flag = 1;
+                ++depth_fail_keep_count;
             }
         }
 
         if (it_per_id.solve_flag == 1)
             syncMappointFromPointFeature(*this, it_per_id);
     }
+
+    ROS_INFO_STREAM_THROTTLE(1.0,
+                             "[vins_estimator] depth update: valid=" << depth_valid_count
+                                                                       << " fail_keep=" << depth_fail_keep_count
+                                                                       << " fail_to_bad=" << depth_fail_to_bad_count);
 }
 
 void FeatureManager::removeFailures()
@@ -765,6 +850,9 @@ void FeatureManager::triangulatePointFeature(int frameCnt, Eigen::Vector3d Ps[],
     if (!allowDepthInitialization(*this))
         return;
 
+    int stereo_triangulated = 0;
+    int multiview_triangulated = 0;
+    int promoted_to_good = 0;
     for (auto &it_per_id : point_manager->pointFeature)
     {
         auto mpt_it = local_mappoints.find(it_per_id.point_feature_id);
@@ -785,21 +873,32 @@ void FeatureManager::triangulatePointFeature(int frameCnt, Eigen::Vector3d Ps[],
 
         Vector3d triangulated_point = Vector3d::Zero();
         double triangulated_depth = -1.0;
-        if (triangulateMappointWorldPoint(*this, it_per_id, triangulated_point, triangulated_depth))
+        bool used_stereo = false;
+        if (triangulateMappointWorldPoint(*this, it_per_id, triangulated_point, triangulated_depth, &used_stereo))
         {
             if (!mappoint)
             {
                 mappoint = std::make_shared<Mappoint>(it_per_id.point_feature_id);
                 local_mappoints[it_per_id.point_feature_id] = mappoint;
             }
+            if (used_stereo)
+                ++stereo_triangulated;
+            else
+                ++multiview_triangulated;
             mappoint->SetPosition(triangulated_point);
             mappoint->SetGood();
+            ++promoted_to_good;
             it_per_id.estimated_depth = triangulated_depth;
             it_per_id.reliable_depth = true;
             it_per_id.solve_flag = 1;
             it_per_id.depth_fail_count = 0;
         }
     }
+
+    ROS_INFO_STREAM_THROTTLE(1.0,
+                             "[vins_estimator][frame " << frameCnt << "] triangulation: stereo=" << stereo_triangulated
+                                                        << " multiview=" << multiview_triangulated
+                                                        << " promoted_good=" << promoted_to_good);
 }
 
 std::vector<ProjectionCandidate> FeatureManager::collectProjectionCandidates(const Eigen::Matrix4d &nextT) const

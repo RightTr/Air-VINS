@@ -24,7 +24,6 @@ class PointFeatureManager
   private:
     FeatureManager *owner;
     int getPointFeatureCount();
-    bool knownLandmarksOnly() const;
     bool allowDepthInitialization() const;
     bool hasReliablePointDepth(const PointFeatureId &point_feature) const;
     double compensatedParallax2(const PointFeatureId &point_feature, int frame_count);
