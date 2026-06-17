@@ -44,7 +44,7 @@ show_track: 1
 flow_back: 1
 # deep_feature: 0=KLT, 1=SuperPoint+Glue, 2=PLNET+Glue
 deep_feature: 2
-reproject_add_en: 0
+reproject_add_en: 1
 deep_feature_model_dir: "/workspace/src/VINS-Fusion/output"
 # deep_feature_matcher: 0=LightGlue, 1=SuperGlue
 deep_feature_matcher: 0
@@ -53,7 +53,6 @@ deep_feature_keypoint_threshold: 0.004
 deep_feature_remove_borders: 4
 deep_feature_stereo_y_threshold: 1.0
 deep_feature_min_stereo_disparity: 4.0
-deep_feature_max_stereo_disparity: 420.0
 feature_min_depth: 0.1
 feature_max_depth: 8.0
 
@@ -66,7 +65,6 @@ line_max_cnt: 100
 line_min_length: 50.0
 line_stereo_y_threshold: 1.0
 line_min_stereo_disparity: 4.0
-line_max_stereo_disparity: 420.0
 line_match_vote_threshold: 2
 line_match_score_threshold: 0.8
 

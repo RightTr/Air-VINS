@@ -16,6 +16,7 @@ namespace
 struct PointFrameStats
 {
     int stereo_triangulated = 0;
+    int stereo_disparity_rejected = 0;
     int multiview_triangulated = 0;
     int to_good = 0;
     int to_bad = 0;
@@ -36,6 +37,19 @@ bool allowDepthInitialization(const FeatureManager &fm)
 bool hasReliablePointDepth(const PointFeatureId &point_feature)
 {
     return point_feature.estimated_depth > 0 && point_feature.reliable_depth;
+}
+
+bool hasReliableStereoDisparity(const PointFeatureFrame &anchor_obs)
+{
+    if (!anchor_obs.is_stereo || anchor_obs.camera_id != 0)
+        return false;
+
+    const double y_error = std::abs(anchor_obs.uv.y() - anchor_obs.uvRight.y());
+    if (y_error > DEEP_FEATURE_STEREO_Y_THRESHOLD)
+        return false;
+
+    const double disparity = anchor_obs.uv.x() - anchor_obs.uvRight.x();
+    return disparity >= DEEP_FEATURE_MIN_STEREO_DISPARITY;
 }
 
 void triangulatePoint(const Eigen::Matrix<double, 3, 4> &Pose0, const Eigen::Matrix<double, 3, 4> &Pose1,
@@ -89,7 +103,7 @@ double worldPointToPointFeatureDepth(const FeatureManager &fm, const PointFeatur
 }
 
 bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureId &point_feature, Eigen::Vector3d &point_w, double &depth,
-                                   bool *used_stereo = nullptr)
+                                   bool *used_stereo = nullptr, PointFrameStats *stats = nullptr)
 {
     point_w.setZero();
     depth = -1.0;
@@ -112,6 +126,13 @@ bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureI
     const PointFeatureFrame &anchor_obs = point_feature.anchorObservation();
     if (STEREO && anchor_obs.camera_id == 0 && anchor_obs.is_stereo)
     {
+        if (!hasReliableStereoDisparity(anchor_obs))
+        {
+            if (stats)
+                ++stats->stereo_disparity_rejected;
+            goto multi_view_fallback;
+        }
+
         const int stereo_frame = anchor_frame;
 
         Eigen::Matrix<double, 3, 4> leftPose;
@@ -139,14 +160,12 @@ bool triangulateMappointWorldPoint(const FeatureManager &fm, const PointFeatureI
 
         const Eigen::Vector3d anchor_point_cam = anchor_R.transpose() * (point_w - anchor_t);
         depth = anchor_point_cam.z();
-        if (isReliableTriangulatedDepth(depth))
-        {
-            if (used_stereo)
-                *used_stereo = true;
-            return true;
-        }
+        if (!isReliableTriangulatedDepth(depth))
+            goto multi_view_fallback;
 
-        goto multi_view_fallback;
+        if (used_stereo)
+            *used_stereo = true;
+        return true;
     }
 
 multi_view_fallback:
@@ -307,7 +326,7 @@ void markMappointFromPointFeature(FeatureManager &fm, PointFeatureId &point_feat
         Vector3d triangulated_point = Vector3d::Zero();
         double triangulated_depth = -1.0;
         bool used_stereo = false;
-        if (triangulateMappointWorldPoint(fm, point_feature, triangulated_point, triangulated_depth, &used_stereo))
+        if (triangulateMappointWorldPoint(fm, point_feature, triangulated_point, triangulated_depth, &used_stereo, stats))
         {
             if (stats && prev_state != Mappoint::State::Good)
             {
@@ -583,6 +602,7 @@ void FeatureManager::updateLocalPoints(int frameCnt)
                                                         << " supported_good=" << live_supported_good_count
                                                         << " | transitions: to_good=" << frame_stats.to_good
                                                         << " stereo=" << frame_stats.stereo_triangulated
+                                                        << " stereo_reject=" << frame_stats.stereo_disparity_rejected
                                                         << " multiview=" << frame_stats.multiview_triangulated
                                                         << " to_bad=" << frame_stats.to_bad
                                                         << " to_untri=" << frame_stats.to_untriangulated);
@@ -850,6 +870,7 @@ void FeatureManager::triangulatePointFeature(int frameCnt, Eigen::Vector3d Ps[],
     if (!allowDepthInitialization(*this))
         return;
 
+    PointFrameStats frame_stats;
     int stereo_triangulated = 0;
     int multiview_triangulated = 0;
     int promoted_to_good = 0;
@@ -874,7 +895,7 @@ void FeatureManager::triangulatePointFeature(int frameCnt, Eigen::Vector3d Ps[],
         Vector3d triangulated_point = Vector3d::Zero();
         double triangulated_depth = -1.0;
         bool used_stereo = false;
-        if (triangulateMappointWorldPoint(*this, it_per_id, triangulated_point, triangulated_depth, &used_stereo))
+        if (triangulateMappointWorldPoint(*this, it_per_id, triangulated_point, triangulated_depth, &used_stereo, &frame_stats))
         {
             if (!mappoint)
             {
@@ -897,6 +918,7 @@ void FeatureManager::triangulatePointFeature(int frameCnt, Eigen::Vector3d Ps[],
 
     ROS_INFO_STREAM_THROTTLE(1.0,
                              "[vins_estimator][frame " << frameCnt << "] triangulation: stereo=" << stereo_triangulated
+                                                        << " stereo_reject=" << frame_stats.stereo_disparity_rejected
                                                         << " multiview=" << multiview_triangulated
                                                         << " promoted_good=" << promoted_to_good);
 }

@@ -61,7 +61,6 @@ double DEEP_FEATURE_KEYPOINT_THRESHOLD;
 int DEEP_FEATURE_REMOVE_BORDERS;
 double DEEP_FEATURE_STEREO_Y_THRESHOLD;
 double DEEP_FEATURE_MIN_STEREO_DISPARITY;
-double DEEP_FEATURE_MAX_STEREO_DISPARITY;
 int LINE_BA;
 double LINE_THRESHOLD;
 int LINE_MIN_OBS;
@@ -151,7 +150,6 @@ void readParameters(std::string config_file)
     DEEP_FEATURE_REMOVE_BORDERS = 4;
     DEEP_FEATURE_STEREO_Y_THRESHOLD = 2.0;
     DEEP_FEATURE_MIN_STEREO_DISPARITY = 1.0;
-    DEEP_FEATURE_MAX_STEREO_DISPARITY = 96.0;
     LINE_BA = 0;
     LINE_THRESHOLD = 0.7;
     LINE_MIN_OBS = 5;
@@ -183,7 +181,6 @@ void readParameters(std::string config_file)
     readOptionalParam(fsSettings, "deep_feature_remove_borders", DEEP_FEATURE_REMOVE_BORDERS);
     readOptionalParam(fsSettings, "deep_feature_stereo_y_threshold", DEEP_FEATURE_STEREO_Y_THRESHOLD);
     readOptionalParam(fsSettings, "deep_feature_min_stereo_disparity", DEEP_FEATURE_MIN_STEREO_DISPARITY);
-    readOptionalParam(fsSettings, "deep_feature_max_stereo_disparity", DEEP_FEATURE_MAX_STEREO_DISPARITY);
     readOptionalParam(fsSettings, "line_ba", LINE_BA);
     readOptionalParam(fsSettings, "line_threshold", LINE_THRESHOLD);
     readOptionalParam(fsSettings, "line_min_obs", LINE_MIN_OBS);

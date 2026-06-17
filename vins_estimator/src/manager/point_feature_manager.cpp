@@ -19,6 +19,19 @@ bool isReliableTriangulatedDepth(double depth)
     return depth >= FEATURE_MIN_DEPTH && depth <= FEATURE_MAX_DEPTH;
 }
 
+bool hasReliableStereoDisparity(const PointFeatureFrame &anchor_obs)
+{
+    if (!anchor_obs.is_stereo || anchor_obs.camera_id != 0)
+        return false;
+
+    const double y_error = std::abs(anchor_obs.uv.y() - anchor_obs.uvRight.y());
+    if (y_error > DEEP_FEATURE_STEREO_Y_THRESHOLD)
+        return false;
+
+    const double disparity = anchor_obs.uv.x() - anchor_obs.uvRight.x();
+    return disparity >= DEEP_FEATURE_MIN_STEREO_DISPARITY;
+}
+
 } // namespace
 
 int PointFeatureId::endFrame() const
@@ -104,6 +117,9 @@ bool PointFeatureManager::triangulateMappointWorldPoint(const PointFeatureId &po
     const PointFeatureFrame &anchor_obs = point_feature.anchorObservation();
     if (STEREO && anchor_obs.camera_id == 0 && anchor_obs.is_stereo)
     {
+        if (!hasReliableStereoDisparity(anchor_obs))
+            goto multi_view_fallback;
+
         Eigen::Matrix<double, 3, 4> leftPose;
         const int stereo_frame = anchor_frame;
 
@@ -133,10 +149,10 @@ bool PointFeatureManager::triangulateMappointWorldPoint(const PointFeatureId &po
 
         const Eigen::Vector3d anchor_point_cam = anchor_R.transpose() * (point_w - anchor_t);
         depth = anchor_point_cam.z();
-        if (isReliableTriangulatedDepth(depth))
-            return true;
+        if (!isReliableTriangulatedDepth(depth))
+            goto multi_view_fallback;
 
-        goto multi_view_fallback;
+        return true;
     }
 
 multi_view_fallback:
