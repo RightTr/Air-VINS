@@ -595,17 +595,12 @@ void FeatureManager::updateLocalPoints(int frameCnt)
             ++live_untriangulated_count;
     }
 
-    ROS_INFO_STREAM_THROTTLE(1.0,
-                             "[vins_estimator][frame " << frameCnt << "] point states: live_good=" << live_good_count
-                                                        << " live_bad=" << live_bad_count
-                                                        << " live_untri=" << live_untriangulated_count
-                                                        << " supported_good=" << live_supported_good_count
-                                                        << " | transitions: to_good=" << frame_stats.to_good
-                                                        << " stereo=" << frame_stats.stereo_triangulated
-                                                        << " stereo_reject=" << frame_stats.stereo_disparity_rejected
-                                                        << " multiview=" << frame_stats.multiview_triangulated
-                                                        << " to_bad=" << frame_stats.to_bad
-                                                        << " to_untri=" << frame_stats.to_untriangulated);
+    (void)frameCnt;
+    (void)live_good_count;
+    (void)live_bad_count;
+    (void)live_untriangulated_count;
+    (void)live_supported_good_count;
+    (void)frame_stats;
 }
 
 bool FeatureManager::addPointFeatureCheckParallax(int frame_count, const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td)
@@ -820,10 +815,9 @@ void FeatureManager::setPointFeatureDepth(const Eigen::VectorXd &x)
             syncMappointFromPointFeature(*this, it_per_id);
     }
 
-    ROS_INFO_STREAM_THROTTLE(1.0,
-                             "[vins_estimator] depth update: valid=" << depth_valid_count
-                                                                       << " fail_keep=" << depth_fail_keep_count
-                                                                       << " fail_to_bad=" << depth_fail_to_bad_count);
+    (void)depth_valid_count;
+    (void)depth_fail_keep_count;
+    (void)depth_fail_to_bad_count;
 }
 
 void FeatureManager::removeFailures()
@@ -916,15 +910,17 @@ void FeatureManager::triangulatePointFeature(int frameCnt, Eigen::Vector3d Ps[],
         }
     }
 
-    ROS_INFO_STREAM_THROTTLE(1.0,
-                             "[vins_estimator][frame " << frameCnt << "] triangulation: stereo=" << stereo_triangulated
-                                                        << " stereo_reject=" << frame_stats.stereo_disparity_rejected
-                                                        << " multiview=" << multiview_triangulated
-                                                        << " promoted_good=" << promoted_to_good);
+    (void)frameCnt;
+    (void)frame_stats;
+    (void)stereo_triangulated;
+    (void)multiview_triangulated;
+    (void)promoted_to_good;
 }
 
 std::vector<ProjectionCandidate> FeatureManager::collectProjectionCandidates(const Eigen::Matrix4d &nextT) const
 {
+    constexpr size_t kMaxProjectionCandidates = 64;
+
     std::vector<ProjectionCandidate> candidates;
     if (!has_local_window_state)
         return candidates;
@@ -933,7 +929,7 @@ std::vector<ProjectionCandidate> FeatureManager::collectProjectionCandidates(con
     if (camera_id < 0 || camera_id >= static_cast<int>(local_ric.size()))
         return candidates;
 
-    candidates.reserve(std::min<size_t>(local_mappoints.size(), 512));
+    candidates.reserve(std::min<size_t>(local_mappoints.size(), kMaxProjectionCandidates));
     for (const auto &item : local_mappoints)
     {
         const auto &mappoint = item.second;
@@ -941,6 +937,7 @@ std::vector<ProjectionCandidate> FeatureManager::collectProjectionCandidates(con
             continue;
 
         const auto support_stats = windowSupportStats(item.first);
+
         ProjectionCandidate candidate;
         candidate.point_feature_id = item.first;
         candidate.camera_id = camera_id;
@@ -970,8 +967,8 @@ std::vector<ProjectionCandidate> FeatureManager::collectProjectionCandidates(con
         return a.point_feature_id < b.point_feature_id;
     });
 
-    if (candidates.size() > 512)
-        candidates.resize(512);
+    if (candidates.size() > kMaxProjectionCandidates)
+        candidates.resize(kMaxProjectionCandidates);
     return candidates;
 }
 

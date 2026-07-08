@@ -828,6 +828,8 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     vector<bool> current_feature_taken(current_features.cols(), false);
     Eigen::Matrix<float, 259, Eigen::Dynamic> matched_features;
     matched_features.resize(259, 0);
+    int history_match_count = 0;
+    int reprojection_recovered_count = 0;
 
     if (history_features.cols() > 0 && history_features.cols() == static_cast<int>(prev_ids.size()))
     {
@@ -845,10 +847,19 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             current_feature_ids[match.trainIdx] = prev_ids[match.queryIdx];
             current_feature_track_cnt[match.trainIdx] = prev_track_cnt[match.queryIdx] + 1;
             current_feature_taken[match.trainIdx] = true;
+            ++history_match_count;
         }
     }
 
-    if (!projection_candidates_local.empty())
+    int unmatched_current_feature_count = 0;
+    for (int idx = 0; idx < current_features.cols(); ++idx)
+    {
+        if (!current_feature_taken[idx])
+            ++unmatched_current_feature_count;
+    }
+    const int unmatched_before_reprojection = unmatched_current_feature_count;
+
+    if (!projection_candidates_local.empty() && unmatched_current_feature_count > 0)
     {
         const float projection_radius = 15.0f;
         const float projection_descriptor_threshold = 0.35f;
@@ -856,6 +867,9 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
 
         for (const auto &candidate : projection_candidates_local)
         {
+            if (unmatched_current_feature_count <= 0)
+                break;
+
             if (candidate.point_feature_id < 0 || candidate.camera_id != primary_camera_id_)
                 continue;
 
@@ -912,8 +926,20 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
                 current_feature_ids[best_idx] = candidate.point_feature_id;
                 current_feature_track_cnt[best_idx] = std::max(1, candidate.track_count + 1);
                 current_feature_taken[best_idx] = true;
+                --unmatched_current_feature_count;
+                ++reprojection_recovered_count;
             }
         }
+    }
+
+    if (REPROJECT_ADD_EN)
+    {
+        ROS_INFO_STREAM_THROTTLE(1.0,
+                                 "[vins_estimator] reprojection recovery: candidates=" << projection_candidates_local.size()
+                                                                                       << " history_hits=" << history_match_count
+                                                                                       << " unmatched_before=" << unmatched_before_reprojection
+                                                                                       << " reproj_hits=" << reprojection_recovered_count
+                                                                                       << " unmatched_after=" << unmatched_current_feature_count);
     }
 
     vector<int> kept_indexes;

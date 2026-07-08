@@ -183,6 +183,10 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1, 
     FeatureFrameMap featureFrame;
     TicToc featureTrackerTime;
 
+    f_manager.setVisualTrackingMode(tracking_mode);
+    f_manager.setActiveCameraId(primary_camera_id);
+    prepareProjectionCandidatesForImage(t, primary_camera_id);
+
     if(_img1.empty())
         featureFrame = featureTracker.trackImage(t, _img, cv::Mat(), primary_camera_id, allow_new_features);
     else
@@ -637,7 +641,6 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         if (! MULTIPLE_THREAD)
         {
             featureTracker.removeOutliers(removeIndex);
-            predictPtsInNextFrame();
         }
             
         ROS_DEBUG("solver costs: %fms", t_solve.toc());
@@ -1703,22 +1706,45 @@ void Estimator::getPoseInWorldFrame(int index, Eigen::Matrix4d &T)
 
 void Estimator::predictPtsInNextFrame()
 {
-    if (!REPROJECT_ADD_EN)
-    {
-        featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
-        return;
-    }
-    if(frame_count < 2)
+    // Reprojection recovery now prepares candidates for the current image in inputImage().
+    // Keep this as a compatibility shim for older call sites.
+    featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
+}
+
+void Estimator::prepareProjectionCandidatesForImage(double t, int primary_camera_id)
+{
+    if (!REPROJECT_ADD_EN || solver_flag != NON_LINEAR)
     {
         featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
         return;
     }
 
-    Eigen::Matrix4d curT, prevT, nextT;
-    getPoseInWorldFrame(curT);
-    getPoseInWorldFrame(frame_count - 1, prevT);
-    nextT = curT * (prevT.inverse() * curT);
-        featureTracker.setProjectionCandidates(f_manager.collectProjectionCandidates(nextT));
+    if (primary_camera_id < 0 || primary_camera_id >= NUM_OF_CAM)
+    {
+        featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
+        return;
+    }
+
+    const double target_time = t + td;
+    Eigen::Matrix4d current_body_pose = Eigen::Matrix4d::Identity();
+    bool pose_ready = false;
+
+    mPropagate.lock();
+    if (latest_time >= target_time)
+    {
+        current_body_pose.block<3, 3>(0, 0) = latest_Q.toRotationMatrix();
+        current_body_pose.block<3, 1>(0, 3) = latest_P;
+        pose_ready = true;
+    }
+    mPropagate.unlock();
+
+    if (!pose_ready)
+    {
+        featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
+        return;
+    }
+
+    featureTracker.setProjectionCandidates(f_manager.collectProjectionCandidates(current_body_pose));
 }
 
 double Estimator::reprojectionError(Matrix3d &Ri, Vector3d &Pi, Matrix3d &rici, Vector3d &tici,

@@ -102,6 +102,7 @@ class Estimator
                                               vector<pair<double, Eigen::Vector3d>> &gyrVector);
     void getPoseInWorldFrame(Eigen::Matrix4d &T);
     void getPoseInWorldFrame(int index, Eigen::Matrix4d &T);
+    void prepareProjectionCandidatesForImage(double t, int primary_camera_id);
     void predictPtsInNextFrame();
     void outliersRejection(set<int> &removeIndex);
     void lineOutliersRejection(std::map<int, std::set<int>> &removeObservations);
