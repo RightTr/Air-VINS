@@ -182,9 +182,9 @@
 - 同一个 `point_feature_id` 对应同一个 `Mappoint`
 - 前端只要继续沿用这个 id，后端就继续认为这是同一个 landmark
 
-### 4.2 绑定动作：`markMappointFromPointFeature`
+### 4.2 绑定动作：`updateLocalPoints`
 
-`markMappointFromPointFeature(...)` 会根据当前 `PointFeatureId` 去更新或创建 `Mappoint`。
+`updateLocalPoints(...)` 会根据当前 `PointFeatureId` 去更新或创建 `Mappoint`。
 
 它做的事情是：
 
@@ -193,8 +193,8 @@
 3. 按当前 `point_feature_frame` 重建 observers
 4. 更新 track count
 5. 如果 `solve_flag == 2`，直接标坏
-6. 如果还是 `UnTriangulated`，并且观测足够，则尝试三角化
-7. 如果已经是 `Good`，则用已有 `estimated_depth` 或 `Mappoint` 位置同步深度
+6. 如果已经是 `Good`，则用已有 `estimated_depth` 或 `Mappoint` 位置同步深度
+7. 更新 window support，并清理 stale Mappoint
 
 这一步的意义是：
 
@@ -206,17 +206,17 @@
 
 ## 5. 三角化的时机
 
-当前代码里，三角化不是单点触发，而是在多个阶段重复进行。
+当前代码由 `triangulate(...)` 统一负责点三角化，`updateLocalPoints(...)` 不重复三角化。
 
 ### 5.1 进入窗口后先尝试
 
 在关键帧或新帧进入后，系统会尽早尝试三角化，让能建的点尽快从 `UnTriangulated` 升到 `Good`。
 
-### 5.2 优化前后都会尝试 refine
+### 5.2 优化阶段持续 refine
 
 在后端优化过程里，会重复做：
 
-- 三角化
+- 在进入优化前尝试三角化
 - 深度回写
 - 地标状态更新
 
@@ -383,7 +383,7 @@ SVD 完成后：
 
 地图点不是“建出来就完事”，而是会持续 refine。
 
-### 9.1 `triangulatePointFeature`
+### 9.1 `triangulate`
 
 这个函数的作用是：
 
@@ -402,7 +402,7 @@ SVD 完成后：
 - 如果还能从 `Mappoint` 位置反推深度，就继续同步
 - 再执行 stale pruning
 
-### 9.3 `setPointFeatureDepth`
+### 9.3 `setDepth`
 
 当 BA 或深度优化得到新的深度估计时：
 
@@ -663,4 +663,3 @@ refine 不是重新发明一个点，而是：
 所以它的目标不是追求“每个点第一次就完美”，而是：
 
 > **尽可能让一个 landmark 在窗口里持续保持可用，并在滑窗、NUC、重投影和优化中不断自我修正。**
-

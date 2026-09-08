@@ -44,17 +44,6 @@ PointFeatureManager::PointFeatureManager()
     last_average_parallax = 0.0;
     new_point_feature_num = 0;
     long_point_feature_track_num = 0;
-    pending_keyframe_next_frame = false;
-}
-
-bool PointFeatureManager::allowDepthInitialization() const
-{
-    return true;
-}
-
-bool PointFeatureManager::hasReliablePointDepth(const PointFeatureId &point_feature) const
-{
-    return point_feature.estimated_depth > 0 && point_feature.reliable_depth;
 }
 
 void PointFeatureManager::clearState()
@@ -66,7 +55,6 @@ void PointFeatureManager::clearState()
     last_average_parallax = 0.0;
     new_point_feature_num = 0;
     long_point_feature_track_num = 0;
-    pending_keyframe_next_frame = false;
 }
 
 void PointFeatureManager::addLocalFrame(
@@ -116,7 +104,17 @@ void PointFeatureManager::syncMappointFromPointFeature(PointFeatureId &point_fea
     if (point_feature.point_feature_frame.empty())
         return;
 
-    it->second->SetPosition(pointFeatureDepthToWorldPoint(point_feature, Ps, Rs, tic, window_ric));
+    const int anchor_frame = point_feature.start_frame;
+    const int anchor_camera_id = point_feature.anchorObservation().camera_id;
+    if (anchor_frame < 0 || anchor_frame > WINDOW_SIZE)
+        return;
+    if (anchor_camera_id < 0 || anchor_camera_id >= NUM_OF_CAM)
+        return;
+
+    const Vector3d point_in_body = window_ric[anchor_camera_id] *
+                                   (point_feature.estimated_depth * point_feature.anchorObservation().point) +
+                                   tic[anchor_camera_id];
+    it->second->SetPosition(Rs[anchor_frame] * point_in_body + Ps[anchor_frame]);
 }
 
 bool PointFeatureManager::triangulateMappointWorldPoint(const PointFeatureId &point_feature,
@@ -130,7 +128,7 @@ bool PointFeatureManager::triangulateMappointWorldPoint(const PointFeatureId &po
     if (point_feature.point_feature_frame.empty())
         return false;
 
-    const int anchor_frame = point_feature.anchorFrame();
+    const int anchor_frame = point_feature.start_frame;
     const int anchor_camera_id = point_feature.anchorObservation().camera_id;
     if (anchor_frame < 0 || anchor_frame > WINDOW_SIZE)
         return false;
@@ -281,90 +279,6 @@ multi_view_fallback:
     return true;
 }
 
-void PointFeatureManager::markMappointFromPointFeature(PointFeatureId &point_feature,
-                                                       Vector3d Ps[], Matrix3d Rs[],
-                                                       Vector3d tic[], Matrix3d window_ric[])
-{
-    auto &mappoint = local_mappoints[point_feature.point_feature_id];
-    if (!mappoint)
-        mappoint = std::make_shared<Mappoint>(point_feature.point_feature_id);
-
-    mappoint->ClearObversers();
-    mappoint->SetTrackCount(static_cast<int>(point_feature.point_feature_frame.size()));
-    mappoint->ResetStaleCount();
-    for (int i = 0; i < static_cast<int>(point_feature.point_feature_frame.size()); ++i)
-        mappoint->AddObverser(point_feature.start_frame + i, i);
-
-    if (point_feature.solve_flag == 2)
-    {
-        mappoint->SetBad();
-        return;
-    }
-
-    if (mappoint->IsUnTriangulated())
-    {
-        if (mappoint->ObverserNum() <= 2)
-        {
-            mappoint->SetUnTriangulated();
-            return;
-        }
-        Vector3d triangulated_point = Vector3d::Zero();
-        double triangulated_depth = -1.0;
-        if (triangulateMappointWorldPoint(point_feature, Ps, Rs, tic, window_ric,
-                                          triangulated_point, triangulated_depth))
-        {
-            mappoint->SetPosition(triangulated_point);
-            mappoint->SetGood();
-            point_feature.estimated_depth = triangulated_depth;
-            point_feature.reliable_depth = true;
-            point_feature.solve_flag = 1;
-            point_feature.depth_fail_count = 0;
-        }
-        else
-        {
-            mappoint->SetUnTriangulated();
-        }
-    }
-    else if (mappoint->IsGood())
-    {
-        if (std::isfinite(point_feature.estimated_depth) && point_feature.estimated_depth > 0)
-            syncMappointFromPointFeature(point_feature, Ps, Rs, tic, window_ric);
-        else if (mappoint->HasPosition())
-        {
-            const double depth = worldPointToPointFeatureDepth(point_feature, mappoint->GetPosition(),
-                                                               Ps, Rs, tic, window_ric);
-            if (isReliableTriangulatedDepth(depth))
-            {
-                point_feature.estimated_depth = depth;
-                point_feature.reliable_depth = true;
-                point_feature.solve_flag = 1;
-                point_feature.depth_fail_count = 0;
-            }
-        }
-    }
-    else if (!mappoint->IsBad())
-    {
-        mappoint->SetUnTriangulated();
-    }
-}
-
-bool PointFeatureManager::projectWorldPointToCamera(const Vector3d &point_w,
-                                                    const Eigen::Matrix4d &nextT,
-                                                    int camera_id, Vector3d tic[],
-                                                    Matrix3d window_ric[], Vector3d &point_cam) const
-{
-    if (camera_id < 0 || camera_id >= NUM_OF_CAM)
-        return false;
-    if (!point_w.allFinite() || !nextT.allFinite())
-        return false;
-
-    const Eigen::Matrix3d Rwb = nextT.block<3, 3>(0, 0);
-    const Eigen::Vector3d Pwb = nextT.block<3, 1>(0, 3);
-    const Eigen::Vector3d point_in_body = Rwb.transpose() * (point_w - Pwb);
-    point_cam = window_ric[camera_id].transpose() * (point_in_body - tic[camera_id]);
-    return point_cam.allFinite() && point_cam.z() > 0.0;
-}
-
 void PointFeatureManager::pruneStaleLocalMappoints()
 {
     std::set<int> alive_point_feature_ids;
@@ -404,25 +318,6 @@ void PointFeatureManager::pruneStaleLocalMappoints()
     }
 }
 
-Vector3d PointFeatureManager::pointFeatureDepthToWorldPoint(const PointFeatureId &point_feature,
-                                                            Vector3d Ps[], Matrix3d Rs[],
-                                                            Vector3d tic[], Matrix3d window_ric[]) const
-{
-    if (point_feature.point_feature_frame.empty())
-        return Vector3d::Zero();
-
-    const int anchor_camera_id = point_feature.anchorObservation().camera_id;
-    const int anchor_frame = point_feature.anchorFrame();
-    if (anchor_camera_id < 0 || anchor_camera_id >= NUM_OF_CAM)
-        return Vector3d::Zero();
-    if (anchor_frame < 0 || anchor_frame > WINDOW_SIZE)
-        return Vector3d::Zero();
-    const Vector3d pts_in_cam = window_ric[anchor_camera_id] *
-                                (point_feature.estimated_depth * point_feature.anchorObservation().point) +
-                                tic[anchor_camera_id];
-    return Rs[anchor_frame] * pts_in_cam + Ps[anchor_frame];
-}
-
 double PointFeatureManager::worldPointToPointFeatureDepth(const PointFeatureId &point_feature,
                                                           const Vector3d &point_w,
                                                           Vector3d Ps[], Matrix3d Rs[],
@@ -431,7 +326,7 @@ double PointFeatureManager::worldPointToPointFeatureDepth(const PointFeatureId &
     if (point_feature.point_feature_frame.empty())
         return -1.0;
 
-    const int anchor_frame = point_feature.anchorFrame();
+    const int anchor_frame = point_feature.start_frame;
     const int anchor_camera_id = point_feature.anchorObservation().camera_id;
     if (anchor_frame < 0 || anchor_frame > WINDOW_SIZE)
         return -1.0;
@@ -460,55 +355,50 @@ void PointFeatureManager::triangulatePoint(const Eigen::Matrix<double, 3, 4> &Po
     point_3d(2) = triangulated_point(2) / triangulated_point(3);
 }
 
-bool PointFeatureManager::shouldUsePointFeatureForPnP(const PointFeatureId &point_feature, bool prefer_good_points) const
-{
-    return prefer_good_points
-               ? (hasGoodMappoint(point_feature.point_feature_id) && hasReliablePointDepth(point_feature))
-               : point_feature.estimated_depth > 0;
-}
-
-void PointFeatureManager::collectPointFeaturePnPCorrespondences(int frameCnt, int active_camera_id_, bool prefer_good_points,
-                                                                Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d window_ric[],
-                                                                vector<cv::Point2f> &pts2D, vector<cv::Point3f> &pts3D) const
-{
-    for (const auto &point_feature : pointFeature)
-    {
-        if (!shouldUsePointFeatureForPnP(point_feature, prefer_good_points))
-            continue;
-
-        const int obs_index = frameCnt - point_feature.start_frame;
-        if (obs_index < 0 || static_cast<int>(point_feature.point_feature_frame.size()) < obs_index + 1)
-            continue;
-
-        const int anchor_camera_id = point_feature.anchorObservation().camera_id;
-        const int obs_camera_id = point_feature.point_feature_frame[obs_index].camera_id;
-        if (obs_camera_id != active_camera_id_)
-            continue;
-
-        const Vector3d point_in_cam = window_ric[anchor_camera_id] * (point_feature.anchorObservation().point * point_feature.estimated_depth) + tic[anchor_camera_id];
-        const Vector3d point_in_world = Rs[point_feature.start_frame] * point_in_cam + Ps[point_feature.start_frame];
-
-        pts3D.emplace_back(point_in_world.x(), point_in_world.y(), point_in_world.z());
-        pts2D.emplace_back(point_feature.point_feature_frame[obs_index].point.x(), point_feature.point_feature_frame[obs_index].point.y());
-    }
-}
-
-
 // Point-feature and local-mappoint lifecycle is owned here.
 void PointFeatureManager::updateLocalPoints(Vector3d Ps[], Matrix3d Rs[],
                                             Vector3d tic[], Matrix3d window_ric[])
 {
-    for (auto &it_per_id : pointFeature)
+    for (auto &point_feature : pointFeature)
     {
-        it_per_id.used_num = static_cast<int>(it_per_id.point_feature_frame.size());
-        markMappointFromPointFeature(it_per_id, Ps, Rs, tic, window_ric);
+        point_feature.used_num = static_cast<int>(point_feature.point_feature_frame.size());
 
-        auto mpt_it = local_mappoints.find(it_per_id.point_feature_id);
-        if (mpt_it == local_mappoints.end() || !mpt_it->second)
-            continue;
+        auto &mappoint = local_mappoints[point_feature.point_feature_id];
+        if (!mappoint)
+            mappoint = std::make_shared<Mappoint>(point_feature.point_feature_id);
 
-        const auto support_stats = windowSupportStats(it_per_id.point_feature_id);
-        mpt_it->second->SetWindowSupport(support_stats.first, support_stats.second);
+        mappoint->ClearObversers();
+        mappoint->SetTrackCount(static_cast<int>(point_feature.point_feature_frame.size()));
+        mappoint->ResetStaleCount();
+        for (int i = 0; i < static_cast<int>(point_feature.point_feature_frame.size()); ++i)
+            mappoint->AddObverser(point_feature.start_frame + i, i);
+
+        if (point_feature.solve_flag == 2)
+        {
+            mappoint->SetBad();
+        }
+        else if (mappoint->IsGood())
+        {
+            if (std::isfinite(point_feature.estimated_depth) && point_feature.estimated_depth > 0)
+            {
+                syncMappointFromPointFeature(point_feature, Ps, Rs, tic, window_ric);
+            }
+            else if (mappoint->HasPosition())
+            {
+                const double depth = worldPointToPointFeatureDepth(point_feature, mappoint->GetPosition(),
+                                                                   Ps, Rs, tic, window_ric);
+                if (isReliableTriangulatedDepth(depth))
+                {
+                    point_feature.estimated_depth = depth;
+                    point_feature.reliable_depth = true;
+                    point_feature.solve_flag = 1;
+                    point_feature.depth_fail_count = 0;
+                }
+            }
+        }
+
+        const auto support_stats = windowSupportStats(point_feature.point_feature_id);
+        mappoint->SetWindowSupport(support_stats.first, support_stats.second);
     }
     pruneStaleLocalMappoints();
 }
@@ -656,8 +546,13 @@ std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> PointFeatureManager::ge
     std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> corres;
     for (auto &it : pointFeature)
     {
-        if (only_good && !hasGoodMappoint(it.point_feature_id))
-            continue;
+        if (only_good)
+        {
+            const auto mappoint_it = local_mappoints.find(it.point_feature_id);
+            if (mappoint_it == local_mappoints.end() || !mappoint_it->second ||
+                !mappoint_it->second->IsGood())
+                continue;
+        }
         if (it.start_frame <= frame_count_l && it.endFrame() >= frame_count_r)
         {
             Eigen::Vector3d a = Eigen::Vector3d::Zero(), b = Eigen::Vector3d::Zero();
@@ -758,9 +653,6 @@ Eigen::VectorXd PointFeatureManager::getDepthVector()
 
 void PointFeatureManager::triangulate(Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[])
 {
-    if (!allowDepthInitialization())
-        return;
-
     for (auto &it_per_id : pointFeature)
     {
         auto mpt_it = local_mappoints.find(it_per_id.point_feature_id);
@@ -811,6 +703,11 @@ std::vector<ProjectionCandidate> PointFeatureManager::collectProjectionCandidate
     const int camera_id = active_camera_id;
     if (camera_id < 0 || camera_id >= NUM_OF_CAM)
         return candidates;
+    if (!nextT.allFinite())
+        return candidates;
+
+    const Eigen::Matrix3d Rwb = nextT.block<3, 3>(0, 0);
+    const Eigen::Vector3d Pwb = nextT.block<3, 1>(0, 3);
 
     candidates.reserve(std::min<size_t>(local_mappoints.size(), kMaxProjectionCandidates));
     for (const auto &item : local_mappoints)
@@ -830,9 +727,13 @@ std::vector<ProjectionCandidate> PointFeatureManager::collectProjectionCandidate
         candidate.last_support_frame_id = support_stats.second;
         candidate.descriptor = mappoint->GetDescriptor().segment<256>(3);
 
-        Vector3d point_cam = Vector3d::Zero();
-        if (!projectWorldPointToCamera(mappoint->GetPosition(), nextT, camera_id,
-                                       tic, window_ric, point_cam))
+        const Vector3d point_w = mappoint->GetPosition();
+        if (!point_w.allFinite())
+            continue;
+        const Vector3d point_in_body = Rwb.transpose() * (point_w - Pwb);
+        const Vector3d point_cam = window_ric[camera_id].transpose() *
+                                   (point_in_body - tic[camera_id]);
+        if (!point_cam.allFinite() || point_cam.z() <= 0.0)
             continue;
 
         candidate.point_cam = point_cam;
@@ -880,7 +781,40 @@ void PointFeatureManager::initFramePoseByPnP(int frameCnt, Eigen::Vector3d Ps[],
 
     vector<cv::Point2f> pts2D;
     vector<cv::Point3f> pts3D;
-    collectPointFeaturePnPCorrespondences(frameCnt, active_camera_id, prefer_good_points, Ps, Rs, tic, window_ric, pts2D, pts3D);
+    for (const auto &point_feature : pointFeature)
+    {
+        if (prefer_good_points)
+        {
+            const auto mappoint_it = local_mappoints.find(point_feature.point_feature_id);
+            if (mappoint_it == local_mappoints.end() || !mappoint_it->second ||
+                !mappoint_it->second->IsGood() || point_feature.estimated_depth <= 0 ||
+                !point_feature.reliable_depth)
+                continue;
+        }
+        else if (point_feature.estimated_depth <= 0)
+        {
+            continue;
+        }
+
+        const int obs_index = frameCnt - point_feature.start_frame;
+        if (obs_index < 0 || static_cast<int>(point_feature.point_feature_frame.size()) < obs_index + 1)
+            continue;
+
+        const int anchor_camera_id = point_feature.anchorObservation().camera_id;
+        const int obs_camera_id = point_feature.point_feature_frame[obs_index].camera_id;
+        if (obs_camera_id != active_camera_id)
+            continue;
+
+        const Vector3d point_in_cam = window_ric[anchor_camera_id] *
+                                      (point_feature.anchorObservation().point * point_feature.estimated_depth) +
+                                      tic[anchor_camera_id];
+        const Vector3d point_in_world = Rs[point_feature.start_frame] * point_in_cam +
+                                        Ps[point_feature.start_frame];
+
+        pts3D.emplace_back(point_in_world.x(), point_in_world.y(), point_in_world.z());
+        pts2D.emplace_back(point_feature.point_feature_frame[obs_index].point.x(),
+                           point_feature.point_feature_frame[obs_index].point.y());
+    }
     if (prefer_good_points && pts3D.size() < 6)
         return;
 
@@ -1043,12 +977,6 @@ bool PointFeatureManager::useFeatureForOptimization(const PointFeatureId &point_
     return it != local_mappoints.end() && it->second && it->second->IsGood();
 }
 
-bool PointFeatureManager::hasGoodMappoint(int point_feature_id) const
-{
-    auto it = local_mappoints.find(point_feature_id);
-    return it != local_mappoints.end() && it->second && it->second->IsGood();
-}
-
 std::pair<int, int> PointFeatureManager::windowSupportStats(int point_feature_id) const
 {
     if (point_feature_id < 0)
@@ -1065,39 +993,4 @@ std::pair<int, int> PointFeatureManager::windowSupportStats(int point_feature_id
             last_support_frame_id = it->frame_id;
     }
     return std::make_pair(support_count, last_support_frame_id);
-}
-
-
-double PointFeatureManager::compensatedParallax2(const PointFeatureId &it_per_id, int frame_count)
-{
-    //check the second last frame is keyframe or not
-    //parallax betwwen seconde last frame and third last frame
-    const PointFeatureFrame &frame_i = it_per_id.point_feature_frame[frame_count - 2 - it_per_id.start_frame];
-    const PointFeatureFrame &frame_j = it_per_id.point_feature_frame[frame_count - 1 - it_per_id.start_frame];
-
-    double ans = 0;
-    Vector3d p_j = frame_j.point;
-
-    double u_j = p_j(0);
-    double v_j = p_j(1);
-
-    Vector3d p_i = frame_i.point;
-    Vector3d p_i_comp;
-
-    //int r_i = frame_count - 2;
-    //int r_j = frame_count - 1;
-    p_i_comp = p_i;
-    double dep_i = p_i(2);
-    double u_i = p_i(0) / dep_i;
-    double v_i = p_i(1) / dep_i;
-    double du = u_i - u_j, dv = v_i - v_j;
-
-    double dep_i_comp = p_i_comp(2);
-    double u_i_comp = p_i_comp(0) / dep_i_comp;
-    double v_i_comp = p_i_comp(1) / dep_i_comp;
-    double du_comp = u_i_comp - u_j, dv_comp = v_i_comp - v_j;
-
-    ans = max(ans, sqrt(min(du * du + dv * dv, du_comp * du_comp + dv_comp * dv_comp)));
-
-    return ans;
 }
