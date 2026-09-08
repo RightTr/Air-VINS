@@ -1,5 +1,4 @@
 #include "line_feature_manager.h"
-#include "feature_manager.h"
 
 #include <cmath>
 #include <algorithm>
@@ -20,17 +19,28 @@ Eigen::Matrix<double, 3, 4> worldToCameraPoseCompat(const Eigen::Vector3d &P,
 }
 } // namespace
 
-LineFeatureManager::LineFeatureManager(FeatureManager *owner)
-    : owner(owner)
+LineFeatureManager::LineFeatureManager()
+    : enabled(false)
 {
-    clearState();
+    for (int i = 0; i < NUM_OF_CAM; ++i)
+        line_camera_intrinsics[i] << FOCAL_LENGTH, FOCAL_LENGTH, COL * 0.5, ROW * 0.5;
+}
+
+bool LineFeatureManager::isEnabled() const
+{
+    return enabled;
 }
 
 void LineFeatureManager::clearState()
 {
     line_feature.clear();
-    for (int i = 0; i < NUM_OF_CAM; ++i)
-        line_camera_intrinsics[i] << FOCAL_LENGTH, FOCAL_LENGTH, COL * 0.5, ROW * 0.5;
+}
+
+void LineFeatureManager::setEnabled(bool enabled_)
+{
+    enabled = enabled_;
+    if (!enabled)
+        clearState();
 }
 
 void LineFeatureManager::setLineCameraIntrinsics(const Eigen::Vector4d intrinsics[])
@@ -41,6 +51,9 @@ void LineFeatureManager::setLineCameraIntrinsics(const Eigen::Vector4d intrinsic
 
 void LineFeatureManager::addLineFeature(int frame_count, const LineFeatureFrameMap &lines, double td)
 {
+    if (!isEnabled())
+        return;
+
     for (const auto &id_lines : lines)
     {
         if (id_lines.second.empty())
@@ -72,18 +85,33 @@ void LineFeatureManager::addLineFeature(int frame_count, const LineFeatureFrameM
 
 int LineFeatureManager::getLineFeatureCount() const
 {
+    if (!isEnabled())
+        return 0;
+
     int cnt = 0;
     for (const auto &it : line_feature)
     {
         const_cast<LinePerId &>(it).used_num = static_cast<int>(it.line_per_frame.size());
-        if (owner->useLineForOptimization(it))
+        if (useFeatureForOptimization(it))
             ++cnt;
     }
     return cnt;
 }
 
+bool LineFeatureManager::useFeatureForOptimization(const LinePerId &line_feature) const
+{
+    return isEnabled() && line_feature.mapline && line_feature.mapline->IsValid() &&
+           line_feature.solve_flag == 1 &&
+           line_feature.used_num >= LINE_MIN_OBS &&
+           line_feature.start_frame < WINDOW_SIZE - 2 &&
+           line_feature.line_3d_world.allFinite();
+}
+
 void LineFeatureManager::triangulateLine(int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d window_ric[])
 {
+    if (!isEnabled())
+        return;
+
     for (auto &it_per_id : line_feature)
     {
         it_per_id.used_num = static_cast<int>(it_per_id.line_per_frame.size());
@@ -247,11 +275,14 @@ void LineFeatureManager::triangulateLine(int frameCnt, Vector3d Ps[], Matrix3d R
 
 Eigen::Matrix<double, Eigen::Dynamic, 4> LineFeatureManager::getLineFeatureVector() const
 {
+    if (!isEnabled())
+        return Eigen::Matrix<double, Eigen::Dynamic, 4>(0, 4);
+
     Eigen::Matrix<double, Eigen::Dynamic, 4> line_vec(getLineFeatureCount(), 4);
     int line_index = -1;
     for (const auto &it_per_id : line_feature)
     {
-        if (!owner->useLineForOptimization(it_per_id))
+        if (!useFeatureForOptimization(it_per_id))
             continue;
         line_vec.row(++line_index) = plk_to_orth(it_per_id.line_3d_world).transpose();
     }
@@ -261,6 +292,9 @@ Eigen::Matrix<double, Eigen::Dynamic, 4> LineFeatureManager::getLineFeatureVecto
 void LineFeatureManager::setLineFeature(const Eigen::Matrix<double, Eigen::Dynamic, 4> &x,
                                         int frameCnt, Vector3d Ps[], Matrix3d Rs[], Vector3d tic[], Matrix3d window_ric[])
 {
+    if (!isEnabled())
+        return;
+
     (void)frameCnt;
     (void)Ps;
     (void)Rs;
@@ -271,7 +305,7 @@ void LineFeatureManager::setLineFeature(const Eigen::Matrix<double, Eigen::Dynam
     for (auto &it_per_id : line_feature)
     {
         it_per_id.used_num = static_cast<int>(it_per_id.line_per_frame.size());
-        if (!owner->useLineForOptimization(it_per_id))
+        if (!useFeatureForOptimization(it_per_id))
             continue;
         if (++line_index >= x.rows())
             break;
@@ -297,6 +331,9 @@ void LineFeatureManager::setLineFeature(const Eigen::Matrix<double, Eigen::Dynam
 
 void LineFeatureManager::removeLineOutliers(const std::map<int, std::set<int>> &outlier_observers)
 {
+    if (!isEnabled())
+        return;
+
     for (auto it = line_feature.begin(), it_next = line_feature.begin(); it != line_feature.end(); it = it_next)
     {
         it_next++;
@@ -338,6 +375,9 @@ void LineFeatureManager::removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::Ve
                                               Eigen::Matrix3d new_R0, Eigen::Vector3d new_P0,
                                               Vector3d tic[], Matrix3d window_ric[])
 {
+    if (!isEnabled())
+        return;
+
     (void)back_R0;
     (void)back_P0;
     (void)new_R0;
@@ -372,6 +412,9 @@ void LineFeatureManager::removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::Ve
 
 void LineFeatureManager::removeBack()
 {
+    if (!isEnabled())
+        return;
+
     for (auto it = line_feature.begin(), it_next = line_feature.begin(); it != line_feature.end(); it = it_next)
     {
         it_next++;
@@ -399,6 +442,9 @@ void LineFeatureManager::removeBack()
 
 void LineFeatureManager::removeFront(int frame_count)
 {
+    if (!isEnabled())
+        return;
+
     for (auto it = line_feature.begin(), it_next = line_feature.begin(); it != line_feature.end(); it = it_next)
     {
         it_next++;
@@ -431,6 +477,9 @@ void LineFeatureManager::removeFront(int frame_count)
 
 void LineFeatureManager::removeFailures()
 {
+    if (!isEnabled())
+        return;
+
     for (auto it = line_feature.begin(), it_next = line_feature.begin(); it != line_feature.end(); it = it_next)
     {
         it_next++;

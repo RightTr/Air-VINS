@@ -21,7 +21,8 @@
 #include <eigen3/Eigen/Geometry>
 
 #include "parameters.h"
-#include "../manager/feature_manager.h"
+#include "../manager/point_feature_manager.h"
+#include "../manager/line_feature_manager.h"
 #include "../utility/utility.h"
 #include "../utility/tic_toc.h"
 #include "../initial/solve_5pts.h"
@@ -82,7 +83,8 @@ class Estimator
     void resetFeatureTracker();
     void processIMU(double t, double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
     void processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
-                      const LineFeatureFrameMap &lines, const double header, int active_camera_id);
+                      const LineFeatureFrameMap &lines, const double header,
+                      VisualTrackingMode tracking_mode, int active_camera_id);
     void processMeasurements();
     void changeSensorType(int use_imu, int use_stereo);
 
@@ -175,7 +177,8 @@ class Estimator
     int sum_of_outlier, sum_of_back, sum_of_front, sum_of_invalid;
     int inputImageCnt;
 
-    FeatureManager f_manager;
+    PointFeatureManager point_manager;
+    LineFeatureManager line_manager;
     MotionEstimator m_estimator;
     InitialEXRotation initial_ex_rotation;
 

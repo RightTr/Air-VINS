@@ -77,7 +77,6 @@ catkin_package()
 add_library(vins_lib
     src/estimator/parameters.cpp
     src/estimator/estimator.cpp
-    src/manager/feature_manager.cpp
     src/manager/point_feature_manager.cpp
     src/factor/line_parameterization.cpp
     src/factor/line_projection_factor.cpp

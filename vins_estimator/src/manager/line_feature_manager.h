@@ -2,19 +2,19 @@
 #define VINS_MANAGER_LINE_FEATURE_MANAGER_H_
 #include "feature_types.h"
 
-class FeatureManager;
-
 class LineFeatureManager
 {
   public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    explicit LineFeatureManager(FeatureManager *owner);
+    LineFeatureManager();
 
     void clearState();
+    void setEnabled(bool enabled);
     void setLineCameraIntrinsics(const Eigen::Vector4d intrinsics[]);
     void addLineFeature(int frame_count, const LineFeatureFrameMap &lines, double td);
     int getLineFeatureCount() const;
+    bool useFeatureForOptimization(const LinePerId &line_feature) const;
     void triangulateLine(int frameCnt, Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);
     Eigen::Matrix<double, Eigen::Dynamic, 4> getLineFeatureVector() const;
     void setLineFeature(const Eigen::Matrix<double, Eigen::Dynamic, 4> &x,
@@ -30,7 +30,9 @@ class LineFeatureManager
     std::list<LinePerId> line_feature;
 
   private:
-    FeatureManager *owner;
+    bool isEnabled() const;
+
+    bool enabled;
 
     Eigen::Vector4d line_camera_intrinsics[2];
 };

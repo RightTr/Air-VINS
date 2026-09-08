@@ -345,7 +345,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
     loop_point_cloud.header = header;
 
 
-    for (auto &it_per_id : estimator.f_manager.points().pointFeature)
+    for (auto &it_per_id : estimator.point_manager.pointFeature)
     {
         int used_num;
         used_num = it_per_id.point_feature_frame.size();
@@ -371,7 +371,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
     sensor_msgs::PointCloud margin_cloud;
     margin_cloud.header = header;
 
-    for (auto &it_per_id : estimator.f_manager.points().pointFeature)
+    for (auto &it_per_id : estimator.point_manager.pointFeature)
     { 
         int used_num;
         used_num = it_per_id.point_feature_frame.size();
@@ -427,13 +427,13 @@ void pubGolbalMapLine(const Estimator &estimator, const std_msgs::Header &header
     // Only promote lines that have already stabilized inside the current window.
     auto isStableForGlobal = [&](const auto &line_it)
     {
-        return estimator.f_manager.useLineForOptimization(line_it) &&
+        return estimator.line_manager.useFeatureForOptimization(line_it) &&
                line_it.endFrame() <= WINDOW_SIZE - 3;
     };
 
-    if (auto *line_manager = estimator.f_manager.lines())
     {
-        for (const auto &line_it : line_manager->line_feature)
+        const auto &line_features = estimator.line_manager.line_feature;
+        for (const auto &line_it : line_features)
         {
             if (!isStableForGlobal(line_it))
                 continue;
@@ -473,11 +473,11 @@ void pubWindowMapLine(const Estimator &estimator, const std_msgs::Header &header
     window_lines.color.a = 1.0;
     window_lines.lifetime = ros::Duration();
 
-    if (const auto *line_manager = estimator.f_manager.lines())
     {
-        for (const auto &line_it : line_manager->line_feature)
+        const auto &line_features = estimator.line_manager.line_feature;
+        for (const auto &line_it : line_features)
         {
-            if (!estimator.f_manager.useLineForOptimization(line_it))
+            if (!estimator.line_manager.useFeatureForOptimization(line_it))
                 continue;
             const Eigen::Vector3d moment = line_it.line_3d_world.head<3>();
             const Eigen::Vector3d direction = line_it.line_3d_world.tail<3>();
@@ -608,7 +608,7 @@ void pubKeyframe(const Estimator &estimator)
         keyframe_pose.pose.pose.orientation.w = R.w();
         ros_utils::ros_publish(pub_keyframe_pose, keyframe_pose);
 
-        const auto good_points = estimator.f_manager.collectGoodKeyframePoints();
+        const auto good_points = estimator.point_manager.collectGoodKeyframePoints();
         ROS_INFO_STREAM_THROTTLE(5.0, "[vins_estimator] keyframe good points=" << good_points.size());
         sensor_msgs::PointCloud keyframe_point_msg;
         keyframe_point_msg.header = header;

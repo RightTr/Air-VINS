@@ -5,14 +5,54 @@
 
 #include "feature_types.h"
 
-class FeatureManager;
-
 class PointFeatureManager
 {
   public:
-    PointFeatureManager(FeatureManager *owner, Eigen::Matrix3d _Rs[]);
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
+    PointFeatureManager();
+
+    // Lifecycle
     void clearState();
+    void addLocalFrame(int frameCnt, double header,
+                       const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
+                       VisualTrackingMode tracking_mode, int active_camera_id);
+    bool addFeatureCheckParallax(int frame_count, const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td);
+    void updateLocalPoints(Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
+                           Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);
+    void triangulate(Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);
+
+    // Optimization
+    int getFeatureCount();
+    bool useFeatureForOptimization(const PointFeatureId &point_feature) const;
+    Eigen::VectorXd getDepthVector();
+    void setDepth(const Eigen::VectorXd &x, Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
+                  Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);
+    void clearDepth();
+
+    // Sliding window
+    void removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::Vector3d back_P0,
+                              Eigen::Matrix3d new_R0, Eigen::Vector3d new_P0,
+                              Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);
+    void removeBack();
+    void removeFront(int frame_count);
+    void removeFailures();
+    void removeOutlier(std::set<int> &outlierIndex);
+
+    // PnP / projection
+    void initFramePoseByPnP(int frameCnt, Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[],
+                            int active_camera_id, bool prefer_good_points = false);
+    std::vector<ProjectionCandidate> collectProjectionCandidates(const Eigen::Matrix4d &nextT,
+                                                                  int active_camera_id,
+                                                                  Eigen::Vector3d tic[],
+                                                                  Eigen::Matrix3d window_ric[]) const;
+    void updateMappointDescriptors(const std::vector<int> &ids, const Eigen::Matrix<float, 259, Eigen::Dynamic> &features);
+
+    // Queries
+    KeyframeGoodPointRecordList collectGoodKeyframePoints() const;
+    int countGoodLocalMappoints() const;
+    int countCurrentStereoObservations() const;
+    std::vector<std::pair<Eigen::Vector3d, Eigen::Vector3d>> getCorresponding(int frame_count_l, int frame_count_r, bool only_good = false);
 
     std::list<PointFeatureId> pointFeature;
     int last_point_feature_track_num;
@@ -22,26 +62,42 @@ class PointFeatureManager
     bool pending_keyframe_next_frame;
 
   private:
-    FeatureManager *owner;
-    int getPointFeatureCount();
+    std::deque<LocalFrameObs> local_frames;
+    std::map<int, MappointPtr> local_mappoints;
     bool allowDepthInitialization() const;
     bool hasReliablePointDepth(const PointFeatureId &point_feature) const;
+    bool hasGoodMappoint(int point_feature_id) const;
+    std::pair<int, int> windowSupportStats(int point_feature_id) const;
     double compensatedParallax2(const PointFeatureId &point_feature, int frame_count);
-    void syncMappointFromPointFeature(PointFeatureId &point_feature);
-    void markMappointFromPointFeature(PointFeatureId &point_feature);
+    void syncMappointFromPointFeature(PointFeatureId &point_feature,
+                                      Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
+                                      Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);
+    void markMappointFromPointFeature(PointFeatureId &point_feature,
+                                      Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
+                                      Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);
     void pruneStaleLocalMappoints();
-    bool triangulateMappointWorldPoint(const PointFeatureId &point_feature, Eigen::Vector3d &point_w, double &depth) const;
-    Eigen::Vector3d pointFeatureDepthToWorldPoint(const PointFeatureId &point_feature) const;
-    double worldPointToPointFeatureDepth(const PointFeatureId &point_feature, const Eigen::Vector3d &point_w) const;
-    bool projectWorldPointToCamera(const Eigen::Vector3d &point_w, const Eigen::Matrix4d &nextT, int camera_id, Eigen::Vector3d &point_cam) const;
+    bool triangulateMappointWorldPoint(const PointFeatureId &point_feature,
+                                       Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
+                                       Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[],
+                                       Eigen::Vector3d &point_w, double &depth) const;
+    Eigen::Vector3d pointFeatureDepthToWorldPoint(const PointFeatureId &point_feature,
+                                                  Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
+                                                  Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]) const;
+    double worldPointToPointFeatureDepth(const PointFeatureId &point_feature,
+                                         const Eigen::Vector3d &point_w,
+                                         Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
+                                         Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]) const;
+    bool projectWorldPointToCamera(const Eigen::Vector3d &point_w, const Eigen::Matrix4d &nextT,
+                                   int camera_id, Eigen::Vector3d tic[],
+                                   Eigen::Matrix3d window_ric[], Eigen::Vector3d &point_cam) const;
     void triangulatePoint(const Eigen::Matrix<double, 3, 4> &Pose0, const Eigen::Matrix<double, 3, 4> &Pose1,
                           const Eigen::Vector2d &point0, const Eigen::Vector2d &point1, Eigen::Vector3d &point_3d) const;
     bool shouldUsePointFeatureForPnP(const PointFeatureId &point_feature, bool prefer_good_points) const;
     void collectPointFeaturePnPCorrespondences(int frameCnt, int active_camera_id_, bool prefer_good_points,
                                                Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[],
                                                std::vector<cv::Point2f> &pts2D, std::vector<cv::Point3f> &pts3D) const;
-
-    const Eigen::Matrix3d *Rs;
+    bool solvePoseByPnP(Eigen::Matrix3d &R_initial, Eigen::Vector3d &P_initial,
+                        std::vector<cv::Point2f> &pts2D, std::vector<cv::Point3f> &pts3D);
 };
 
 #endif  // VINS_MANAGER_POINT_FEATURE_MANAGER_H_

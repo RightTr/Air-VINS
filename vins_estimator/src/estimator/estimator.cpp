@@ -12,7 +12,7 @@
 
 #include <algorithm>
 
-Estimator::Estimator(): f_manager{Rs}
+Estimator::Estimator()
 {
     ROS_INFO("init begins");
     initThreadFlag = false;
@@ -88,7 +88,8 @@ void Estimator::clearState()
     last_marginalization_info = nullptr;
     last_marginalization_parameter_blocks.clear();
 
-    f_manager.clearState();
+    point_manager.clearState();
+    line_manager.clearState();
     featureTracker.clearState();
     keyframe_path.poses.clear();
     keyframe_marker.points.clear();
@@ -108,8 +109,7 @@ void Estimator::setParameter()
         ric[i] = RIC[i];
         cout << " exitrinsic cam " << i << endl  << ric[i] << endl << tic[i].transpose() << endl;
     }
-    f_manager.setRic(ric);
-    f_manager.setLineBA(LINE_BA);
+    line_manager.setEnabled(LINE_BA);
     ProjectionTwoFrameOneCamFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
     ProjectionTwoFrameTwoCamFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
     ProjectionOneFrameTwoCamFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
@@ -122,7 +122,7 @@ void Estimator::setParameter()
         if (!featureTracker.getCameraIntrinsics(i, line_camera_intrinsics[i]))
             line_camera_intrinsics[i] << FOCAL_LENGTH, FOCAL_LENGTH, COL * 0.5, ROW * 0.5;
     }
-    f_manager.setLineCameraIntrinsics(line_camera_intrinsics);
+    line_manager.setLineCameraIntrinsics(line_camera_intrinsics);
     lineProjectionFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
 
     std::cout << "MULTIPLE_THREAD is " << MULTIPLE_THREAD << '\n';
@@ -183,8 +183,6 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1, 
     FeatureFrameMap featureFrame;
     TicToc featureTrackerTime;
 
-    f_manager.setVisualTrackingMode(tracking_mode);
-    f_manager.setActiveCameraId(primary_camera_id);
     prepareProjectionCandidatesForImage(t, primary_camera_id);
 
     if(_img1.empty())
@@ -193,9 +191,9 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1, 
         featureFrame = featureTracker.trackImage(t, _img, _img1, primary_camera_id, allow_new_features);
 
     if (primary_camera_id == 1)
-        f_manager.updateMappointDescriptors(featureTracker.ids, featureTracker.right_deep_features);
+        point_manager.updateMappointDescriptors(featureTracker.ids, featureTracker.right_deep_features);
     else
-        f_manager.updateMappointDescriptors(featureTracker.ids, featureTracker.left_deep_features);
+        point_manager.updateMappointDescriptors(featureTracker.ids, featureTracker.left_deep_features);
 
     LineFeatureFrameMap lineFrame;
     lineFrame = featureTracker.getLineFrame();
@@ -347,9 +345,8 @@ void Estimator::processMeasurements()
                 }
             }
             mProcess.lock();
-            f_manager.setVisualTrackingMode(feature.tracking_mode);
-            f_manager.setActiveCameraId(feature.active_camera_id);
-            processImage(feature.feature_frame, feature.line_frame, feature.header, feature.active_camera_id);
+            processImage(feature.feature_frame, feature.line_frame, feature.header,
+                         feature.tracking_mode, feature.active_camera_id);
             prevTime = curTime;
 
             printStatistics(*this, 0);
@@ -447,10 +444,10 @@ void Estimator::processIMU(double t, double dt, const Vector3d &linear_accelerat
 bool Estimator::stereoInitializationReady() const
 {
     const int min_stereo_observations = std::max(KEYFRAME_MIN_INIT_STEREO_FEATURE, KEYFRAME_MIN_NUM_MATCH);
-    const int stereo_observations = f_manager.countCurrentStereoObservations();
-    const int good_mappoints = f_manager.countGoodLocalMappoints();
-    const int tracked_points = f_manager.points().last_point_feature_track_num;
-    const int long_tracks = f_manager.points().long_point_feature_track_num;
+    const int stereo_observations = point_manager.countCurrentStereoObservations();
+    const int good_mappoints = point_manager.countGoodLocalMappoints();
+    const int tracked_points = point_manager.last_point_feature_track_num;
+    const int long_tracks = point_manager.long_point_feature_track_num;
 
     const bool ready = stereo_observations >= min_stereo_observations &&
                        tracked_points >= KEYFRAME_MIN_NUM_MATCH &&
@@ -469,12 +466,13 @@ bool Estimator::stereoInitializationReady() const
 }
 
 void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
-                             const LineFeatureFrameMap &lines, const double header, int active_camera_id)
+                             const LineFeatureFrameMap &lines, const double header,
+                             VisualTrackingMode tracking_mode, int active_camera_id)
 {
     should_marginalize_old = false;
     ROS_DEBUG("new image coming ------------------------------------------");
     ROS_DEBUG("Adding feature points %lu", image.size());
-    if (f_manager.addPointFeatureCheckParallax(frame_count, image, td))
+    if (point_manager.addFeatureCheckParallax(frame_count, image, td))
     {
         marginalization_flag = MARGIN_OLD;
         should_marginalize_old = true;
@@ -485,12 +483,12 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         marginalization_flag = MARGIN_SECOND_NEW;
         //printf("non-keyframe\n");
     }
-    f_manager.addLineFeature(frame_count, lines, td);
-    f_manager.addLocalFrame(frame_count, header, image);
+    line_manager.addLineFeature(frame_count, lines, td);
+    point_manager.addLocalFrame(frame_count, header, image, tracking_mode, active_camera_id);
 
     ROS_DEBUG("%s", should_marginalize_old ? "Keyframe" : "Non-keyframe");
     ROS_DEBUG("Solving %d", frame_count);
-    ROS_DEBUG("number of point feature: %d", f_manager.getPointFeatureCount());
+    ROS_DEBUG("number of point feature: %d", point_manager.getFeatureCount());
     Headers[frame_count] = header;
 
     ImageFrame imageframe(image, header);
@@ -503,7 +501,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         ROS_INFO("calibrating extrinsic param, rotation movement is needed");
         if (frame_count != 0)
         {
-            vector<pair<Vector3d, Vector3d>> corres = f_manager.getCorresponding(frame_count - 1, frame_count);
+            vector<pair<Vector3d, Vector3d>> corres = point_manager.getCorresponding(frame_count - 1, frame_count);
             Matrix3d calib_ric;
             if (initial_ex_rotation.CalibrationExRotation(corres, pre_integrations[frame_count]->delta_q, calib_ric))
             {
@@ -531,12 +529,11 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
                 }
                 if(result)
                 {
-                    f_manager.setWindowState(Ps, Rs, tic, ric);
-                    f_manager.updateLocalPoints(frame_count);
+                    point_manager.updateLocalPoints(Ps, Rs, tic, ric);
                     optimization();
                     updateLatestStates();
-                    f_manager.removeFailures();
-                    f_manager.removeLineFailures();
+                    point_manager.removeFailures();
+                    line_manager.removeFailures();
                     solver_flag = NON_LINEAR;
                     slideWindow();
                     ROS_INFO("Initialization finish!");
@@ -549,12 +546,11 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         // stereo + IMU initilization
         if(STEREO && USE_IMU)
         {
-            f_manager.setWindowState(Ps, Rs, tic, ric);
-            f_manager.triangulatePointFeature(frame_count, Ps, Rs, tic, ric);
-            f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
-            f_manager.updateLocalPoints(frame_count);
-            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id, true);
-            ROS_INFO("init stereo+imu line landmarks: %d", f_manager.getLineFeatureCount());
+            point_manager.triangulate(Ps, Rs, tic, ric);
+            line_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
+            point_manager.updateLocalPoints(Ps, Rs, tic, ric);
+            point_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id, true);
+            ROS_INFO("init stereo+imu line landmarks: %d", line_manager.getLineFeatureCount());
             if (frame_count == WINDOW_SIZE)
             {
                 if (!stereoInitializationReady())
@@ -579,8 +575,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
                 }
                 optimization();
                 updateLatestStates();
-                f_manager.removeFailures();
-                f_manager.removeLineFailures();
+                point_manager.removeFailures();
+                line_manager.removeFailures();
                 solver_flag = NON_LINEAR;
                 slideWindow();
                 ROS_INFO("Initialization finish!");
@@ -590,20 +586,19 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         // stereo only initilization
         if(STEREO && !USE_IMU)
         {
-            f_manager.setWindowState(Ps, Rs, tic, ric);
-            f_manager.triangulatePointFeature(frame_count, Ps, Rs, tic, ric);
-            f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
-            f_manager.updateLocalPoints(frame_count);
-            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id, true);
-            ROS_INFO("init stereo-only line landmarks: %d", f_manager.getLineFeatureCount());
+            point_manager.triangulate(Ps, Rs, tic, ric);
+            line_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
+            point_manager.updateLocalPoints(Ps, Rs, tic, ric);
+            point_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id, true);
+            ROS_INFO("init stereo-only line landmarks: %d", line_manager.getLineFeatureCount());
             optimization();
 
             if(frame_count == WINDOW_SIZE)
             {
                 optimization();
                 updateLatestStates();
-                f_manager.removeFailures();
-                f_manager.removeLineFailures();
+                point_manager.removeFailures();
+                line_manager.removeFailures();
                 solver_flag = NON_LINEAR;
                 slideWindow();
                 ROS_INFO("Initialization finish!");
@@ -626,18 +621,17 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     {
         TicToc t_solve;
         if(!USE_IMU)
-            f_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
-        f_manager.setWindowState(Ps, Rs, tic, ric);
-        f_manager.triangulatePointFeature(frame_count, Ps, Rs, tic, ric);
-        f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
-        f_manager.updateLocalPoints(frame_count);
+            point_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
+        point_manager.triangulate(Ps, Rs, tic, ric);
+        line_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
+        point_manager.updateLocalPoints(Ps, Rs, tic, ric);
         optimization();
         std::map<int, std::set<int>> removeLineObservations;
         lineOutliersRejection(removeLineObservations);
-        f_manager.removeLineOutliers(removeLineObservations);
+        line_manager.removeLineOutliers(removeLineObservations);
         set<int> removeIndex;
         outliersRejection(removeIndex);
-        f_manager.removePointFeatureOutlier(removeIndex);
+        point_manager.removeOutlier(removeIndex);
         if (! MULTIPLE_THREAD)
         {
             featureTracker.removeOutliers(removeIndex);
@@ -656,8 +650,8 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         }
 
         slideWindow();
-        f_manager.removeFailures();
-        f_manager.removeLineFailures();
+        point_manager.removeFailures();
+        line_manager.removeFailures();
         // prepare output of VINS
         key_poses.clear();
         for (int i = 0; i <= WINDOW_SIZE; i++)
@@ -707,7 +701,7 @@ bool Estimator::initialStructure()
     Vector3d T[frame_count + 1];
     map<int, Vector3d> sfm_tracked_points;
     vector<SFMFeature> sfm_f;
-    for (auto &it_per_id : f_manager.points().pointFeature)
+    for (auto &it_per_id : point_manager.pointFeature)
     {
         int imu_j = it_per_id.start_frame - 1;
         SFMFeature tmp_feature;
@@ -872,11 +866,10 @@ bool Estimator::visualInitialAlign()
     ROS_DEBUG_STREAM("g0     " << g.transpose());
     ROS_DEBUG_STREAM("my R0  " << Utility::R2ypr(Rs[0]).transpose()); 
 
-    f_manager.setWindowState(Ps, Rs, tic, ric);
-    f_manager.clearPointFeatureDepth();
-    f_manager.triangulatePointFeature(frame_count, Ps, Rs, tic, ric);
-    f_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
-    ROS_INFO("visual initial align line landmarks: %d", f_manager.getLineFeatureCount());
+    point_manager.clearDepth();
+    point_manager.triangulate(Ps, Rs, tic, ric);
+    line_manager.triangulateLine(frame_count, Ps, Rs, tic, ric);
+    ROS_INFO("visual initial align line landmarks: %d", line_manager.getLineFeatureCount());
 
     return true;
 }
@@ -887,7 +880,7 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l,
     for (int i = 0; i < WINDOW_SIZE; i++)
     {
         vector<pair<Vector3d, Vector3d>> corres;
-        corres = f_manager.getCorresponding(i, WINDOW_SIZE, only_good);
+        corres = point_manager.getCorresponding(i, WINDOW_SIZE, only_good);
         if (corres.size() > 20)
         {
             double sum_parallax = 0;
@@ -914,7 +907,6 @@ bool Estimator::relativePose(Matrix3d &relative_R, Vector3d &relative_T, int &l,
 
 void Estimator::vector2double()
 {
-    f_manager.setWindowState(Ps, Rs, tic, ric);
 
     for (int i = 0; i <= WINDOW_SIZE; i++)
     {
@@ -956,13 +948,13 @@ void Estimator::vector2double()
     }
 
 
-    VectorXd dep = f_manager.getPointFeatureDepthVector();
-    for (int i = 0; i < f_manager.getPointFeatureCount(); i++)
+    VectorXd dep = point_manager.getDepthVector();
+    for (int i = 0; i < point_manager.getFeatureCount(); i++)
         para_Feature[i][0] = dep(i);
 
     if (LINE_BA)
     {
-        Eigen::Matrix<double, Eigen::Dynamic, 4> lines = f_manager.getLineFeatureVector();
+        Eigen::Matrix<double, Eigen::Dynamic, 4> lines = line_manager.getLineFeatureVector();
         const int line_count = std::min<int>(lines.rows(), NUM_OF_LINE_F);
         for (int i = 0; i < line_count; i++)
             for (int j = 0; j < 4; j++)
@@ -1050,20 +1042,19 @@ void Estimator::double2vector()
         }
     }
 
-    VectorXd dep = f_manager.getPointFeatureDepthVector();
-    for (int i = 0; i < f_manager.getPointFeatureCount(); i++)
+    VectorXd dep = point_manager.getDepthVector();
+    for (int i = 0; i < point_manager.getFeatureCount(); i++)
         dep(i) = para_Feature[i][0];
-    f_manager.setWindowState(Ps, Rs, tic, ric);
-    f_manager.setPointFeatureDepth(dep);
+    point_manager.setDepth(dep, Ps, Rs, tic, ric);
 
     if (LINE_BA)
     {
-        const int line_count = std::min(f_manager.getLineFeatureCount(), NUM_OF_LINE_F);
+        const int line_count = std::min(line_manager.getLineFeatureCount(), NUM_OF_LINE_F);
         Eigen::Matrix<double, Eigen::Dynamic, 4> lines(line_count, 4);
         for (int i = 0; i < line_count; i++)
             for (int j = 0; j < 4; j++)
                 lines(i, j) = para_LineFeature[i][j];
-        f_manager.setLineFeature(lines, frame_count, Ps, Rs, tic, ric);
+        line_manager.setLineFeature(lines, frame_count, Ps, Rs, tic, ric);
     }
 
     if(USE_IMU)
@@ -1074,9 +1065,9 @@ void Estimator::double2vector()
 bool Estimator::failureDetection()
 {
     return false;
-    if (f_manager.points().last_point_feature_track_num < 2)
+    if (point_manager.last_point_feature_track_num < 2)
     {
-        ROS_INFO(" little point feature %d", f_manager.points().last_point_feature_track_num);
+        ROS_INFO(" little point feature %d", point_manager.last_point_feature_track_num);
         //return true;
     }
     if (Bas[WINDOW_SIZE].norm() > 2.5)
@@ -1183,10 +1174,10 @@ void Estimator::optimization()
 
     int f_m_cnt = 0;
     int point_feature_index = -1;
-    for (auto &it_per_id : f_manager.points().pointFeature)
+    for (auto &it_per_id : point_manager.pointFeature)
     {
         it_per_id.used_num = it_per_id.point_feature_frame.size();
-        if (!f_manager.usePointFeatureForOptimization(it_per_id))
+        if (!point_manager.useFeatureForOptimization(it_per_id))
             continue;
  
         ++point_feature_index;
@@ -1246,12 +1237,12 @@ void Estimator::optimization()
     if (LINE_BA)
     {
         int line_index = -1;
-        if (auto *line_manager = f_manager.lines())
         {
-            for (auto &it_per_id : line_manager->line_feature)
+            auto &line_features = line_manager.line_feature;
+            for (auto &it_per_id : line_features)
             {
                 it_per_id.used_num = it_per_id.line_per_frame.size();
-                if (!f_manager.useLineForOptimization(it_per_id))
+                if (!line_manager.useFeatureForOptimization(it_per_id))
                     continue;
                 ++line_index;
                 if (line_index >= NUM_OF_LINE_F)
@@ -1355,10 +1346,10 @@ void Estimator::optimization()
 
         {
             int point_feature_index = -1;
-            for (auto &it_per_id : f_manager.points().pointFeature)
+            for (auto &it_per_id : point_manager.pointFeature)
             {
                 it_per_id.used_num = it_per_id.point_feature_frame.size();
-                if (!f_manager.usePointFeatureForOptimization(it_per_id))
+                if (!point_manager.useFeatureForOptimization(it_per_id))
                     continue;
 
                 ++point_feature_index;
@@ -1426,12 +1417,12 @@ void Estimator::optimization()
         if (LINE_BA)
         {
             int linefeature_index = -1;
-            if (auto *line_manager = f_manager.lines())
             {
-                for (auto &it_per_id : line_manager->line_feature)
+                auto &line_features = line_manager.line_feature;
+                for (auto &it_per_id : line_features)
                 {
                     it_per_id.used_num = static_cast<int>(it_per_id.line_per_frame.size());
-                    if (!f_manager.useLineForOptimization(it_per_id))
+                    if (!line_manager.useFeatureForOptimization(it_per_id))
                         continue;
 
                     ++linefeature_index;
@@ -1670,7 +1661,9 @@ void Estimator::slideWindow()
 void Estimator::slideWindowNew()
 {
     sum_of_front++;
-    f_manager.removeFront(frame_count);
+    point_manager.removeFront(frame_count);
+    if (LINE_BA)
+        line_manager.removeFront(frame_count);
 }
 
 void Estimator::slideWindowOld()
@@ -1680,12 +1673,15 @@ void Estimator::slideWindowOld()
     bool shift_depth = solver_flag == NON_LINEAR ? true : false;
     if (shift_depth)
     {
-        f_manager.removePointFeatureBackShiftDepth(back_R0, back_P0, Rs[0], Ps[0], tic, ric);
-        f_manager.removeLineBackShiftDepth(back_R0, back_P0, Rs[0], Ps[0], tic, ric);
+        point_manager.removeBackShiftDepth(back_R0, back_P0, Rs[0], Ps[0], tic, ric);
+        if (LINE_BA)
+            line_manager.removeBackShiftDepth(back_R0, back_P0, Rs[0], Ps[0], tic, ric);
     }
     else
     {
-        f_manager.removeBack();
+        point_manager.removeBack();
+        if (LINE_BA)
+            line_manager.removeBack();
     }
 }
 
@@ -1744,7 +1740,8 @@ void Estimator::prepareProjectionCandidatesForImage(double t, int primary_camera
         return;
     }
 
-    featureTracker.setProjectionCandidates(f_manager.collectProjectionCandidates(current_body_pose));
+    featureTracker.setProjectionCandidates(
+        point_manager.collectProjectionCandidates(current_body_pose, primary_camera_id, tic, ric));
 }
 
 double Estimator::reprojectionError(Matrix3d &Ri, Vector3d &Pi, Matrix3d &rici, Vector3d &tici,
@@ -1789,12 +1786,12 @@ void Estimator::outliersRejection(set<int> &removeIndex)
 {
     //return;
     int point_feature_index = -1;
-    for (auto &it_per_id : f_manager.points().pointFeature)
+    for (auto &it_per_id : point_manager.pointFeature)
     {
         double err = 0;
         int errCnt = 0;
         it_per_id.used_num = it_per_id.point_feature_frame.size();
-        if (!f_manager.usePointFeatureForOptimization(it_per_id))
+        if (!point_manager.useFeatureForOptimization(it_per_id))
             continue;
         point_feature_index ++;
         int imu_i = it_per_id.start_frame, imu_j = imu_i - 1;
@@ -1856,12 +1853,12 @@ void Estimator::lineOutliersRejection(std::map<int, std::set<int>> &removeObserv
     int optimized_line_cnt = 0;
     int removed_line_cnt = 0;
     int removed_observation_cnt = 0;
-    if (auto *line_manager = f_manager.lines())
     {
-        for (auto &it_per_id : line_manager->line_feature)
+        auto &line_features = line_manager.line_feature;
+        for (auto &it_per_id : line_features)
         {
             it_per_id.used_num = it_per_id.line_per_frame.size();
-            if (!f_manager.useLineForOptimization(it_per_id))
+            if (!line_manager.useFeatureForOptimization(it_per_id))
                 continue;
             optimized_line_cnt++;
 
