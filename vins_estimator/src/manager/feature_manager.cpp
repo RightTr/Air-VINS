@@ -196,8 +196,8 @@ multi_view_fallback:
         P.rightCols<1>() = -R.transpose() * t;
 
         const Eigen::Vector3d f = bearing.normalized();
-        svd_A.row(svd_idx++) = f[0] * P.row(2) - P.row(0);
-        svd_A.row(svd_idx++) = f[1] * P.row(2) - P.row(1);
+        svd_A.row(svd_idx++) = f[0] * P.row(2) - f[2] * P.row(0);
+        svd_A.row(svd_idx++) = f[1] * P.row(2) - f[2] * P.row(1);
         return true;
     };
 
