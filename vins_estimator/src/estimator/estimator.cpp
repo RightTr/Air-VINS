@@ -183,8 +183,6 @@ void Estimator::inputImage(double t, const cv::Mat &_img, const cv::Mat &_img1, 
     FeatureFrameMap featureFrame;
     TicToc featureTrackerTime;
 
-    prepareProjectionCandidatesForImage(t, primary_camera_id);
-
     if(_img1.empty())
         featureFrame = featureTracker.trackImage(t, _img, cv::Mat(), primary_camera_id, allow_new_features);
     else
@@ -1698,50 +1696,6 @@ void Estimator::getPoseInWorldFrame(int index, Eigen::Matrix4d &T)
     T = Eigen::Matrix4d::Identity();
     T.block<3, 3>(0, 0) = Rs[index];
     T.block<3, 1>(0, 3) = Ps[index];
-}
-
-void Estimator::predictPtsInNextFrame()
-{
-    // Reprojection recovery now prepares candidates for the current image in inputImage().
-    // Keep this as a compatibility shim for older call sites.
-    featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
-}
-
-void Estimator::prepareProjectionCandidatesForImage(double t, int primary_camera_id)
-{
-    if (!REPROJECT_ADD_EN || solver_flag != NON_LINEAR)
-    {
-        featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
-        return;
-    }
-
-    if (primary_camera_id < 0 || primary_camera_id >= NUM_OF_CAM)
-    {
-        featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
-        return;
-    }
-
-    const double target_time = t + td;
-    Eigen::Matrix4d current_body_pose = Eigen::Matrix4d::Identity();
-    bool pose_ready = false;
-
-    mPropagate.lock();
-    if (latest_time >= target_time)
-    {
-        current_body_pose.block<3, 3>(0, 0) = latest_Q.toRotationMatrix();
-        current_body_pose.block<3, 1>(0, 3) = latest_P;
-        pose_ready = true;
-    }
-    mPropagate.unlock();
-
-    if (!pose_ready)
-    {
-        featureTracker.setProjectionCandidates(std::vector<ProjectionCandidate>());
-        return;
-    }
-
-    featureTracker.setProjectionCandidates(
-        point_manager.collectProjectionCandidates(current_body_pose, primary_camera_id, tic, ric));
 }
 
 double Estimator::reprojectionError(Matrix3d &Ri, Vector3d &Pi, Matrix3d &rici, Vector3d &tici,

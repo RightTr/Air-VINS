@@ -71,7 +71,6 @@ extern double F_THRESHOLD;
 extern int SHOW_TRACK;
 extern int FLOW_BACK;
 extern int DEEP_FEATURE;
-extern int REPROJECT_ADD_EN;
 extern std::string DEEP_FEATURE_MODEL_DIR;
 extern int DEEP_FEATURE_MATCHER;
 extern int DEEP_FEATURE_MAX_KEYPOINTS;

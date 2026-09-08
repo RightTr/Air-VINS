@@ -39,13 +39,9 @@ class PointFeatureManager
     void removeFailures();
     void removeOutlier(std::set<int> &outlierIndex);
 
-    // PnP / projection
+    // PnP
     void initFramePoseByPnP(int frameCnt, Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[],
                             int active_camera_id, bool prefer_good_points = false);
-    std::vector<ProjectionCandidate> collectProjectionCandidates(const Eigen::Matrix4d &nextT,
-                                                                  int active_camera_id,
-                                                                  Eigen::Vector3d tic[],
-                                                                  Eigen::Matrix3d window_ric[]) const;
     void updateMappointDescriptors(const std::vector<int> &ids, const Eigen::Matrix<float, 259, Eigen::Dynamic> &features);
 
     // Queries

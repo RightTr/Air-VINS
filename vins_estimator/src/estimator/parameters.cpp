@@ -53,7 +53,6 @@ double F_THRESHOLD;
 int SHOW_TRACK;
 int FLOW_BACK;
 int DEEP_FEATURE;
-int REPROJECT_ADD_EN;
 std::string DEEP_FEATURE_MODEL_DIR;
 int DEEP_FEATURE_MATCHER;
 int DEEP_FEATURE_MAX_KEYPOINTS;
@@ -142,7 +141,6 @@ void readParameters(std::string config_file)
     std::string configPath = config_file.substr(0, pn);
 
     DEEP_FEATURE = 0;
-    REPROJECT_ADD_EN = 0;
     DEEP_FEATURE_MODEL_DIR = joinPath(configPath, "../../output");
     DEEP_FEATURE_MATCHER = 1;
     DEEP_FEATURE_MAX_KEYPOINTS = std::max(MAX_CNT, static_cast<int>(MAX_CNT * 3 / 2));
@@ -173,7 +171,6 @@ void readParameters(std::string config_file)
     KEYFRAME_TRACKING_POINT_RATE = 0.7f;
     KEYFRAME_TRACKING_PARALLAX_RATE = 0.1;
     readOptionalParam(fsSettings, "deep_feature", DEEP_FEATURE);
-    readOptionalParam(fsSettings, "reproject_add_en", REPROJECT_ADD_EN);
     readOptionalParam(fsSettings, "deep_feature_model_dir", DEEP_FEATURE_MODEL_DIR);
     readOptionalParam(fsSettings, "deep_feature_matcher", DEEP_FEATURE_MATCHER);
     readOptionalParam(fsSettings, "deep_feature_max_keypoints", DEEP_FEATURE_MAX_KEYPOINTS);

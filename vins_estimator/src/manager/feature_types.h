@@ -57,25 +57,6 @@ struct LineObservationInput
 
 using LineFeatureFrameMap = std::map<int, std::vector<LineObservationInput>>;
 
-struct ProjectionCandidate
-{
-    int point_feature_id;
-    int camera_id;
-    int track_count;
-    int observer_count;
-    int window_support_count;
-    int last_support_frame_id;
-    Eigen::Vector3d point_cam;
-    Eigen::Matrix<float, 256, 1> descriptor;
-
-    ProjectionCandidate()
-        : point_feature_id(-1), camera_id(0), track_count(0), observer_count(0),
-          window_support_count(0), last_support_frame_id(-1), point_cam(Eigen::Vector3d::Zero())
-    {
-        descriptor.setZero();
-    }
-};
-
 struct KeyframeGoodPointRecord
 {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW

@@ -18,7 +18,6 @@
 #include <set>
 #include <cmath>
 #include <cstdint>
-#include <limits>
 
 namespace
 {
@@ -384,7 +383,6 @@ void FeatureTracker::resetTrackingState()
     right_prev_img.release();
 
     n_pts.clear();
-    projection_candidates.clear();
     prev_pts.clear();
     cur_pts.clear();
     cur_right_pts.clear();
@@ -812,9 +810,6 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     right_pts_velocity.clear();
     cur_un_right_pts_map.clear();
 
-    const std::vector<ProjectionCandidate> projection_candidates_local = projection_candidates;
-    projection_candidates.clear();
-
     Eigen::Matrix<float, 259, Eigen::Dynamic> current_features;
     if (!deep_feature || !deep_feature->extractPoints(cur_img, current_features))
     {
@@ -825,11 +820,8 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     vector<int> current_prev_index(current_features.cols(), -1);
     vector<int> current_feature_ids(current_features.cols(), -1);
     vector<int> current_feature_track_cnt(current_features.cols(), 1);
-    vector<bool> current_feature_taken(current_features.cols(), false);
     Eigen::Matrix<float, 259, Eigen::Dynamic> matched_features;
     matched_features.resize(259, 0);
-    int history_match_count = 0;
-    int reprojection_recovered_count = 0;
 
     if (history_features.cols() > 0 && history_features.cols() == static_cast<int>(prev_ids.size()))
     {
@@ -846,100 +838,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             current_prev_index[match.trainIdx] = match.queryIdx;
             current_feature_ids[match.trainIdx] = prev_ids[match.queryIdx];
             current_feature_track_cnt[match.trainIdx] = prev_track_cnt[match.queryIdx] + 1;
-            current_feature_taken[match.trainIdx] = true;
-            ++history_match_count;
         }
-    }
-
-    int unmatched_current_feature_count = 0;
-    for (int idx = 0; idx < current_features.cols(); ++idx)
-    {
-        if (!current_feature_taken[idx])
-            ++unmatched_current_feature_count;
-    }
-    const int unmatched_before_reprojection = unmatched_current_feature_count;
-
-    if (!projection_candidates_local.empty() && unmatched_current_feature_count > 0)
-    {
-        const float projection_radius = 15.0f;
-        const float projection_descriptor_threshold = 0.35f;
-        const float projection_descriptor_ratio = 0.60f;
-
-        for (const auto &candidate : projection_candidates_local)
-        {
-            if (unmatched_current_feature_count <= 0)
-                break;
-
-            if (candidate.point_feature_id < 0 || candidate.camera_id != primary_camera_id_)
-                continue;
-
-            if (!std::isfinite(candidate.point_cam.x()) || !std::isfinite(candidate.point_cam.y()) ||
-                !std::isfinite(candidate.point_cam.z()) || candidate.point_cam.z() <= 0.1)
-                continue;
-
-            Eigen::Vector2d projected_uv;
-            m_camera[candidate.camera_id]->spaceToPlane(candidate.point_cam, projected_uv);
-            cv::Point2f projected_pt(projected_uv.x(), projected_uv.y());
-            if (!inBorder(projected_pt))
-                continue;
-
-            int best_idx = -1;
-            float best_desc_dist = std::numeric_limits<float>::max();
-            int second_idx = -1;
-            float second_desc_dist = std::numeric_limits<float>::max();
-
-            const Eigen::Matrix<float, 256, 1> &candidate_descriptor = candidate.descriptor;
-
-            for (int idx = 0; idx < current_features.cols(); ++idx)
-            {
-                if (current_feature_taken[idx])
-                    continue;
-
-                cv::Point2f pt(current_features(1, idx), current_features(2, idx));
-                if (!inBorder(pt))
-                    continue;
-                if (cv::norm(pt - projected_pt) > projection_radius)
-                    continue;
-
-                const Eigen::Matrix<float, 256, 1> current_descriptor = current_features.block<256, 1>(3, idx);
-                const float desc_dist = DescriptorDistance(candidate_descriptor, current_descriptor);
-                if (desc_dist < best_desc_dist)
-                {
-                    second_desc_dist = best_desc_dist;
-                    second_idx = best_idx;
-                    best_desc_dist = desc_dist;
-                    best_idx = idx;
-                }
-                else if (desc_dist < second_desc_dist)
-                {
-                    second_desc_dist = desc_dist;
-                    second_idx = idx;
-                }
-            }
-
-            if (best_idx >= 0 &&
-                best_desc_dist <= projection_descriptor_threshold &&
-                (second_idx < 0 || second_desc_dist == std::numeric_limits<float>::max() ||
-                 best_desc_dist <= projection_descriptor_ratio * second_desc_dist))
-            {
-                current_prev_index[best_idx] = -2;
-                current_feature_ids[best_idx] = candidate.point_feature_id;
-                current_feature_track_cnt[best_idx] = std::max(1, candidate.track_count + 1);
-                current_feature_taken[best_idx] = true;
-                --unmatched_current_feature_count;
-                ++reprojection_recovered_count;
-            }
-        }
-    }
-
-    if (REPROJECT_ADD_EN)
-    {
-        ROS_INFO_STREAM_THROTTLE(1.0,
-                                 "[vins_estimator] reprojection recovery: candidates=" << projection_candidates_local.size()
-                                                                                       << " history_hits=" << history_match_count
-                                                                                       << " unmatched_before=" << unmatched_before_reprojection
-                                                                                       << " reproj_hits=" << reprojection_recovered_count
-                                                                                       << " unmatched_after=" << unmatched_current_feature_count);
     }
 
     vector<int> kept_indexes;
@@ -1054,8 +953,6 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     prevLeftPtsMap.clear();
     for (size_t i = 0; i < cur_pts.size(); i++)
         prevLeftPtsMap[ids[i]] = cur_pts[i];
-
-    projection_candidates.clear();
 
     if (primary_camera_id_ == 1)
     {
@@ -1562,12 +1459,6 @@ void FeatureTracker::drawTrack(const cv::Mat &imLeft, const cv::Mat &imRight,
     //cv::Mat imCur2Compress;
     //cv::resize(imCur2, imCur2Compress, cv::Size(cols, rows / 2));
 }
-
-void FeatureTracker::setProjectionCandidates(const std::vector<ProjectionCandidate> &candidates)
-{
-    projection_candidates = candidates;
-}
-
 
 void FeatureTracker::removeOutliers(set<int> &removePtsIds)
 {
