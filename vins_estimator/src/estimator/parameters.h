@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <array>
 #include <ros/ros.h>
 #include <vector>
 #include <eigen3/Eigen/Dense>
@@ -64,7 +65,7 @@ extern map<int, Eigen::Vector3d> pts_gt;
 
 extern std::string IMAGE0_TOPIC, IMAGE1_TOPIC;
 extern std::string FISHEYE_MASK;
-extern std::vector<std::string> CAM_NAMES;
+extern std::array<Eigen::Vector4d, 2> CAM_INTRINSICS;
 extern int MAX_CNT;
 extern int MIN_DIST;
 extern double F_THRESHOLD;

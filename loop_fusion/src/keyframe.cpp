@@ -173,7 +173,7 @@ void KeyFrame::computeBRIEFPoint()
 	for (int i = 0; i < (int)keypoints.size(); i++)
 	{
 		Eigen::Vector3d tmp_p;
-		m_camera->liftProjective(Eigen::Vector2d(keypoints[i].pt.x, keypoints[i].pt.y), tmp_p);
+		m_camera.liftProjective(Eigen::Vector2d(keypoints[i].pt.x, keypoints[i].pt.y), tmp_p);
 		cv::KeyPoint tmp_norm;
 		tmp_norm.pt = cv::Point2f(tmp_p.x()/tmp_p.z(), tmp_p.y()/tmp_p.z());
 		keypoints_norm.push_back(tmp_norm);
@@ -379,8 +379,8 @@ bool KeyFrame::findConnection(KeyFrame* old_kf, DeepFeature* deep_feature)
 				getDeepFeatures()(1, cur_idx),
 				getDeepFeatures()(2, cur_idx));
 			Eigen::Vector3d old_norm_p, cur_norm_p;
-			m_camera->liftProjective(Eigen::Vector2d(old_uv.x, old_uv.y), old_norm_p);
-			m_camera->liftProjective(Eigen::Vector2d(cur_uv.x, cur_uv.y), cur_norm_p);
+			m_camera.liftProjective(Eigen::Vector2d(old_uv.x, old_uv.y), old_norm_p);
+			m_camera.liftProjective(Eigen::Vector2d(cur_uv.x, cur_uv.y), cur_norm_p);
 			const cv::Point2f old_uv_norm(old_norm_p.x() / old_norm_p.z(), old_norm_p.y() / old_norm_p.z());
 			const cv::Point2f cur_uv_norm(cur_norm_p.x() / cur_norm_p.z(), cur_norm_p.y() / cur_norm_p.z());
 

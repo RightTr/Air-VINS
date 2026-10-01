@@ -365,6 +365,7 @@ FeatureTracker::FeatureTracker()
     n_id = 0;
     line_n_id = 0;
     primary_camera_id = 0;
+    camera_count = 0;
     left_deep_features.resize(259, 0);
     right_deep_features.resize(259, 0);
     prev_line_points.resize(259, 0);
@@ -430,7 +431,8 @@ void FeatureTracker::clearState()
     n_id = 0;
     line_n_id = 0;
     primary_camera_id = 0;
-    m_camera.clear();
+    cameras = std::array<Camera, 2>{};
+    camera_count = 0;
 }
 
 void FeatureTracker::initLineFeatureFrontend()
@@ -512,7 +514,7 @@ double FeatureTracker::distance(cv::Point2f &pt1, cv::Point2f &pt2)
 
 map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImage(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id_, bool allow_new_features)
 {
-    if (primary_camera_id_ < 0 || primary_camera_id_ >= static_cast<int>(m_camera.size()))
+    if (primary_camera_id_ < 0 || primary_camera_id_ >= camera_count)
     {
         ROS_WARN_STREAM("invalid primary camera id " << primary_camera_id_ << ", fallback to 0");
         primary_camera_id_ = 0;
@@ -621,7 +623,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         //printf("feature cnt after add %d\n", (int)ids.size());
     }
 
-    cur_un_pts = undistortedPts(cur_pts, m_camera[primary_camera_id]);
+    cur_un_pts = undistortedPts(cur_pts, cameras[primary_camera_id]);
     pts_velocity = ptsVelocity(ids, cur_un_pts, cur_un_pts_map, prev_un_pts_map);
 
     if(!_img1.empty() && stereo_cam && primary_camera_id == 0)
@@ -663,7 +665,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
             reduceVector(cur_un_pts, status);
             reduceVector(pts_velocity, status);
             */
-            cur_un_right_pts = undistortedPts(cur_right_pts, m_camera[1]);
+            cur_un_right_pts = undistortedPts(cur_right_pts, cameras[1]);
             right_pts_velocity = ptsVelocity(ids_right, cur_un_right_pts, cur_un_right_pts_map, prev_un_right_pts_map);
         }
         prev_un_right_pts_map = cur_un_right_pts_map;
@@ -738,7 +740,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
 
 map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackImageDeep(double _cur_time, const cv::Mat &_img, const cv::Mat &_img1, int primary_camera_id_, bool allow_new_features)
 {
-    if (primary_camera_id_ < 0 || primary_camera_id_ >= static_cast<int>(m_camera.size()))
+    if (primary_camera_id_ < 0 || primary_camera_id_ >= camera_count)
         primary_camera_id_ = 0;
     cur_time = _cur_time;
     cur_img = _img;
@@ -874,7 +876,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     }
     matched_features.conservativeResize(259, kept_feature_count);
 
-    cur_un_pts = undistortedPts(cur_pts, m_camera[primary_camera_id_]);
+    cur_un_pts = undistortedPts(cur_pts, cameras[primary_camera_id_]);
     if (primary_camera_id_ == 1)
         pts_velocity = ptsVelocity(ids, cur_un_pts, cur_un_pts_map, prev_un_right_pts_map);
     else
@@ -912,7 +914,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
                 accepted_right_feature_indexes.push_back(match.trainIdx);
             }
 
-            cur_un_right_pts = undistortedPts(cur_right_pts, m_camera[1]);
+            cur_un_right_pts = undistortedPts(cur_right_pts, cameras[1]);
             right_pts_velocity = ptsVelocity(ids_right, cur_un_right_pts, cur_un_right_pts_map, prev_un_right_pts_map);
             right_deep_features.resize(259, accepted_right_feature_indexes.size());
             right_track_cnt.clear();
@@ -1135,8 +1137,8 @@ void FeatureTracker::processLineFeatures(const cv::Mat &left_img, const cv::Mat 
     auto liftLine = [&](const Eigen::Vector4d &line, int camera_id) {
         Eigen::Matrix<double, 8, 1> obs;
         Eigen::Vector3d p1, p2;
-        m_camera[camera_id]->liftProjective(Eigen::Vector2d(line(0), line(1)), p1);
-        m_camera[camera_id]->liftProjective(Eigen::Vector2d(line(2), line(3)), p2);
+        cameras[camera_id].liftProjective(Eigen::Vector2d(line(0), line(1)), p1);
+        cameras[camera_id].liftProjective(Eigen::Vector2d(line(2), line(3)), p2);
         obs << p1.x() / p1.z(), p1.y() / p1.z(), p2.x() / p2.z(), p2.y() / p2.z(),
             line(0), line(1), line(2), line(3);
         return obs;
@@ -1246,30 +1248,6 @@ LineFeatureFrameMap FeatureTracker::getLineFrame() const
     return line_feature_frame;
 }
 
-bool FeatureTracker::getCameraIntrinsics(int camera_id, Eigen::Vector4d &intrinsics) const
-{
-    if (camera_id < 0 || camera_id >= static_cast<int>(m_camera.size()) || !m_camera[camera_id])
-        return false;
-
-    if (boost::shared_ptr<camodocal::PinholeCamera> pinhole =
-            boost::dynamic_pointer_cast<camodocal::PinholeCamera>(m_camera[camera_id]))
-    {
-        const camodocal::PinholeCamera::Parameters &params = pinhole->getParameters();
-        intrinsics << params.fx(), params.fy(), params.cx(), params.cy();
-        return true;
-    }
-
-    if (boost::shared_ptr<camodocal::CataCamera> cata =
-            boost::dynamic_pointer_cast<camodocal::CataCamera>(m_camera[camera_id]))
-    {
-        const camodocal::CataCamera::Parameters &params = cata->getParameters();
-        intrinsics << params.gamma1(), params.gamma2(), params.u0(), params.v0();
-        return true;
-    }
-
-    return false;
-}
-
 void FeatureTracker::rejectWithF()
 {
     if (cur_pts.size() >= 8)
@@ -1280,12 +1258,12 @@ void FeatureTracker::rejectWithF()
         for (unsigned int i = 0; i < cur_pts.size(); i++)
         {
             Eigen::Vector3d tmp_p;
-            m_camera[0]->liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p);
+            cameras[0].liftProjective(Eigen::Vector2d(cur_pts[i].x, cur_pts[i].y), tmp_p);
             tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + col / 2.0;
             tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + row / 2.0;
             un_cur_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
 
-            m_camera[0]->liftProjective(Eigen::Vector2d(prev_pts[i].x, prev_pts[i].y), tmp_p);
+            cameras[0].liftProjective(Eigen::Vector2d(prev_pts[i].x, prev_pts[i].y), tmp_p);
             tmp_p.x() = FOCAL_LENGTH * tmp_p.x() / tmp_p.z() + col / 2.0;
             tmp_p.y() = FOCAL_LENGTH * tmp_p.y() / tmp_p.z() + row / 2.0;
             un_prev_pts[i] = cv::Point2f(tmp_p.x(), tmp_p.y());
@@ -1304,19 +1282,18 @@ void FeatureTracker::rejectWithF()
     }
 }
 
-void FeatureTracker::readIntrinsicParameter(const vector<string> &calib_file)
+void FeatureTracker::setCameraIntrinsics(const std::array<Eigen::Vector4d, 2> &intrinsics,
+                                         int camera_count_)
 {
-    m_camera.clear();
-    for (size_t i = 0; i < calib_file.size(); i++)
+    camera_count = camera_count_;
+    for (int i = 0; i < camera_count; ++i)
     {
-        ROS_INFO("reading paramerter of camera %s", calib_file[i].c_str());
-        camodocal::CameraPtr camera = CameraFactory::instance()->generateCameraFromYamlFile(calib_file[i]);
-        m_camera.push_back(camera);
+        cameras[i] = Camera{intrinsics[i].x(), intrinsics[i].y(),
+                            intrinsics[i].z(), intrinsics[i].w()};
+        ROS_INFO("camera %d intrinsics: fx=%f fy=%f cx=%f cy=%f", i,
+                 cameras[i].fx, cameras[i].fy, cameras[i].cx, cameras[i].cy);
     }
-    if (calib_file.size() == 2)
-        stereo_cam = 1;
-    else
-        stereo_cam = 0;
+    stereo_cam = camera_count == 2;
 
     if (DEEP_FEATURE && !deep_feature)
         initDeepFeatureFrontend();
@@ -1333,7 +1310,7 @@ void FeatureTracker::showUndistortion(const string &name)
         {
             Eigen::Vector2d a(i, j);
             Eigen::Vector3d b;
-            m_camera[0]->liftProjective(a, b);
+            cameras[0].liftProjective(a, b);
             distortedp.push_back(a);
             undistortedp.push_back(Eigen::Vector2d(b.x() / b.z(), b.y() / b.z()));
             //printf("%f,%f->%f,%f,%f\n)\n", a.x(), a.y(), b.x(), b.y(), b.z());
@@ -1361,14 +1338,14 @@ void FeatureTracker::showUndistortion(const string &name)
     // cv::waitKey(0);
 }
 
-vector<cv::Point2f> FeatureTracker::undistortedPts(vector<cv::Point2f> &pts, camodocal::CameraPtr cam)
+vector<cv::Point2f> FeatureTracker::undistortedPts(vector<cv::Point2f> &pts, const Camera &camera)
 {
     vector<cv::Point2f> un_pts;
     for (unsigned int i = 0; i < pts.size(); i++)
     {
         Eigen::Vector2d a(pts[i].x, pts[i].y);
         Eigen::Vector3d b;
-        cam->liftProjective(a, b);
+        camera.liftProjective(a, b);
         un_pts.push_back(cv::Point2f(b.x() / b.z(), b.y() / b.z()));
     }
     return un_pts;

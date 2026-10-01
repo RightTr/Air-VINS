@@ -116,12 +116,9 @@ void Estimator::setParameter()
     td = TD;
     g = G;
     cout << "set g " << g.transpose() << endl;
-    featureTracker.readIntrinsicParameter(CAM_NAMES);
+    featureTracker.setCameraIntrinsics(CAM_INTRINSICS, NUM_OF_CAM);
     for (int i = 0; i < NUM_OF_CAM; ++i)
-    {
-        if (!featureTracker.getCameraIntrinsics(i, line_camera_intrinsics[i]))
-            line_camera_intrinsics[i] << FOCAL_LENGTH, FOCAL_LENGTH, COL * 0.5, ROW * 0.5;
-    }
+        line_camera_intrinsics[i] = CAM_INTRINSICS[i];
     line_manager.setLineCameraIntrinsics(line_camera_intrinsics);
     lineProjectionFactor::sqrt_info = FOCAL_LENGTH / 1.5 * Matrix2d::Identity();
 

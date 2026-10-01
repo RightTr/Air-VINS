@@ -46,7 +46,8 @@ int MULTIPLE_THREAD;
 map<int, Eigen::Vector3d> pts_gt;
 std::string IMAGE0_TOPIC, IMAGE1_TOPIC;
 std::string FISHEYE_MASK;
-std::vector<std::string> CAM_NAMES;
+std::array<Eigen::Vector4d, 2> CAM_INTRINSICS{
+    Eigen::Vector4d::Zero(), Eigen::Vector4d::Zero()};
 int MAX_CNT;
 int MIN_DIST;
 double F_THRESHOLD;
@@ -94,6 +95,19 @@ void readOptionalParam(cv::FileStorage &fsSettings, const std::string &name, T &
     cv::FileNode node = fsSettings[name];
     if (!node.empty())
         node >> value;
+}
+
+bool readCameraIntrinsics(cv::FileStorage &fsSettings, const std::string &name,
+                          Eigen::Vector4d &intrinsics)
+{
+    const cv::FileNode node = fsSettings[name];
+    if (node.empty() || !node.isSeq() || node.size() != 4)
+        return false;
+
+    for (int i = 0; i < 4; ++i)
+        intrinsics(i) = static_cast<double>(node[i]);
+
+    return intrinsics.allFinite() && intrinsics.x() > 0.0 && intrinsics.y() > 0.0;
 }
 } // namespace
 
@@ -261,19 +275,22 @@ void readParameters(std::string config_file)
         printf("num_of_cam should be 1 or 2\n");
         assert(0);
     }
-    std::string cam0Calib;
-    fsSettings["cam0_calib"] >> cam0Calib;
-    std::string cam0Path = configPath + "/" + cam0Calib;
-    CAM_NAMES.push_back(cam0Path);
+    if (!readCameraIntrinsics(fsSettings, "cam0_intrinsics", CAM_INTRINSICS[0]))
+    {
+        ROS_ERROR("cam0_intrinsics must contain finite [fx, fy, cx, cy] values with positive fx/fy");
+        ROS_BREAK();
+        return;
+    }
 
     if(NUM_OF_CAM == 2)
     {
         STEREO = 1;
-        std::string cam1Calib;
-        fsSettings["cam1_calib"] >> cam1Calib;
-        std::string cam1Path = configPath + "/" + cam1Calib; 
-        //printf("%s cam1 path\n", cam1Path.c_str() );
-        CAM_NAMES.push_back(cam1Path);
+        if (!readCameraIntrinsics(fsSettings, "cam1_intrinsics", CAM_INTRINSICS[1]))
+        {
+            ROS_ERROR("cam1_intrinsics must contain finite [fx, fy, cx, cy] values with positive fx/fy");
+            ROS_BREAK();
+            return;
+        }
         
         cv::Mat cv_T;
         fsSettings["body_T_cam1"] >> cv_T;

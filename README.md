@@ -109,11 +109,10 @@ VIO is not only a software algorithm, it heavily relies on hardware quality. For
 Write a config file for your device. You can take config files of EuRoC and KITTI as the example. 
 
 ### 6.2 Camera calibration
-VINS-Fusion support several camera models (pinhole, mei, equidistant). You can use [camera model](https://github.com/hengli/camodocal) to calibrate your cameras. We put some example data under /camera_models/calibrationdata to tell you how to calibrate.
-```
-cd ~/catkin_ws/src/VINS-Fusion/camera_models/camera_calib_example/
-rosrun camera_models Calibrations -w 12 -h 8 -s 80 -i calibrationdata --camera-model pinhole
-```
+This project expects rectified, zero-distortion pinhole images. Store each camera's
+`[fx, fy, cx, cy]` values directly in the main configuration as
+`cam0_intrinsics` and `cam1_intrinsics`. If the source images have distortion,
+rectify them before passing them to VINS.
 
 ## 7. Docker Support
 To further facilitate the building process, we add docker in our code. Docker environment is like a sandbox, thus makes our code environment-independent. To run with docker, first make sure [ros](http://wiki.ros.org/ROS/Installation) and [docker](https://docs.docker.com/install/linux/docker-ce/ubuntu/) are installed on your machine. Then add your account to `docker` group by `sudo usermod -aG docker $YOUR_USER_NAME`. **Relaunch the terminal or logout and re-login if you get `Permission denied` error**, type:
@@ -144,7 +143,9 @@ In Euroc cases, you need open another terminal and play your bag file. If you ne
 
 
 ## 8. Acknowledgements
-We use [ceres solver](http://ceres-solver.org/) for non-linear optimization and [DBoW2](https://github.com/dorian3d/DBoW2) for loop detection, a generic [camera model](https://github.com/hengli/camodocal) and [GeographicLib](https://geographiclib.sourceforge.io/).
+We use [ceres solver](http://ceres-solver.org/) for non-linear optimization,
+[DBoW2](https://github.com/dorian3d/DBoW2) for loop detection, and
+[GeographicLib](https://geographiclib.sourceforge.io/).
 
 ## 9. License
 The source code is released under [GPLv3](http://www.gnu.org/licenses/) license.

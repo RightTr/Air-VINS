@@ -11,7 +11,6 @@ find_package(catkin REQUIRED COMPONENTS
     roscpp
     std_msgs
     nav_msgs
-    camera_models
     cv_bridge
     roslib
     )

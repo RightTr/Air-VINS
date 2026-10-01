@@ -60,7 +60,7 @@ int ROW;
 int COL;
 int DEBUG_IMAGE;
 
-camodocal::CameraPtr m_camera;
+Camera m_camera;
 Eigen::Vector3d tic;
 Eigen::Matrix3d qic;
 ros::Publisher pub_match_img;
@@ -466,13 +466,22 @@ int main(int argc, char **argv)
     BRIEF_PATTERN_FILE = pkg_path + "/../support_files/brief_pattern.yml";
     cout << "BRIEF_PATTERN_FILE" << BRIEF_PATTERN_FILE << endl;
 
-    int pn = config_file.find_last_of('/');
-    std::string configPath = config_file.substr(0, pn);
-    std::string cam0Calib;
-    fsSettings["cam0_calib"] >> cam0Calib;
-    std::string cam0Path = configPath + "/" + cam0Calib;
-    printf("cam calib path: %s\n", cam0Path.c_str());
-    m_camera = camodocal::CameraFactory::instance()->generateCameraFromYamlFile(cam0Path.c_str());
+    const cv::FileNode cam0_node = fsSettings["cam0_intrinsics"];
+    if (cam0_node.empty() || !cam0_node.isSeq() || cam0_node.size() != 4)
+    {
+        ROS_ERROR("cam0_intrinsics must contain [fx, fy, cx, cy]");
+        return 1;
+    }
+    Eigen::Vector4d cam0_intrinsics;
+    for (int i = 0; i < 4; ++i)
+        cam0_intrinsics(i) = static_cast<double>(cam0_node[i]);
+    if (!cam0_intrinsics.allFinite() || cam0_intrinsics.x() <= 0.0 || cam0_intrinsics.y() <= 0.0)
+    {
+        ROS_ERROR("cam0_intrinsics must contain finite values with positive fx/fy");
+        return 1;
+    }
+    m_camera = Camera{cam0_intrinsics.x(), cam0_intrinsics.y(),
+                      cam0_intrinsics.z(), cam0_intrinsics.w()};
 
     fsSettings["image0_topic"] >> IMAGE_TOPIC;        
     fsSettings["pose_graph_save_path"] >> POSE_GRAPH_SAVE_PATH;

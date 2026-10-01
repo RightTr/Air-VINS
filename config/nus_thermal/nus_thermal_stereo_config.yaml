@@ -9,8 +9,8 @@ image0_topic: "/cam0/image_raw"
 image1_topic: "/cam1/image_raw"
 output_path: "/workspace/src/VINS-Fusion/output/"
 
-cam0_calib: "left.yaml"
-cam1_calib: "right.yaml"
+cam0_intrinsics: [302.165801415368, 302.165801415368, 305.290283203125, 273.441696166992]
+cam1_intrinsics: [302.165801415368, 302.165801415368, 305.290283203125, 273.441696166992]
 image_width: 640
 image_height: 512
 

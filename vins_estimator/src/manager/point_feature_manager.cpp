@@ -6,7 +6,6 @@
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
-#include "camodocal/camera_models/CameraFactory.h"
 
 using namespace std;
 using namespace Eigen;
