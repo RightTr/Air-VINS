@@ -12,7 +12,6 @@
 #include <stdio.h>
 #include <queue>
 #include <map>
-#include <thread>
 #include <mutex>
 #include <opencv2/opencv.hpp>
 #include "estimator/estimator.h"
@@ -86,11 +85,7 @@ void sync_process()
     static int nuc_recovery_streak = 0;
     static int nuc_active_camera_id = 0;
     const int nuc_recovery_required = 3;
-#ifdef USE_ROS1
-    while(ros_utils::ok())
-    {
-#endif
-        if(STEREO)
+    if(STEREO)
         {
             cv::Mat image0, image1;
             std_msgs::Header header;
@@ -212,11 +207,6 @@ void sync_process()
                 estimator.inputImage(time, image);
         }
 
-#ifdef USE_ROS1
-        std::chrono::milliseconds dura(2);
-        std::this_thread::sleep_for(dura);
-    }
-#endif
 }
 
 
@@ -355,16 +345,9 @@ int main(int argc, char **argv)
     auto sub_cam_switch = ros_utils::create_subscription<std_msgs::Bool>(
         node, "/vins_cam_switch", 100, cam_switch_callback);
 
-#ifdef USE_ROS1
-    std::thread sync_thread{sync_process};
-#else
     auto sync_timer = ros_utils::create_timer(node, 0.002, sync_process);
-#endif
     ros_utils::spin(node);
-#ifdef USE_ROS1
-    if (sync_thread.joinable())
-        sync_thread.join();
-#endif
+    ros_utils::stop_timer(sync_timer);
 
     estimator.shutdown();
     shutdownPub();

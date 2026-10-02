@@ -180,11 +180,22 @@ template <typename CallbackT>
 inline Timer create_timer(const NodeHandle &node, double period_seconds, CallbackT &&callback)
 {
 #ifdef USE_ROS1
-    return node->createTimer(ros::Duration(period_seconds), std::forward<CallbackT>(callback));
+    auto timer_callback = [callback = std::forward<CallbackT>(callback)](
+                              const ros::TimerEvent &) mutable { callback(); };
+    return node->createTimer(ros::Duration(period_seconds), timer_callback);
 #else
     const auto period = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::duration<double>(period_seconds));
     return node->create_wall_timer(period, std::forward<CallbackT>(callback));
+#endif
+}
+
+inline void stop_timer(Timer &timer)
+{
+#ifdef USE_ROS1
+    timer.stop();
+#else
+    timer.reset();
 #endif
 }
 
