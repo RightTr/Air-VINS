@@ -1,88 +1,92 @@
 %YAML:1.0
 
 # NUS thermal stereo, no IMU.
-imu: 0
-num_of_cam: 2
+system:
+  imu: 0
+  num_of_cam: 2
+  multiple_thread: 1
+  output_path: "/workspace/src/VINS-Fusion/output/"
 
-imu_topic: "/imu0"
-image0_topic: "/cam0/image_raw"
-image1_topic: "/cam1/image_raw"
-output_path: "/workspace/src/VINS-Fusion/output/"
+topics:
+  imu: "/imu0"
+  image0: "/cam0/image_raw"
+  image1: "/cam1/image_raw"
 
-cam0_intrinsics: [302.165801415368, 302.165801415368, 305.290283203125, 273.441696166992]
-cam1_intrinsics: [302.165801415368, 302.165801415368, 305.290283203125, 273.441696166992]
-image_width: 640
-image_height: 512
+camera:
+  image_width: 640
+  image_height: 512
+  cam0_intrinsics: [302.165801415368, 302.165801415368, 305.290283203125, 273.441696166992]
+  cam1_intrinsics: [302.165801415368, 302.165801415368, 305.290283203125, 273.441696166992]
+  # Use the rectified left virtual camera as the VINS body frame.
+  estimate_extrinsic: 0
+  body_T_cam0: !!opencv-matrix
+    rows: 4
+    cols: 4
+    dt: d
+    data: [1.0, 0.0, 0.0, 0.0,
+           0.0, 1.0, 0.0, 0.0,
+           0.0, 0.0, 1.0, 0.0,
+           0.0, 0.0, 0.0, 1.0]
+  body_T_cam1: !!opencv-matrix
+    rows: 4
+    cols: 4
+    dt: d
+    data: [1.0, 0.0, 0.0, 0.1216630973583834,
+           0.0, 1.0, 0.0, 0.0,
+           0.0, 0.0, 1.0, 0.0,
+           0.0, 0.0, 0.0, 1.0]
 
-# Use the rectified left virtual camera as the VINS body frame.
-estimate_extrinsic: 0
-body_T_cam0: !!opencv-matrix
-   rows: 4
-   cols: 4
-   dt: d
-   data: [1.0, 0.0, 0.0, 0.0,
-          0.0, 1.0, 0.0, 0.0,
-          0.0, 0.0, 1.0, 0.0,
-          0.0, 0.0, 0.0, 1.0]
+feature_tracker:
+  max_cnt: 150
+  min_dist: 30
+  freq: 10
+  F_threshold: 1.0
+  show_track: 1
+  flow_back: 1
+  min_depth: 0.1
+  max_depth: 10.0
 
-body_T_cam1: !!opencv-matrix
-   rows: 4
-   cols: 4
-   dt: d
-   data: [1.0, 0.0, 0.0, 0.1216630973583834,
-          0.0, 1.0, 0.0, 0.0,
-          0.0, 0.0, 1.0, 0.0,
-          0.0, 0.0, 0.0, 1.0]
+deep_feature:
+  enabled: 1
+  model_dir: "/root/stirslam_ws/install/vins/share/vins/output"
+  matcher: 0  # 0 for LightGlue, 1 for SuperGlue
+  max_keypoints: 150
+  keypoint_threshold: 0.004
+  remove_borders: 4
+  stereo_y_threshold: 1.0
+  min_stereo_disparity: 4.0
 
-multiple_thread: 1
+line_feature:
+  enabled: 0
+  threshold: 0.7
+  min_track_cnt: 2
+  max_cnt: 100
+  min_length: 50.0
+  stereo_y_threshold: 1.0
+  min_stereo_disparity: 4.0
+  match_vote_threshold: 2
+  match_score_threshold: 0.8
 
-max_cnt: 150
-min_dist: 30
-freq: 10
-F_threshold: 1.0
-show_track: 1
-flow_back: 1
-deep_feature: 1
-deep_feature_model_dir: "/root/stirslam_ws/install/vins/share/vins/output"
-deep_feature_matcher: 0
-deep_feature_max_keypoints: 150
-deep_feature_keypoint_threshold: 0.004
-deep_feature_remove_borders: 4
-deep_feature_stereo_y_threshold: 1.0
-deep_feature_min_stereo_disparity: 4.0
-feature_min_depth: 0.1
-feature_max_depth: 10.0
+keyframe:
+  min_init_stereo_feature: 10
+  lost_num_match: 10
+  min_num_match: 30
+  max_num_match: 80
+  tracking_point_rate: 0.7
+  tracking_parallax_rate: 0.1
 
-# line_ba is the single switch for PLNet line inference, temporal/stereo line
-# matching, line BA, and 2D/3D line visualization.
-line_ba: 0
-line_threshold: 0.7
-line_min_track_cnt: 2
-line_max_cnt: 100
-line_min_length: 50.0
-line_stereo_y_threshold: 1.0
-line_min_stereo_disparity: 4.0
-line_match_vote_threshold: 2
-line_match_score_threshold: 0.8
+loop_closure:
+  descriptor_method: 1
+  vprnet_engine_path: "/root/stirslam_ws/install/vins/share/vins/output/ResNet50_512_eigenplaces.engine"
+  vprnet_onnx_path: "/root/stirslam_ws/install/vins/share/vins/output/ResNet50_512_eigenplaces.onnx"
+  loop_threshold: 0.75
+  loop_margin: 0.05
+  exclude_recent: 50
 
-keyframe_min_init_stereo_feature: 10
-keyframe_lost_num_match: 10
-keyframe_min_num_match: 30
-keyframe_max_num_match: 80
-keyframe_tracking_point_rate: 0.7
-keyframe_tracking_parallax_rate: 0.1
-loop_descriptor_method: 1   # 1 brief, 2 VPRNet
-vprnet_engine_path: "/root/stirslam_ws/install/vins/share/vins/output/ResNet50_512_eigenplaces.engine"
-vprnet_onnx_path: "/root/stirslam_ws/install/vins/share/vins/output/ResNet50_512_eigenplaces.onnx"
-vprnet_loop_threshold: 0.75
-vprnet_loop_margin: 0.05
-vprnet_loop_exclude_recent: 50
+nuc:
+  enable_handle: 1
 
-enable_nuc_handle: 1
-
-max_solver_time: 0.04
-max_num_iterations: 8
-keyframe_parallax: 10.0
-
-estimate_td: 0
-td: 0.0
+estimator:
+  max_solver_time: 0.04
+  max_num_iterations: 8
+  keyframe_parallax: 10.0

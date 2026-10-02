@@ -458,8 +458,8 @@ int main(int argc, char **argv)
     std::string IMAGE_TOPIC;
     int LOAD_PREVIOUS_POSE_GRAPH;
 
-    ROW = fsSettings["image_height"];
-    COL = fsSettings["image_width"];
+    ROW = fsSettings["camera"]["image_height"];
+    COL = fsSettings["camera"]["image_width"];
     std::string pkg_path = ros_utils::package_share_directory("loop_fusion");
     string vocabulary_file = pkg_path + "/../support_files/brief_k10L6.bin";
     cout << "vocabulary_file" << vocabulary_file << endl;
@@ -468,7 +468,7 @@ int main(int argc, char **argv)
     BRIEF_PATTERN_FILE = pkg_path + "/../support_files/brief_pattern.yml";
     cout << "BRIEF_PATTERN_FILE" << BRIEF_PATTERN_FILE << endl;
 
-    const cv::FileNode cam0_node = fsSettings["cam0_intrinsics"];
+    const cv::FileNode cam0_node = fsSettings["camera"]["cam0_intrinsics"];
     if (cam0_node.empty() || !cam0_node.isSeq() || cam0_node.size() != 4)
     {
         ROS_ERROR("cam0_intrinsics must contain [fx, fy, cx, cy]");
@@ -485,44 +485,44 @@ int main(int argc, char **argv)
     m_camera = Camera{cam0_intrinsics.x(), cam0_intrinsics.y(),
                       cam0_intrinsics.z(), cam0_intrinsics.w()};
 
-    fsSettings["image0_topic"] >> IMAGE_TOPIC;        
-    fsSettings["pose_graph_save_path"] >> POSE_GRAPH_SAVE_PATH;
-    fsSettings["output_path"] >> VINS_RESULT_PATH;
-    fsSettings["save_image"] >> DEBUG_IMAGE;
+    fsSettings["topics"]["image0"] >> IMAGE_TOPIC;
+    fsSettings["loop_closure"]["pose_graph_save_path"] >> POSE_GRAPH_SAVE_PATH;
+    fsSettings["system"]["output_path"] >> VINS_RESULT_PATH;
+    fsSettings["loop_closure"]["save_image"] >> DEBUG_IMAGE;
     std::string output_dir = VINS_RESULT_PATH;
 
-    LOAD_PREVIOUS_POSE_GRAPH = fsSettings["load_previous_pose_graph"];
+    LOAD_PREVIOUS_POSE_GRAPH = fsSettings["loop_closure"]["load_previous_pose_graph"];
     VINS_RESULT_PATH = VINS_RESULT_PATH + "/vio_loop.csv";
     std::ofstream fout(VINS_RESULT_PATH, std::ios::out);
     fout.close();
 
     int loop_descriptor_method = 1;
-    if (!fsSettings["loop_descriptor_method"].empty()) {
-        fsSettings["loop_descriptor_method"] >> loop_descriptor_method;
+    if (!fsSettings["loop_closure"]["descriptor_method"].empty()) {
+        fsSettings["loop_closure"]["descriptor_method"] >> loop_descriptor_method;
     }
     posegraph.setLoopDescriptorType(loop_descriptor_method);
     double vprnet_loop_threshold = 0.75;
     double vprnet_loop_margin = 0.0;
     int vprnet_loop_exclude_recent = 50;
-    if (!fsSettings["vprnet_loop_threshold"].empty()) {
-        fsSettings["vprnet_loop_threshold"] >> vprnet_loop_threshold;
+    if (!fsSettings["loop_closure"]["loop_threshold"].empty()) {
+        fsSettings["loop_closure"]["loop_threshold"] >> vprnet_loop_threshold;
     }
-    if (!fsSettings["vprnet_loop_margin"].empty()) {
-        fsSettings["vprnet_loop_margin"] >> vprnet_loop_margin;
+    if (!fsSettings["loop_closure"]["loop_margin"].empty()) {
+        fsSettings["loop_closure"]["loop_margin"] >> vprnet_loop_margin;
     }
-    if (!fsSettings["vprnet_loop_exclude_recent"].empty()) {
-        fsSettings["vprnet_loop_exclude_recent"] >> vprnet_loop_exclude_recent;
+    if (!fsSettings["loop_closure"]["exclude_recent"].empty()) {
+        fsSettings["loop_closure"]["exclude_recent"] >> vprnet_loop_exclude_recent;
     }
     posegraph.setVPRNetLoopParams(vprnet_loop_threshold, vprnet_loop_margin, vprnet_loop_exclude_recent);
 
     if (loop_descriptor_method == 2) {
         std::string vprnet_engine_path = output_dir + "/ResNet50_512_eigenplaces.engine";
         std::string vprnet_onnx_path = output_dir + "/ResNet50_512_eigenplaces.onnx";
-        if (!fsSettings["vprnet_engine_path"].empty()) {
-            fsSettings["vprnet_engine_path"] >> vprnet_engine_path;
+        if (!fsSettings["loop_closure"]["vprnet_engine_path"].empty()) {
+            fsSettings["loop_closure"]["vprnet_engine_path"] >> vprnet_engine_path;
         }
-        if (!fsSettings["vprnet_onnx_path"].empty()) {
-            fsSettings["vprnet_onnx_path"] >> vprnet_onnx_path;
+        if (!fsSettings["loop_closure"]["vprnet_onnx_path"].empty()) {
+            fsSettings["loop_closure"]["vprnet_onnx_path"] >> vprnet_onnx_path;
         }
         VPRNet::Options options;
         options.engine_path = vprnet_engine_path;
@@ -558,7 +558,7 @@ int main(int argc, char **argv)
         }
     }
 
-    int USE_IMU = fsSettings["imu"];
+    int USE_IMU = fsSettings["system"]["imu"];
     posegraph.setIMUFlag(USE_IMU);
     fsSettings.release();
 

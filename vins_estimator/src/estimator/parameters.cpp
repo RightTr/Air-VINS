@@ -90,9 +90,10 @@ std::string joinPath(const std::string &folder, const std::string &name)
 }
 
 template <typename T>
-void readOptionalParam(cv::FileStorage &fsSettings, const std::string &name, T &value)
+void readOptionalParam(cv::FileStorage &fsSettings, const std::string &group,
+                       const std::string &name, T &value)
 {
-    cv::FileNode node = fsSettings[name];
+    cv::FileNode node = fsSettings[group][name];
     if (!node.empty())
         node >> value;
 }
@@ -100,7 +101,7 @@ void readOptionalParam(cv::FileStorage &fsSettings, const std::string &name, T &
 bool readCameraIntrinsics(cv::FileStorage &fsSettings, const std::string &name,
                           Eigen::Vector4d &intrinsics)
 {
-    const cv::FileNode node = fsSettings[name];
+    const cv::FileNode node = fsSettings["camera"][name];
     if (node.empty() || !node.isSeq() || node.size() != 4)
         return false;
 
@@ -128,13 +129,13 @@ void readParameters(std::string config_file)
         std::cerr << "ERROR: Wrong path to settings" << std::endl;
     }
 
-    fsSettings["image0_topic"] >> IMAGE0_TOPIC;
-    fsSettings["image1_topic"] >> IMAGE1_TOPIC;
-    MAX_CNT = fsSettings["max_cnt"];
-    MIN_DIST = fsSettings["min_dist"];
-    F_THRESHOLD = fsSettings["F_threshold"];
-    SHOW_TRACK = fsSettings["show_track"];
-    FLOW_BACK = fsSettings["flow_back"];
+    fsSettings["topics"]["image0"] >> IMAGE0_TOPIC;
+    fsSettings["topics"]["image1"] >> IMAGE1_TOPIC;
+    MAX_CNT = fsSettings["feature_tracker"]["max_cnt"];
+    MIN_DIST = fsSettings["feature_tracker"]["min_dist"];
+    F_THRESHOLD = fsSettings["feature_tracker"]["F_threshold"];
+    SHOW_TRACK = fsSettings["feature_tracker"]["show_track"];
+    FLOW_BACK = fsSettings["feature_tracker"]["flow_back"];
     int pn = config_file.find_last_of('/');
     std::string configPath = config_file.substr(0, pn);
 
@@ -168,64 +169,66 @@ void readParameters(std::string config_file)
     KEYFRAME_MAX_NUM_MATCH = 80;
     KEYFRAME_TRACKING_POINT_RATE = 0.7f;
     KEYFRAME_TRACKING_PARALLAX_RATE = 0.1;
-    readOptionalParam(fsSettings, "deep_feature", DEEP_FEATURE);
-    readOptionalParam(fsSettings, "deep_feature_model_dir", DEEP_FEATURE_MODEL_DIR);
-    readOptionalParam(fsSettings, "deep_feature_matcher", DEEP_FEATURE_MATCHER);
-    readOptionalParam(fsSettings, "deep_feature_max_keypoints", DEEP_FEATURE_MAX_KEYPOINTS);
-    readOptionalParam(fsSettings, "deep_feature_keypoint_threshold", DEEP_FEATURE_KEYPOINT_THRESHOLD);
-    readOptionalParam(fsSettings, "deep_feature_remove_borders", DEEP_FEATURE_REMOVE_BORDERS);
-    readOptionalParam(fsSettings, "deep_feature_stereo_y_threshold", DEEP_FEATURE_STEREO_Y_THRESHOLD);
-    readOptionalParam(fsSettings, "deep_feature_min_stereo_disparity", DEEP_FEATURE_MIN_STEREO_DISPARITY);
-    readOptionalParam(fsSettings, "line_ba", LINE_BA);
-    readOptionalParam(fsSettings, "line_threshold", LINE_THRESHOLD);
-    readOptionalParam(fsSettings, "line_min_obs", LINE_MIN_OBS);
-    readOptionalParam(fsSettings, "line_min_track_cnt", LINE_MIN_TRACK_CNT);
-    readOptionalParam(fsSettings, "line_max_cnt", LINE_MAX_CNT);
-    readOptionalParam(fsSettings, "line_min_length", LINE_MIN_LENGTH);
-    readOptionalParam(fsSettings, "line_stereo_y_threshold", LINE_STEREO_Y_THRESHOLD);
-    readOptionalParam(fsSettings, "line_min_stereo_disparity", LINE_MIN_STEREO_DISPARITY);
-    readOptionalParam(fsSettings, "line_max_stereo_disparity", LINE_MAX_STEREO_DISPARITY);
-    readOptionalParam(fsSettings, "line_match_vote_threshold", LINE_MATCH_VOTE_THRESHOLD);
-    readOptionalParam(fsSettings, "line_match_score_threshold", LINE_MATCH_SCORE_THRESHOLD);
-    readOptionalParam(fsSettings, "line_mono_chi2", LINE_MONO_CHI2);
-    readOptionalParam(fsSettings, "line_stereo_chi2", LINE_STEREO_CHI2);
-    readOptionalParam(fsSettings, "feature_min_depth", FEATURE_MIN_DEPTH);
-    readOptionalParam(fsSettings, "feature_max_depth", FEATURE_MAX_DEPTH);
-    readOptionalParam(fsSettings, "enable_nuc_handle", ENABLE_NUC_HANDLE);
-    readOptionalParam(fsSettings, "keyframe_min_init_stereo_feature", KEYFRAME_MIN_INIT_STEREO_FEATURE);
-    readOptionalParam(fsSettings, "keyframe_lost_num_match", KEYFRAME_LOST_NUM_MATCH);
-    readOptionalParam(fsSettings, "keyframe_min_num_match", KEYFRAME_MIN_NUM_MATCH);
-    readOptionalParam(fsSettings, "keyframe_max_num_match", KEYFRAME_MAX_NUM_MATCH);
-    readOptionalParam(fsSettings, "keyframe_tracking_point_rate", KEYFRAME_TRACKING_POINT_RATE);
-    readOptionalParam(fsSettings, "keyframe_tracking_parallax_rate", KEYFRAME_TRACKING_PARALLAX_RATE);
+    readOptionalParam(fsSettings, "deep_feature", "enabled", DEEP_FEATURE);
+    readOptionalParam(fsSettings, "deep_feature", "model_dir", DEEP_FEATURE_MODEL_DIR);
+    readOptionalParam(fsSettings, "deep_feature", "matcher", DEEP_FEATURE_MATCHER);
+    readOptionalParam(fsSettings, "deep_feature", "max_keypoints", DEEP_FEATURE_MAX_KEYPOINTS);
+    readOptionalParam(fsSettings, "deep_feature", "keypoint_threshold", DEEP_FEATURE_KEYPOINT_THRESHOLD);
+    readOptionalParam(fsSettings, "deep_feature", "remove_borders", DEEP_FEATURE_REMOVE_BORDERS);
+    readOptionalParam(fsSettings, "deep_feature", "stereo_y_threshold", DEEP_FEATURE_STEREO_Y_THRESHOLD);
+    readOptionalParam(fsSettings, "deep_feature", "min_stereo_disparity", DEEP_FEATURE_MIN_STEREO_DISPARITY);
+    readOptionalParam(fsSettings, "line_feature", "enabled", LINE_BA);
+    readOptionalParam(fsSettings, "line_feature", "threshold", LINE_THRESHOLD);
+    readOptionalParam(fsSettings, "line_feature", "min_obs", LINE_MIN_OBS);
+    readOptionalParam(fsSettings, "line_feature", "min_track_cnt", LINE_MIN_TRACK_CNT);
+    readOptionalParam(fsSettings, "line_feature", "max_cnt", LINE_MAX_CNT);
+    readOptionalParam(fsSettings, "line_feature", "min_length", LINE_MIN_LENGTH);
+    readOptionalParam(fsSettings, "line_feature", "stereo_y_threshold", LINE_STEREO_Y_THRESHOLD);
+    readOptionalParam(fsSettings, "line_feature", "min_stereo_disparity", LINE_MIN_STEREO_DISPARITY);
+    readOptionalParam(fsSettings, "line_feature", "max_stereo_disparity", LINE_MAX_STEREO_DISPARITY);
+    readOptionalParam(fsSettings, "line_feature", "match_vote_threshold", LINE_MATCH_VOTE_THRESHOLD);
+    readOptionalParam(fsSettings, "line_feature", "match_score_threshold", LINE_MATCH_SCORE_THRESHOLD);
+    readOptionalParam(fsSettings, "line_feature", "mono_chi2", LINE_MONO_CHI2);
+    readOptionalParam(fsSettings, "line_feature", "stereo_chi2", LINE_STEREO_CHI2);
+    readOptionalParam(fsSettings, "feature_tracker", "min_depth", FEATURE_MIN_DEPTH);
+    readOptionalParam(fsSettings, "feature_tracker", "max_depth", FEATURE_MAX_DEPTH);
+    readOptionalParam(fsSettings, "nuc", "enable_handle", ENABLE_NUC_HANDLE);
+    readOptionalParam(fsSettings, "keyframe", "min_init_stereo_feature", KEYFRAME_MIN_INIT_STEREO_FEATURE);
+    readOptionalParam(fsSettings, "keyframe", "lost_num_match", KEYFRAME_LOST_NUM_MATCH);
+    readOptionalParam(fsSettings, "keyframe", "min_num_match", KEYFRAME_MIN_NUM_MATCH);
+    readOptionalParam(fsSettings, "keyframe", "max_num_match", KEYFRAME_MAX_NUM_MATCH);
+    readOptionalParam(fsSettings, "keyframe", "tracking_point_rate", KEYFRAME_TRACKING_POINT_RATE);
+    readOptionalParam(fsSettings, "keyframe", "tracking_parallax_rate", KEYFRAME_TRACKING_PARALLAX_RATE);
 
-    MULTIPLE_THREAD = fsSettings["multiple_thread"];
+    MULTIPLE_THREAD = fsSettings["system"]["multiple_thread"];
 
-    USE_IMU = fsSettings["imu"];
+    USE_IMU = fsSettings["system"]["imu"];
     printf("USE_IMU: %d\n", USE_IMU);
     if(USE_IMU)
     {
-        fsSettings["imu_topic"] >> IMU_TOPIC;
+        fsSettings["topics"]["imu"] >> IMU_TOPIC;
         printf("IMU_TOPIC: %s\n", IMU_TOPIC.c_str());
-        ACC_N = fsSettings["acc_n"];
-        ACC_W = fsSettings["acc_w"];
-        GYR_N = fsSettings["gyr_n"];
-        GYR_W = fsSettings["gyr_w"];
-        G.z() = fsSettings["g_norm"];
+        ACC_N = fsSettings["estimator"]["acc_n"];
+        ACC_W = fsSettings["estimator"]["acc_w"];
+        GYR_N = fsSettings["estimator"]["gyr_n"];
+        GYR_W = fsSettings["estimator"]["gyr_w"];
+        G.z() = fsSettings["estimator"]["g_norm"];
+        TD = fsSettings["estimator"]["td"];
+        ESTIMATE_TD = fsSettings["estimator"]["estimate_td"];
     }
 
-    SOLVER_TIME = fsSettings["max_solver_time"];
-    NUM_ITERATIONS = fsSettings["max_num_iterations"];
-    MIN_PARALLAX = fsSettings["keyframe_parallax"];
+    SOLVER_TIME = fsSettings["estimator"]["max_solver_time"];
+    NUM_ITERATIONS = fsSettings["estimator"]["max_num_iterations"];
+    MIN_PARALLAX = fsSettings["estimator"]["keyframe_parallax"];
     MIN_PARALLAX = MIN_PARALLAX / FOCAL_LENGTH;
 
-    fsSettings["output_path"] >> OUTPUT_FOLDER;
+    fsSettings["system"]["output_path"] >> OUTPUT_FOLDER;
     VINS_RESULT_PATH = OUTPUT_FOLDER + "/vio.csv";
     std::cout << "result path " << VINS_RESULT_PATH << std::endl;
     std::ofstream fout(VINS_RESULT_PATH, std::ios::out);
     fout.close();
 
-    ESTIMATE_EXTRINSIC = fsSettings["estimate_extrinsic"];
+    ESTIMATE_EXTRINSIC = fsSettings["camera"]["estimate_extrinsic"];
     if (ESTIMATE_EXTRINSIC == 2)
     {
         ROS_WARN("have no prior about extrinsic param, calibrate extrinsic param");
@@ -244,14 +247,14 @@ void readParameters(std::string config_file)
             ROS_WARN(" fix extrinsic param ");
 
         cv::Mat cv_T;
-        fsSettings["body_T_cam0"] >> cv_T;
+        fsSettings["camera"]["body_T_cam0"] >> cv_T;
         Eigen::Matrix4d T;
         cv::cv2eigen(cv_T, T);
         RIC.push_back(T.block<3, 3>(0, 0));
         TIC.push_back(T.block<3, 1>(0, 3));
     } 
     
-    NUM_OF_CAM = fsSettings["num_of_cam"];
+    NUM_OF_CAM = fsSettings["system"]["num_of_cam"];
     printf("camera number %d\n", NUM_OF_CAM);
 
     if(NUM_OF_CAM != 1 && NUM_OF_CAM != 2)
@@ -277,7 +280,7 @@ void readParameters(std::string config_file)
         }
         
         cv::Mat cv_T;
-        fsSettings["body_T_cam1"] >> cv_T;
+        fsSettings["camera"]["body_T_cam1"] >> cv_T;
         Eigen::Matrix4d T;
         cv::cv2eigen(cv_T, T);
         RIC.push_back(T.block<3, 3>(0, 0));
@@ -288,15 +291,13 @@ void readParameters(std::string config_file)
     BIAS_ACC_THRESHOLD = 0.1;
     BIAS_GYR_THRESHOLD = 0.1;
 
-    TD = fsSettings["td"];
-    ESTIMATE_TD = fsSettings["estimate_td"];
     if (ESTIMATE_TD)
         ROS_INFO_STREAM("Unsynchronized sensors, online estimate time offset, initial td: " << TD);
     else
         ROS_INFO_STREAM("Synchronized sensors, fix time offset: " << TD);
 
-    ROW = fsSettings["image_height"];
-    COL = fsSettings["image_width"];
+    ROW = fsSettings["camera"]["image_height"];
+    COL = fsSettings["camera"]["image_width"];
     ROS_INFO("ROW: %d COL: %d ", ROW, COL);
 
     if(!USE_IMU)
