@@ -9,10 +9,7 @@
 
 #pragma once
 
-#include <ros/ros.h>
-#include <std_msgs/ColorRGBA.h>
-#include <visualization_msgs/Marker.h>
-#include <visualization_msgs/MarkerArray.h>
+#include "vins_estimator/src/utility/ros_utils.h"
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 #include <opencv2/opencv.hpp>
@@ -32,11 +29,11 @@ public:
 	void add_pose(const Eigen::Vector3d& p, const Eigen::Quaterniond& q);
 	void reset();
 
-	void publish_by(ros::Publisher& pub, const std_msgs::Header& header);
+	void publish_by(ros_utils::Publisher<visualization_msgs::MarkerArray>& pub, const std_msgs::Header& header);
 	void add_edge(const Eigen::Vector3d& p0, const Eigen::Vector3d& p1);
 	void add_loopedge(const Eigen::Vector3d& p0, const Eigen::Vector3d& p1);
 	//void add_image(const Eigen::Vector3d& T, const Eigen::Matrix3d& R, const cv::Mat &src);
-	void publish_image_by( ros::Publisher &pub, const std_msgs::Header &header);
+	void publish_image_by(ros_utils::Publisher<visualization_msgs::Marker>& pub, const std_msgs::Header &header);
 private:
 	std::vector<visualization_msgs::Marker> m_markers;
 	std_msgs::ColorRGBA m_image_boundary_color;

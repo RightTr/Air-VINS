@@ -14,18 +14,19 @@
 
 Estimator::Estimator()
 {
-    ROS_INFO("init begins");
     initThreadFlag = false;
-    clearState();
 }
 
 Estimator::~Estimator()
 {
-    if (MULTIPLE_THREAD)
-    {
+    shutdown();
+}
+
+void Estimator::shutdown()
+{
+    shutdown_requested.store(true);
+    if (processThread.joinable())
         processThread.join();
-        printf("join thread \n");
-    }
 }
 
 void Estimator::clearState()
@@ -102,6 +103,7 @@ void Estimator::clearState()
 
 void Estimator::setParameter()
 {
+    shutdown_requested.store(false);
     mProcess.lock();
     for (int i = 0; i < NUM_OF_CAM; i++)
     {
@@ -294,7 +296,7 @@ bool Estimator::IMUAvailable(double t)
 
 void Estimator::processMeasurements()
 {
-    while (1)
+    while (!shutdown_requested.load())
     {
         //printf("process measurments\n");
         VisualMeasurement feature;
@@ -303,7 +305,7 @@ void Estimator::processMeasurements()
         {
             feature = featureBuf.front();
             curTime = feature.header + td;
-            while(1)
+            while(!shutdown_requested.load())
             {
                 if ((!USE_IMU  || IMUAvailable(feature.header + td)))
                     break;
@@ -316,6 +318,8 @@ void Estimator::processMeasurements()
                     std::this_thread::sleep_for(dura);
                 }
             }
+            if (shutdown_requested.load())
+                break;
             mBuf.lock();
             if(USE_IMU)
                 getIMUInterval(prevTime, curTime, accVector, gyrVector);
@@ -348,7 +352,7 @@ void Estimator::processMeasurements()
 
             std_msgs::Header header;
             header.frame_id = "world";
-            header.stamp = ros::Time(feature.header);
+            header.stamp = ros_utils::time_from_sec(feature.header);
 
             pubOdometry(*this, header);
             pubKeyPoses(*this, header);

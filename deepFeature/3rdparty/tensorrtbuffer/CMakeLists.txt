@@ -18,5 +18,11 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 add_library(tensorrtbuffer SHARED src/logger.cpp src/sample_options.cpp src/sample_utils.cpp)
 
-
+# Install beside the ROS2 node so the executable can resolve the shared
+# library from its own runtime directory after `colcon build --symlink-install`
+# or a normal install build.
+install(TARGETS tensorrtbuffer
+    LIBRARY DESTINATION lib/${CMAKE_PROJECT_NAME}
+    ARCHIVE DESTINATION lib/${CMAKE_PROJECT_NAME}
+    RUNTIME DESTINATION bin)
 

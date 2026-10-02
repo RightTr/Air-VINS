@@ -14,13 +14,21 @@
 #include <map>
 #include <thread>
 #include <mutex>
-#include <ros/ros.h>
-#include <std_msgs/Bool.h>
+#ifdef USE_ROS1
 #include <cv_bridge/cv_bridge.h>
+#else
+#include <cv_bridge/cv_bridge.h>
+#endif
+#ifdef USE_ROS1
+#include <sensor_msgs/image_encodings.h>
+#else
+#include <sensor_msgs/image_encodings.hpp>
+#endif
 #include <opencv2/opencv.hpp>
 #include "estimator/estimator.h"
 #include "estimator/parameters.h"
 #include "utility/visualization.h"
+#include "utility/ros_utils.h"
 
 Estimator estimator;
 
@@ -29,6 +37,8 @@ queue<sensor_msgs::PointCloudConstPtr> feature_buf;
 queue<sensor_msgs::ImageConstPtr> img0_buf;
 queue<sensor_msgs::ImageConstPtr> img1_buf;
 std::mutex m_buf;
+
+
 
 
 void img0_callback(const sensor_msgs::ImageConstPtr &img_msg)
@@ -80,14 +90,16 @@ bool sameImageExact(const cv::Mat &a, const cv::Mat &b)
 // extract images with same timestamp from two topics
 void sync_process()
 {
-    cv::Mat prev_image0, prev_image1;
-    bool skipped_visual_update = false;
-    bool nuc_mono_fallback = false;
-    int nuc_recovery_streak = 0;
-    int nuc_active_camera_id = 0;
+    static cv::Mat prev_image0, prev_image1;
+    static bool skipped_visual_update = false;
+    static bool nuc_mono_fallback = false;
+    static int nuc_recovery_streak = 0;
+    static int nuc_active_camera_id = 0;
     const int nuc_recovery_required = 3;
-    while(1)
+#ifdef USE_ROS1
+    while(ros_utils::ok())
     {
+#endif
         if(STEREO)
         {
             cv::Mat image0, image1;
@@ -96,8 +108,8 @@ void sync_process()
             m_buf.lock();
             if (!img0_buf.empty() && !img1_buf.empty())
             {
-                double time0 = img0_buf.front()->header.stamp.toSec();
-                double time1 = img1_buf.front()->header.stamp.toSec();
+                double time0 = ros_utils::time_to_sec(img0_buf.front()->header.stamp);
+                double time1 = ros_utils::time_to_sec(img1_buf.front()->header.stamp);
                 // 0.003s sync tolerance
                 if(time0 < time1 - 0.003)
                 {
@@ -111,7 +123,7 @@ void sync_process()
                 }
                 else
                 {
-                    time = img0_buf.front()->header.stamp.toSec();
+                    time = ros_utils::time_to_sec(img0_buf.front()->header.stamp);
                     header = img0_buf.front()->header;
                     image0 = getImageFromMsg(img0_buf.front());
                     img0_buf.pop();
@@ -200,7 +212,7 @@ void sync_process()
             m_buf.lock();
             if(!img0_buf.empty())
             {
-                time = img0_buf.front()->header.stamp.toSec();
+                time = ros_utils::time_to_sec(img0_buf.front()->header.stamp);
                 header = img0_buf.front()->header;
                 image = getImageFromMsg(img0_buf.front());
                 img0_buf.pop();
@@ -210,15 +222,17 @@ void sync_process()
                 estimator.inputImage(time, image);
         }
 
+#ifdef USE_ROS1
         std::chrono::milliseconds dura(2);
         std::this_thread::sleep_for(dura);
     }
+#endif
 }
 
 
 void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
 {
-    double t = imu_msg->header.stamp.toSec();
+    double t = ros_utils::time_to_sec(imu_msg->header.stamp);
     double dx = imu_msg->linear_acceleration.x;
     double dy = imu_msg->linear_acceleration.y;
     double dz = imu_msg->linear_acceleration.z;
@@ -259,7 +273,7 @@ void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
         xyz_uv_velocity << x, y, z, p_u, p_v, velocity_x, velocity_y;
         featureFrame[feature_id].emplace_back(camera_id,  xyz_uv_velocity);
     }
-    double t = feature_msg->header.stamp.toSec();
+    double t = ros_utils::time_to_sec(feature_msg->header.stamp);
     estimator.inputFeature(t, featureFrame);
     return;
 }
@@ -307,10 +321,16 @@ void cam_switch_callback(const std_msgs::BoolConstPtr &switch_msg)
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "vins_estimator");
-    ros::NodeHandle n("~");
+    auto node = ros_utils::init(argc, argv, "vins_estimator");
+    ROS_INFO("init begins");
+    // Estimator is a global callback target. Initialize its state here, after
+    // every translation unit's global visualization objects are constructed.
+    estimator.clearState();
+#ifdef USE_ROS1
     ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
+#endif
 
+#ifdef USE_ROS1
     if(argc != 2)
     {
         printf("please intput: rosrun vins vins_node [config file] \n"
@@ -321,6 +341,16 @@ int main(int argc, char **argv)
 
     string config_file = argv[1];
     printf("config_file: %s\n", argv[1]);
+#else
+    const auto non_ros_args = rclcpp::remove_ros_arguments(argc, argv);
+    if (non_ros_args.size() != 2)
+    {
+        RCLCPP_ERROR(node->get_logger(), "usage: vins_node <config_file>");
+        return 1;
+    }
+    string config_file = non_ros_args[1];
+    printf("config_file: %s\n", config_file.c_str());
+#endif
 
     readParameters(config_file);
     estimator.setParameter();
@@ -331,26 +361,56 @@ int main(int argc, char **argv)
 
     ROS_WARN("waiting for image and imu...");
 
-    registerPub(n);
+    registerPub(node);
 
-    ros::Subscriber sub_imu;
+    ros_utils::Subscription<sensor_msgs::Imu> sub_imu;
     if(USE_IMU)
     {
-        sub_imu = n.subscribe(IMU_TOPIC, 2000, imu_callback, ros::TransportHints().tcpNoDelay());
+        sub_imu = ros_utils::create_subscription<sensor_msgs::Imu>(
+            node, IMU_TOPIC, 2000, imu_callback, ros_utils::QosProfile::SensorData, true);
     }
-    ros::Subscriber sub_feature = n.subscribe("/feature_tracker/feature", 2000, feature_callback);
-    ros::Subscriber sub_img0 = n.subscribe(IMAGE0_TOPIC, 100, img0_callback);
-    ros::Subscriber sub_img1;
+    auto sub_feature = ros_utils::create_subscription<sensor_msgs::PointCloud>(
+        node, "/feature_tracker/feature", 2000, feature_callback);
+    auto sub_img0 = ros_utils::create_subscription<sensor_msgs::Image>(
+        node, IMAGE0_TOPIC, 100, img0_callback, ros_utils::QosProfile::SensorData);
+    ros_utils::Subscription<sensor_msgs::Image> sub_img1;
     if(STEREO)
     {
-        sub_img1 = n.subscribe(IMAGE1_TOPIC, 100, img1_callback);
+        sub_img1 = ros_utils::create_subscription<sensor_msgs::Image>(
+            node, IMAGE1_TOPIC, 100, img1_callback, ros_utils::QosProfile::SensorData);
     }
-    ros::Subscriber sub_restart = n.subscribe("/vins_restart", 100, restart_callback);
-    ros::Subscriber sub_imu_switch = n.subscribe("/vins_imu_switch", 100, imu_switch_callback);
-    ros::Subscriber sub_cam_switch = n.subscribe("/vins_cam_switch", 100, cam_switch_callback);
+    auto sub_restart = ros_utils::create_subscription<std_msgs::Bool>(
+        node, "/vins_restart", 100, restart_callback);
+    auto sub_imu_switch = ros_utils::create_subscription<std_msgs::Bool>(
+        node, "/vins_imu_switch", 100, imu_switch_callback);
+    auto sub_cam_switch = ros_utils::create_subscription<std_msgs::Bool>(
+        node, "/vins_cam_switch", 100, cam_switch_callback);
 
+#ifdef USE_ROS1
     std::thread sync_thread{sync_process};
-    ros::spin();
+#else
+    auto sync_timer = node->create_wall_timer(std::chrono::milliseconds(2), sync_process);
+#endif
+    ros_utils::spin(node);
+#ifdef USE_ROS1
+    if (sync_thread.joinable())
+        sync_thread.join();
+#endif
+
+    estimator.shutdown();
+    shutdownPub();
+#ifdef USE_ROS2
+    sync_timer.reset();
+    sub_cam_switch.reset();
+    sub_imu_switch.reset();
+    sub_restart.reset();
+    sub_img1.reset();
+    sub_img0.reset();
+    sub_feature.reset();
+    sub_imu.reset();
+    ros_utils::global_node().reset();
+    node.reset();
+#endif
 
     return 0;
 }

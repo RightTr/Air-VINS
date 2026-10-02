@@ -92,7 +92,7 @@ void CameraPoseVisualization::add_loopedge(const Eigen::Vector3d& p0, const Eige
     //  tmp_loop_edge_num = 1;
     marker.type = visualization_msgs::Marker::LINE_STRIP;
     marker.action = visualization_msgs::Marker::ADD;
-    marker.lifetime = ros::Duration();
+    marker.lifetime = ros_utils::zero_duration();
     //marker.scale.x = 0.4;
     marker.scale.x = 0.02;
     marker.color.r = 1.0f;
@@ -117,7 +117,8 @@ void CameraPoseVisualization::add_pose(const Eigen::Vector3d& p, const Eigen::Qu
 
     marker.ns = m_marker_ns;
     marker.id = 0;
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    // The frustum points are stored as independent edge pairs.
+    marker.type = visualization_msgs::Marker::LINE_LIST;
     marker.action = visualization_msgs::Marker::ADD;
     marker.scale.x = m_line_width;
 
@@ -204,7 +205,8 @@ void CameraPoseVisualization::reset() {
     //image.colors.clear();
 }
 
-void CameraPoseVisualization::publish_by( ros::Publisher &pub, const std_msgs::Header &header ) {
+void CameraPoseVisualization::publish_by(ros_utils::Publisher<visualization_msgs::MarkerArray> &pub,
+                                         const std_msgs::Header &header) {
 	visualization_msgs::MarkerArray markerArray_msg;
 	//int k = (int)m_markers.size();
   /*
@@ -222,13 +224,14 @@ void CameraPoseVisualization::publish_by( ros::Publisher &pub, const std_msgs::H
 		markerArray_msg.markers.push_back(marker);
 	}
   
-	pub.publish(markerArray_msg);
+	ros_utils::publish(pub, markerArray_msg);
 }
 
-void CameraPoseVisualization::publish_image_by( ros::Publisher &pub, const std_msgs::Header &header ) {
+void CameraPoseVisualization::publish_image_by(ros_utils::Publisher<visualization_msgs::Marker> &pub,
+                                               const std_msgs::Header &header) {
     image.header = header;
 
-    pub.publish(image);
+    ros_utils::publish(pub, image);
 }
 /*
 void CameraPoseVisualization::add_image(const Eigen::Vector3d& T, const Eigen::Matrix3d& R, const cv::Mat &src)

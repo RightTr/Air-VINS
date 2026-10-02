@@ -2,7 +2,7 @@
 #include <cmath>
 #include <limits>
 #include <utility>
-#include <ros/console.h>
+#include "../utility/ros_utils.h"
 #include <opencv2/calib3d.hpp>
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/imgproc/imgproc.hpp>

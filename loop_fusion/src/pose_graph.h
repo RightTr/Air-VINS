@@ -20,11 +20,8 @@
 #include <ceres/rotation.h>
 #include <queue>
 #include <assert.h>
-#include <nav_msgs/Path.h>
-#include <geometry_msgs/PointStamped.h>
-#include <nav_msgs/Odometry.h>
 #include <stdio.h>
-#include <ros/ros.h>
+#include "vins_estimator/src/utility/ros_utils.h"
 #include "keyframe.h"
 #include "utility/tic_toc.h"
 #include "utility/utility.h"
@@ -56,7 +53,7 @@ public:
 
 	PoseGraph();
 	~PoseGraph();
-	void registerPub(ros::NodeHandle &n);
+	void registerPub(const ros_utils::NodeHandle &n);
 	void addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop);
 	void loadKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop);
 	void loadVocabulary(std::string voc_path);
@@ -112,10 +109,10 @@ private:
 	BriefDatabase db;
 	BriefVocabulary* voc;
 
-	ros::Publisher pub_pg_path;
-	ros::Publisher pub_base_path;
-	ros::Publisher pub_pose_graph;
-	ros::Publisher pub_path[10];
+	ros_utils::Publisher<nav_msgs::Path> pub_pg_path;
+	ros_utils::Publisher<nav_msgs::Path> pub_base_path;
+	ros_utils::Publisher<visualization_msgs::MarkerArray> pub_pose_graph;
+	ros_utils::Publisher<nav_msgs::Path> pub_path[10];
 };
 
 template <typename T> inline

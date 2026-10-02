@@ -111,7 +111,10 @@ void CameraPoseVisualization::add_pose(const Eigen::Vector3d& p, const Eigen::Qu
 
     marker.ns = m_marker_ns;
     marker.id = m_markers.size() + 1;
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    // The frustum is encoded as independent point pairs below. LINE_STRIP
+    // connects the end of one edge to the start of the next in RViz2 and
+    // produces spurious diagonals across the camera marker.
+    marker.type = visualization_msgs::Marker::LINE_LIST;
     marker.action = visualization_msgs::Marker::ADD;
     marker.scale.x = m_line_width;
 
@@ -196,7 +199,8 @@ void CameraPoseVisualization::reset() {
 	m_markers.clear();
 }
 
-void CameraPoseVisualization::publish_by( ros::Publisher &pub, const std_msgs::Header &header ) {
+void CameraPoseVisualization::publish_by(ros_utils::Publisher<visualization_msgs::MarkerArray> &pub,
+                                         const std_msgs::Header &header) {
 	visualization_msgs::MarkerArray markerArray_msg;
 	
 	for(auto& marker : m_markers) {

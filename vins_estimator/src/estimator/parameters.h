@@ -10,7 +10,7 @@
 #pragma once
 
 #include <array>
-#include <ros/ros.h>
+#include "../utility/ros_utils.h"
 #include <vector>
 #include <eigen3/Eigen/Dense>
 #include "../utility/utility.h"

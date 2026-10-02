@@ -1,6 +1,6 @@
 #include "deep_feature.h"
 
-#include <ros/ros.h>
+#include "../utility/ros_utils.h"
 
 #include <Eigen/Dense>
 #include <opencv2/opencv.hpp>

@@ -10,9 +10,9 @@
 #pragma once
  
 #include <thread>
+#include <atomic>
 #include <mutex>
-#include <std_msgs/Header.h>
-#include <std_msgs/Float32.h>
+#include "../utility/ros_utils.h"
 #include <ceres/ceres.h>
 #include <unordered_map>
 #include <queue>
@@ -74,6 +74,7 @@ class Estimator
     Estimator();
     ~Estimator();
     void setParameter();
+    void shutdown();
 
     // interface
     void initFirstPose(Eigen::Vector3d p, Eigen::Matrix3d r);
@@ -215,4 +216,5 @@ class Estimator
 
     bool initFirstPoseFlag;
     bool initThreadFlag;
+    std::atomic<bool> shutdown_requested{false};
 };

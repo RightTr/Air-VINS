@@ -9,8 +9,7 @@
 
 #pragma once
 
-#include <ros/ros.h>
-#include <ros/console.h>
+#include "../utility/ros_utils.h"
 #include <cstdlib>
 #include <pthread.h>
 #include <ceres/ceres.h>

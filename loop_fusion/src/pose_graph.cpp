@@ -44,13 +44,13 @@ PoseGraph::~PoseGraph()
     t_optimization.detach();
 }
 
-void PoseGraph::registerPub(ros::NodeHandle &n)
+void PoseGraph::registerPub(const ros_utils::NodeHandle &n)
 {
-    pub_pg_path = n.advertise<nav_msgs::Path>("pose_graph_path", 1000);
-    pub_base_path = n.advertise<nav_msgs::Path>("base_path", 1000);
-    pub_pose_graph = n.advertise<visualization_msgs::MarkerArray>("pose_graph", 1000);
+    pub_pg_path = ros_utils::create_publisher<nav_msgs::Path>(n, "pose_graph_path", 1000);
+    pub_base_path = ros_utils::create_publisher<nav_msgs::Path>(n, "base_path", 1000);
+    pub_pose_graph = ros_utils::create_publisher<visualization_msgs::MarkerArray>(n, "pose_graph", 1000);
     for (int i = 1; i < 10; i++)
-        pub_path[i] = n.advertise<nav_msgs::Path>("path_" + to_string(i), 1000);
+        pub_path[i] = ros_utils::create_publisher<nav_msgs::Path>(n, "path_" + to_string(i), 1000);
 }
 
 void PoseGraph::setIMUFlag(bool _use_imu)
@@ -203,7 +203,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
     cur_kf->updatePose(P, R);
     Quaterniond Q{R};
     geometry_msgs::PoseStamped pose_stamped;
-    pose_stamped.header.stamp = ros::Time(cur_kf->time_stamp);
+    pose_stamped.header.stamp = ros_utils::time_from_sec(cur_kf->time_stamp);
     pose_stamped.header.frame_id = "world";
     pose_stamped.pose.position.x = P.x() + VISUALIZATION_SHIFT_X;
     pose_stamped.pose.position.y = P.y() + VISUALIZATION_SHIFT_Y;
@@ -307,7 +307,7 @@ void PoseGraph::loadKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
     cur_kf->getPose(P, R);
     Quaterniond Q{R};
     geometry_msgs::PoseStamped pose_stamped;
-    pose_stamped.header.stamp = ros::Time(cur_kf->time_stamp);
+    pose_stamped.header.stamp = ros_utils::time_from_sec(cur_kf->time_stamp);
     pose_stamped.header.frame_id = "world";
     pose_stamped.pose.position.x = P.x() + VISUALIZATION_SHIFT_X;
     pose_stamped.pose.position.y = P.y() + VISUALIZATION_SHIFT_Y;
@@ -930,7 +930,7 @@ void PoseGraph::updatePath()
 //        printf("path p: %f, %f, %f\n",  P.x(),  P.z(),  P.y() );
 
         geometry_msgs::PoseStamped pose_stamped;
-        pose_stamped.header.stamp = ros::Time((*it)->time_stamp);
+        pose_stamped.header.stamp = ros_utils::time_from_sec((*it)->time_stamp);
         pose_stamped.header.frame_id = "world";
         pose_stamped.pose.position.x = P.x() + VISUALIZATION_SHIFT_X;
         pose_stamped.pose.position.y = P.y() + VISUALIZATION_SHIFT_Y;
@@ -1311,11 +1311,11 @@ void PoseGraph::publish()
         //if (sequence_loop[i] == true || i == base_sequence)
         if (1 || i == base_sequence)
         {
-            pub_pg_path.publish(path[i]);
-            pub_path[i].publish(path[i]);
+            ros_utils::publish(pub_pg_path, path[i]);
+            ros_utils::publish(pub_path[i], path[i]);
             posegraph_visualization->publish_by(pub_pose_graph, path[sequence_cnt].header);
         }
     }
-    pub_base_path.publish(base_path);
+    ros_utils::publish(pub_base_path, base_path);
     //posegraph_visualization->publish_by(pub_pose_graph, path[sequence_cnt].header);
 }

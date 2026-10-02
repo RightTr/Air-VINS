@@ -9,14 +9,20 @@
 #include <string>
 #include <vector>
 
+#ifdef USE_ROS1
 #include <cv_bridge/cv_bridge.h>
+#else
+#include <cv_bridge/cv_bridge.h>
+#endif
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
-#include <ros/ros.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/Imu.h>
 #include "utility/ros_utils.h"
+#ifdef USE_ROS1
+#include <sensor_msgs/image_encodings.h>
+#else
+#include <sensor_msgs/image_encodings.hpp>
+#endif
 
 namespace
 {
@@ -207,7 +213,7 @@ Rectifier makeNusThermalRectifier(bool enabled, double alpha)
 }
 
 sensor_msgs::ImagePtr readMonoImage(const std::string &path,
-                                    const ros::Time &stamp,
+                                    const ros_utils::Time &stamp,
                                     const std::string &frame_id,
                                     const Rectifier &rectifier,
                                     bool is_left)
@@ -236,7 +242,7 @@ sensor_msgs::ImagePtr readMonoImage(const std::string &path,
 sensor_msgs::Imu makeImuMsg(const ImuSample &sample, const std::string &frame_id)
 {
     sensor_msgs::Imu msg;
-    msg.header.stamp = ros::Time().fromSec(sample.stamp);
+    msg.header.stamp = ros_utils::time_from_sec(sample.stamp);
     msg.header.frame_id = frame_id;
     msg.angular_velocity.x = sample.gx;
     msg.angular_velocity.y = sample.gy;
@@ -250,9 +256,7 @@ sensor_msgs::Imu makeImuMsg(const ImuSample &sample, const std::string &frame_id
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "nus_thermal_publisher");
-    ros::NodeHandle nh;
-    ros::NodeHandle pnh("~");
+    auto node = ros_utils::init(argc, argv, "nus_thermal_publisher");
 
     std::string data_root;
     std::string left_dir;
@@ -272,23 +276,23 @@ int main(int argc, char **argv)
     bool publish_imu = false;
     double rectify_alpha = 0.0;
 
-    pnh.param<std::string>("data_root", data_root, "/mnt/Data/homebrew_thermal/Nus/run_20250912_180927");
-    pnh.param<std::string>("left_dir", left_dir, "left_thermal/associated_left");
-    pnh.param<std::string>("right_dir", right_dir, "right_thermal/associated_right");
-    pnh.param<std::string>("imu_file", imu_file, "realsense/imu/imu_synced.txt");
-    pnh.param<std::string>("image0_topic", image0_topic, "/cam0/image_raw");
-    pnh.param<std::string>("image1_topic", image1_topic, "/cam1/image_raw");
-    pnh.param<std::string>("imu_topic", imu_topic, "/imu0");
-    pnh.param<std::string>("left_frame_id", left_frame_id, "nus_thermal_left");
-    pnh.param<std::string>("right_frame_id", right_frame_id, "nus_thermal_right");
-    pnh.param<std::string>("imu_frame_id", imu_frame_id, "realsense_imu");
-    pnh.param("playback_rate", playback_rate, 1.0);
-    pnh.param("start_index", start_index, 0);
-    pnh.param("max_frames", max_frames, 0);
-    pnh.param("loop", loop, false);
-    pnh.param("rectify_images", rectify_images, true);
-    pnh.param("publish_imu", publish_imu, false);
-    pnh.param("rectify_alpha", rectify_alpha, 0.0);
+    ros_utils::param(node, "data_root", data_root, std::string("/mnt/Data/homebrew_thermal/Nus/run_20250912_180927"));
+    ros_utils::param(node, "left_dir", left_dir, std::string("left_thermal/associated_left"));
+    ros_utils::param(node, "right_dir", right_dir, std::string("right_thermal/associated_right"));
+    ros_utils::param(node, "imu_file", imu_file, std::string("realsense/imu/imu_synced.txt"));
+    ros_utils::param(node, "image0_topic", image0_topic, std::string("/cam0/image_raw"));
+    ros_utils::param(node, "image1_topic", image1_topic, std::string("/cam1/image_raw"));
+    ros_utils::param(node, "imu_topic", imu_topic, std::string("/imu0"));
+    ros_utils::param(node, "left_frame_id", left_frame_id, std::string("nus_thermal_left"));
+    ros_utils::param(node, "right_frame_id", right_frame_id, std::string("nus_thermal_right"));
+    ros_utils::param(node, "imu_frame_id", imu_frame_id, std::string("realsense_imu"));
+    ros_utils::param(node, "playback_rate", playback_rate, 1.0);
+    ros_utils::param(node, "start_index", start_index, 0);
+    ros_utils::param(node, "max_frames", max_frames, 0);
+    ros_utils::param(node, "loop", loop, false);
+    ros_utils::param(node, "rectify_images", rectify_images, true);
+    ros_utils::param(node, "publish_imu", publish_imu, false);
+    ros_utils::param(node, "rectify_alpha", rectify_alpha, 0.0);
 
     if (playback_rate <= 0.0)
     {
@@ -334,11 +338,14 @@ int main(int argc, char **argv)
     if (max_frames > 0)
         end_index = std::min(pair_count, static_cast<size_t>(start_index + max_frames));
 
-    ros::Publisher pub_left = ros_utils::ros_advertise<sensor_msgs::Image>(nh, image0_topic, 10);
-    ros::Publisher pub_right = ros_utils::ros_advertise<sensor_msgs::Image>(nh, image1_topic, 10);
-    ros::Publisher pub_imu;
+    auto pub_left = ros_utils::ros_advertise<sensor_msgs::Image>(
+        node, image0_topic, 10, false, ros_utils::QosProfile::SensorData);
+    auto pub_right = ros_utils::ros_advertise<sensor_msgs::Image>(
+        node, image1_topic, 10, false, ros_utils::QosProfile::SensorData);
+    ros_utils::Publisher<sensor_msgs::Imu> pub_imu;
     if (publish_imu)
-        pub_imu = ros_utils::ros_advertise<sensor_msgs::Imu>(nh, imu_topic, 2000);
+        pub_imu = ros_utils::ros_advertise<sensor_msgs::Imu>(
+            node, imu_topic, 2000, false, ros_utils::QosProfile::SensorData);
     const Rectifier rectifier = makeNusThermalRectifier(rectify_images, rectify_alpha);
 
     ROS_INFO_STREAM("Publishing NUS thermal stereo sequence"
@@ -351,9 +358,9 @@ int main(int argc, char **argv)
     do
     {
         size_t imu_index = publish_imu ? firstImuIndexForImageTime(imu_samples, left_frames[start_index].stamp) : 0;
-        for (size_t i = static_cast<size_t>(start_index); ros::ok() && i < end_index; ++i)
+        for (size_t i = static_cast<size_t>(start_index); ros_utils::ok() && i < end_index; ++i)
         {
-            const ros::Time stamp = ros::Time().fromSec(left_frames[i].stamp);
+            const ros_utils::Time stamp = ros_utils::time_from_sec(left_frames[i].stamp);
             if (publish_imu)
             {
                 while (imu_index < imu_samples.size() && imu_samples[imu_index].stamp < left_frames[i].stamp)
@@ -374,17 +381,17 @@ int main(int argc, char **argv)
 
             ros_utils::ros_publish(pub_left, *left_msg);
             ros_utils::ros_publish(pub_right, *right_msg);
-            ros::spinOnce();
+            ros_utils::spin_once(node);
 
             if (i + 1 < end_index)
             {
                 double dt = left_frames[i + 1].stamp - left_frames[i].stamp;
                 if (dt < 0.0)
                     dt = 0.0;
-                ros::Duration(dt / playback_rate).sleep();
+                ros_utils::sleep_for(dt / playback_rate);
             }
         }
-    } while (ros::ok() && loop);
+    } while (ros_utils::ok() && loop);
 
     return 0;
 }

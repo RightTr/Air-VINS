@@ -9,6 +9,8 @@ evaluate/
 result.txt
 result_global.txt
 result_gps.txt
+vins_estimator/package.xml
+loop_fusion/package.xml
 0*.txt
 1*.txt
 2*.txt

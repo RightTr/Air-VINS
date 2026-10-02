@@ -8,7 +8,7 @@
  *******************************************************/
 
 #pragma once
-#include <ros/assert.h>
+#include "../utility/ros_utils.h"
 #include <iostream>
 #include <eigen3/Eigen/Dense>
 
@@ -195,4 +195,3 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
     IntegrationBase* pre_integration;
 
 };
-

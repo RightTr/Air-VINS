@@ -16,27 +16,24 @@
 #include <opencv2/core.hpp>
 #include "../estimator/estimator.h"
 
-extern ros::Publisher pub_odometry;
-extern ros::Publisher pub_path, pub_pose;
-extern ros::Publisher pub_cloud, pub_map;
-extern ros::Publisher pub_window_keypose;
-extern ros::Publisher pub_ref_pose, pub_cur_pose;
-extern ros::Publisher pub_key;
-extern ros::Publisher pub_keyframe_point;
-extern ros::Publisher pub_keyframe_pose;
-extern ros::Publisher pub_keyframe_path;
-extern ros::Publisher pub_keyframe_marker;
+extern ros_utils::Publisher<nav_msgs::Odometry> pub_odometry;
+extern ros_utils::Publisher<nav_msgs::Path> pub_path;
+extern ros_utils::Publisher<visualization_msgs::Marker> pub_window_keypose;
+extern ros_utils::Publisher<sensor_msgs::PointCloud> pub_keyframe_point;
+extern ros_utils::Publisher<nav_msgs::Odometry> pub_keyframe_pose;
+extern ros_utils::Publisher<nav_msgs::Path> pub_keyframe_path;
+extern ros_utils::Publisher<visualization_msgs::Marker> pub_keyframe_marker;
 extern nav_msgs::Path path;
 extern nav_msgs::Path keyframe_path;
 extern visualization_msgs::Marker keyframe_marker;
-extern ros::Publisher pub_pose_graph;
-extern ros::Publisher pub_deep_match;
-extern ros::Publisher pub_line_match;
-extern ros::Publisher pub_map_line;
-extern ros::Publisher pub_window_map_line;
+extern ros_utils::Publisher<sensor_msgs::Image> pub_deep_match;
+extern ros_utils::Publisher<sensor_msgs::Image> pub_line_match;
+extern ros_utils::Publisher<visualization_msgs::Marker> pub_map_line;
+extern ros_utils::Publisher<visualization_msgs::Marker> pub_window_map_line;
 extern int IMAGE_ROW, IMAGE_COL;
 
-void registerPub(ros::NodeHandle &n);
+void registerPub(const ros_utils::NodeHandle &n);
+void shutdownPub();
 
 void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, const Eigen::Vector3d &V, double t);
 

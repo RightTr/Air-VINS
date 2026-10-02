@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>loop_fusion</name>
+  <version>0.0.0</version>
+  <description>Air-VINS visual loop closure</description>
+  <maintainer email="tony-ws@todo.todo">tony-ws</maintainer>
+  <license>GPL-3.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>ament_index_cpp</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
