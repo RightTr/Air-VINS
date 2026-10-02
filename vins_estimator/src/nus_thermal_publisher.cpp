@@ -9,20 +9,10 @@
 #include <string>
 #include <vector>
 
-#ifdef USE_ROS1
-#include <cv_bridge/cv_bridge.h>
-#else
-#include <cv_bridge/cv_bridge.h>
-#endif
 #include <opencv2/calib3d.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #include "utility/ros_utils.h"
-#ifdef USE_ROS1
-#include <sensor_msgs/image_encodings.h>
-#else
-#include <sensor_msgs/image_encodings.hpp>
-#endif
 
 namespace
 {

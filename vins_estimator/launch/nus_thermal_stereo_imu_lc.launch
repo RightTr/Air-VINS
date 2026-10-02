@@ -31,8 +31,12 @@
     <param name="subscriber_wait_timeout" type="double" value="$(arg subscriber_wait_timeout)" />
   </node>
 
-  <node name="vins_estimator" pkg="vins" type="vins_node" output="screen" args="$(arg config_file)" />
-  <node name="loop_fusion" pkg="loop_fusion" type="loop_fusion_node" output="screen" args="$(arg config_file)" />
+  <node name="vins_estimator" pkg="vins" type="vins_node" output="screen">
+    <param name="config_file" value="$(arg config_file)" />
+  </node>
+  <node name="loop_fusion" pkg="loop_fusion" type="loop_fusion_node" output="screen">
+    <param name="config_file" value="$(arg config_file)" />
+  </node>
 
   <group if="$(arg visualization)">
     <include file="$(find vins)/launch/vins_rviz.launch" />

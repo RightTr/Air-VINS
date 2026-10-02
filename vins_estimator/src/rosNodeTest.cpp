@@ -14,16 +14,6 @@
 #include <map>
 #include <thread>
 #include <mutex>
-#ifdef USE_ROS1
-#include <cv_bridge/cv_bridge.h>
-#else
-#include <cv_bridge/cv_bridge.h>
-#endif
-#ifdef USE_ROS1
-#include <sensor_msgs/image_encodings.h>
-#else
-#include <sensor_msgs/image_encodings.hpp>
-#endif
 #include <opencv2/opencv.hpp>
 #include "estimator/estimator.h"
 #include "estimator/parameters.h"
@@ -326,38 +316,17 @@ int main(int argc, char **argv)
     // Estimator is a global callback target. Initialize its state here, after
     // every translation unit's global visualization objects are constructed.
     estimator.clearState();
-#ifdef USE_ROS1
-    ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info);
-#endif
-
-#ifdef USE_ROS1
-    if(argc != 2)
+    string config_file;
+    ros_utils::param(node, "config_file", config_file, string(""));
+    if (config_file.empty())
     {
-        printf("please intput: rosrun vins vins_node [config file] \n"
-               "for example: rosrun vins vins_node "
-               "~/catkin_ws/src/VINS-Fusion/config/euroc/euroc_stereo_imu_config.yaml \n");
+        ROS_ERROR("missing ROS parameter: config_file");
         return 1;
     }
-
-    string config_file = argv[1];
-    printf("config_file: %s\n", argv[1]);
-#else
-    const auto non_ros_args = rclcpp::remove_ros_arguments(argc, argv);
-    if (non_ros_args.size() != 2)
-    {
-        RCLCPP_ERROR(node->get_logger(), "usage: vins_node <config_file>");
-        return 1;
-    }
-    string config_file = non_ros_args[1];
     printf("config_file: %s\n", config_file.c_str());
-#endif
 
     readParameters(config_file);
     estimator.setParameter();
-
-#ifdef EIGEN_DONT_PARALLELIZE
-    ROS_DEBUG("EIGEN_DONT_PARALLELIZE");
-#endif
 
     ROS_WARN("waiting for image and imu...");
 
@@ -389,7 +358,7 @@ int main(int argc, char **argv)
 #ifdef USE_ROS1
     std::thread sync_thread{sync_process};
 #else
-    auto sync_timer = node->create_wall_timer(std::chrono::milliseconds(2), sync_process);
+    auto sync_timer = ros_utils::create_timer(node, 0.002, sync_process);
 #endif
     ros_utils::spin(node);
 #ifdef USE_ROS1

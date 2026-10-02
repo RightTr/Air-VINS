@@ -44,9 +44,9 @@ def generate_launch_description():
         }],
     )
     estimator = Node(package="vins", executable="vins_node", name="vins_estimator", output="screen",
-                     arguments=[LaunchConfiguration("config_file")])
+                     parameters=[{"config_file": LaunchConfiguration("config_file")}])
     loop_fusion = Node(package="loop_fusion", executable="loop_fusion_node", name="loop_fusion", output="screen",
-                       arguments=[LaunchConfiguration("config_file")])
+                       parameters=[{"config_file": LaunchConfiguration("config_file")}])
     rviz = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(share, "launch", "vins_rviz.launch.py")),
         condition=IfCondition(LaunchConfiguration("visualization")),

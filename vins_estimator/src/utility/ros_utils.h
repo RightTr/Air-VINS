@@ -15,6 +15,7 @@
 #ifdef USE_ROS1
 #include <ros/package.h>
 #include <ros/ros.h>
+#include <cv_bridge/cv_bridge.h>
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Point32.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -31,9 +32,11 @@
 #include <std_msgs/Header.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <tf/transform_broadcaster.h>
 #elif defined(USE_ROS2)
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <cv_bridge/cv_bridge.h>
 #include <builtin_interfaces/msg/duration.hpp>
 #include <builtin_interfaces/msg/time.hpp>
 #include <geometry_msgs/msg/point.hpp>
@@ -52,6 +55,9 @@
 #include <std_msgs/msg/header.hpp>
 #include <visualization_msgs/msg/marker.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
+#include <sensor_msgs/image_encodings.hpp>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_ros/transform_broadcaster.h>
 
 // Preserve the ROS1 spelling in algorithm code. ROS-specific ownership and node
 // operations remain explicit in ros_utils below.
@@ -103,6 +109,7 @@ using Duration = ros::Duration;
 template <typename MsgT> using Publisher = ros::Publisher;
 template <typename MsgT> using Subscription = ros::Subscriber;
 template <typename MsgT> using ConstPtr = typename MsgT::ConstPtr;
+using Timer = ros::Timer;
 #else
 using NodeHandle = rclcpp::Node::SharedPtr;
 using Time = builtin_interfaces::msg::Time;
@@ -110,6 +117,7 @@ using Duration = builtin_interfaces::msg::Duration;
 template <typename MsgT> using Publisher = typename rclcpp::Publisher<MsgT>::SharedPtr;
 template <typename MsgT> using Subscription = typename rclcpp::Subscription<MsgT>::SharedPtr;
 template <typename MsgT> using ConstPtr = typename MsgT::ConstSharedPtr;
+using Timer = rclcpp::TimerBase::SharedPtr;
 #endif
 
 inline NodeHandle &global_node()
@@ -165,6 +173,39 @@ inline void spin_once(const NodeHandle &node = global_node())
     ros::spinOnce();
 #else
     rclcpp::spin_some(node);
+#endif
+}
+
+template <typename CallbackT>
+inline Timer create_timer(const NodeHandle &node, double period_seconds, CallbackT &&callback)
+{
+#ifdef USE_ROS1
+    return node->createTimer(ros::Duration(period_seconds), std::forward<CallbackT>(callback));
+#else
+    const auto period = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::duration<double>(period_seconds));
+    return node->create_wall_timer(period, std::forward<CallbackT>(callback));
+#endif
+}
+
+inline void publish_transform(const geometry_msgs::TransformStamped &message)
+{
+#ifdef USE_ROS1
+    static tf::TransformBroadcaster broadcaster;
+    tf::Transform transform;
+    transform.setOrigin(tf::Vector3(message.transform.translation.x,
+                                    message.transform.translation.y,
+                                    message.transform.translation.z));
+    transform.setRotation(tf::Quaternion(message.transform.rotation.x,
+                                         message.transform.rotation.y,
+                                         message.transform.rotation.z,
+                                         message.transform.rotation.w));
+    broadcaster.sendTransform(tf::StampedTransform(transform, message.header.stamp,
+                                                   message.header.frame_id,
+                                                   message.child_frame_id));
+#else
+    static auto broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(global_node());
+    broadcaster->sendTransform(message);
 #endif
 }
 

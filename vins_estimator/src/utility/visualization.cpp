@@ -9,20 +9,8 @@
 
 #include "visualization.h"
 #include "ros_utils.h"
-#ifdef USE_ROS1
-#include <cv_bridge/cv_bridge.h>
-#else
-#include <cv_bridge/cv_bridge.h>
-#endif
 #include <cstdint>
 #include <map>
-#ifdef USE_ROS1
-#include <tf/transform_broadcaster.h>
-#else
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2_ros/transform_broadcaster.h>
-#endif
-
 using namespace Eigen;
 ros_utils::Publisher<nav_msgs::Odometry> pub_odometry, pub_latest_odometry;
 ros_utils::Publisher<nav_msgs::Path> pub_path;
@@ -539,32 +527,6 @@ void pubTF(const Estimator &estimator, const std_msgs::Header &header)
     correct_t = estimator.Ps[WINDOW_SIZE];
     correct_q = estimator.Rs[WINDOW_SIZE];
 
-#ifdef USE_ROS1
-    static tf::TransformBroadcaster br;
-    tf::Transform transform;
-    tf::Quaternion q;
-    transform.setOrigin(tf::Vector3(correct_t(0),
-                                    correct_t(1),
-                                    correct_t(2)));
-    q.setW(correct_q.w());
-    q.setX(correct_q.x());
-    q.setY(correct_q.y());
-    q.setZ(correct_q.z());
-    transform.setRotation(q);
-    br.sendTransform(tf::StampedTransform(transform, header.stamp, "world", "body"));
-
-    // camera frame
-    transform.setOrigin(tf::Vector3(estimator.tic[0].x(),
-                                    estimator.tic[0].y(),
-                                    estimator.tic[0].z()));
-    q.setW(Quaterniond(estimator.ric[0]).w());
-    q.setX(Quaterniond(estimator.ric[0]).x());
-    q.setY(Quaterniond(estimator.ric[0]).y());
-    q.setZ(Quaterniond(estimator.ric[0]).z());
-    transform.setRotation(q);
-    br.sendTransform(tf::StampedTransform(transform, header.stamp, "body", "camera"));
-#else
-    static auto br = std::make_shared<tf2_ros::TransformBroadcaster>(ros_utils::global_node());
     geometry_msgs::TransformStamped body_transform;
     body_transform.header = header;
     body_transform.header.frame_id = "world";
@@ -576,7 +538,7 @@ void pubTF(const Estimator &estimator, const std_msgs::Header &header)
     body_transform.transform.rotation.y = correct_q.y();
     body_transform.transform.rotation.z = correct_q.z();
     body_transform.transform.rotation.w = correct_q.w();
-    br->sendTransform(body_transform);
+    ros_utils::publish_transform(body_transform);
 
     const Quaterniond camera_q(estimator.ric[0]);
     geometry_msgs::TransformStamped camera_transform;
@@ -590,8 +552,7 @@ void pubTF(const Estimator &estimator, const std_msgs::Header &header)
     camera_transform.transform.rotation.y = camera_q.y();
     camera_transform.transform.rotation.z = camera_q.z();
     camera_transform.transform.rotation.w = camera_q.w();
-    br->sendTransform(camera_transform);
-#endif
+    ros_utils::publish_transform(camera_transform);
 
     
     nav_msgs::Odometry odometry;
