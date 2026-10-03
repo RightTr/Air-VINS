@@ -130,7 +130,7 @@ bool SuperPoint::infer(const cv::Mat &image_, Eigen::Matrix<float, 259, Eigen::D
     cv::Mat image;
     cv::resize(image_, image, cv::Size(resized_width, resized_height));
 
-    assert(engine_->getNbBindings() == 3);
+    assert(engine_->getNbIOTensors() == 3);
 
     const char* input_name = super_point_config_.input_tensor_names[0].c_str();
 
@@ -145,7 +145,7 @@ bool SuperPoint::infer(const cv::Mat &image_, Eigen::Matrix<float, 259, Eigen::D
 
     buffers.copyInputToDevice();
 
-    bool status = context_->executeV2(buffers.getDeviceBindings().data());  
+    bool status = buffers.execute(*context_);
     if (!status) {
         return false;
     }

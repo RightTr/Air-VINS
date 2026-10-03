@@ -1,0 +1,7 @@
+<launch>
+  <arg name="config_file" default="$(find stir_slam)/../config/scout/scout_stereo_imu_config.yaml" />
+
+  <node name="stir_slam" pkg="stir_slam" type="stir_slam_node" output="screen">
+    <param name="config_file" type="string" value="$(arg config_file)" />
+  </node>
+</launch>

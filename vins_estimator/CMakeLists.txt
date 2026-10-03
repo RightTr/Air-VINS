@@ -45,6 +45,7 @@ find_package(Eigen3 REQUIRED)
 find_path(TENSORRT_INCLUDE_DIR NvInfer.h
   HINTS $ENV{TENSORRT_ROOT}/include /usr/include /usr/include/aarch64-linux-gnu
         /usr/local/include /usr/local/TensorRT/include /usr/src/tensorrt/include)
+include(${PROJECT_SOURCE_DIR}/../cmake/TensorRTApi.cmake)
 find_library(NVINFER_LIBRARY nvinfer
   HINTS $ENV{TENSORRT_ROOT}/lib /usr/lib /usr/lib/aarch64-linux-gnu
         /usr/local/lib /usr/local/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu)

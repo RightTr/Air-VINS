@@ -42,7 +42,11 @@ class VPRNet {
     void operator()(T* ptr) const
     {
       if (ptr) {
+#if NV_TENSORRT_MAJOR >= 10
+        delete ptr;
+#else
         ptr->destroy();
+#endif
       }
     }
   };

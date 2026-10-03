@@ -225,6 +225,19 @@ bool VPRNet::build()
 
   input_binding_index_ = -1;
   output_binding_index_ = -1;
+#if NV_TENSORRT_MAJOR >= 10
+  const int nb_bindings = engine_->getNbIOTensors();
+  for (int i = 0; i < nb_bindings; ++i) {
+    const char* name = engine_->getIOTensorName(i);
+    if (engine_->getTensorIOMode(name) == nvinfer1::TensorIOMode::kINPUT) {
+      input_binding_index_ = i;
+      input_dims_ = engine_->getTensorShape(name);
+    } else if (output_binding_index_ < 0) {
+      output_binding_index_ = i;
+      output_dims_ = engine_->getTensorShape(name);
+    }
+  }
+#else
   const int nb_bindings = engine_->getNbBindings();
   for (int i = 0; i < nb_bindings; ++i) {
     if (engine_->bindingIsInput(i)) {
@@ -235,6 +248,7 @@ bool VPRNet::build()
       output_dims_ = engine_->getBindingDimensions(i);
     }
   }
+#endif
 
   if (input_binding_index_ < 0 || output_binding_index_ < 0) {
     std::cerr << "[VPRNet] failed to locate input/output bindings" << std::endl;
@@ -278,12 +292,20 @@ bool VPRNet::build()
     }
   }
 
+#if NV_TENSORRT_MAJOR >= 10
+  if (!context_->setInputShape(engine_->getIOTensorName(input_binding_index_), input_dims_)) {
+#else
   if (!context_->setBindingDimensions(input_binding_index_, input_dims_)) {
+#endif
     std::cerr << "[VPRNet] failed to set binding dimensions" << std::endl;
     return false;
   }
 
+#if NV_TENSORRT_MAJOR >= 10
+  output_dims_ = context_->getTensorShape(engine_->getIOTensorName(output_binding_index_));
+#else
   output_dims_ = context_->getBindingDimensions(output_binding_index_);
+#endif
   input_elements_ = dims_volume(input_dims_);
   output_elements_ = dims_volume(output_dims_);
   descriptor_dim_ = static_cast<int>(output_elements_);
@@ -308,9 +330,18 @@ bool VPRNet::build()
     return false;
   }
 
+#if NV_TENSORRT_MAJOR >= 10
+  if (!context_->setTensorAddress(engine_->getIOTensorName(input_binding_index_), device_input_) ||
+      !context_->setTensorAddress(engine_->getIOTensorName(output_binding_index_), device_output_)) {
+    std::cerr << "[VPRNet] failed to set tensor addresses" << std::endl;
+    release_buffers();
+    return false;
+  }
+#else
   bindings_.assign(engine_->getNbBindings(), nullptr);
   bindings_[input_binding_index_] = device_input_;
   bindings_[output_binding_index_] = device_output_;
+#endif
 
   if (!stream_created_) {
     if (cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking) != cudaSuccess) {
@@ -415,7 +446,11 @@ bool VPRNet::infer_internal(const std::vector<float>& input, Eigen::VectorXf& de
     return false;
   }
 
+#if NV_TENSORRT_MAJOR >= 10
+  if (!context_->enqueueV3(stream_)) {
+#else
   if (!context_->executeV2(bindings_.data())) {
+#endif
     return false;
   }
 

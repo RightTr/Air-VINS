@@ -2,7 +2,7 @@
 <package format="3">
   <name>loop_fusion</name>
   <version>0.0.0</version>
-  <description>Air-VINS visual loop closure</description>
+  <description>StirSLAM visual loop closure</description>
   <maintainer email="tony-ws@todo.todo">tony-ws</maintainer>
   <license>GPL-3.0</license>
 
@@ -15,8 +15,6 @@
   <depend>visualization_msgs</depend>
   <depend>cv_bridge</depend>
   <depend>ament_index_cpp</depend>
-  <depend>tf2</depend>
-  <depend>tf2_ros</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

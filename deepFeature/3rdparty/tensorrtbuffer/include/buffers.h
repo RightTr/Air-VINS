@@ -281,6 +281,21 @@ namespace tensorrt_buffer
             return mDeviceBindings;
         }
 
+        // TensorRT 10 uses named tensor addresses; TensorRT 8 uses bindings.
+        bool execute(nvinfer1::IExecutionContext& context)
+        {
+#if NV_TENSORRT_MAJOR >= 10
+            for (int i = 0; i < mEngine->getNbIOTensors(); ++i)
+            {
+                if (!context.setTensorAddress(mEngine->getIOTensorName(i), mDeviceBindings[i]))
+                    return false;
+            }
+            return context.enqueueV3(0) && cudaStreamSynchronize(0) == cudaSuccess;
+#else
+            return context.executeV2(mDeviceBindings.data());
+#endif
+        }
+
         //!
         //! \brief Returns a vector of device buffers.
         //!
