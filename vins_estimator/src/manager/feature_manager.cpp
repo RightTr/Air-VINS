@@ -48,7 +48,10 @@ PointFeatureManager::PointFeatureManager()
 void PointFeatureManager::clearState()
 {
     pointFeature.clear();
+    pointFeatureIndex.clear();
     local_frames.clear();
+    windowSupportCount.clear();
+    windowSupportLastFrame.clear();
     local_mappoints.clear();
     last_point_feature_track_num = 0;
     last_average_parallax = 0.0;
@@ -72,9 +75,27 @@ void PointFeatureManager::addLocalFrame(
         if (id_pts.second.empty())
             continue;
         local_frame.addObservation(id_pts.first, id_pts.second[0].first, id_pts.second[0].second);
+        ++windowSupportCount[id_pts.first];
+        windowSupportLastFrame[id_pts.first] = frameCnt;
     }
     while (local_frames.size() > WINDOW_SIZE + 1)
+    {
+        const LocalFrameObs &oldest_frame = local_frames.front();
+        for (const auto &observation : oldest_frame.observations)
+        {
+            const int feature_id = observation.first;
+            auto support_it = windowSupportCount.find(feature_id);
+            if (support_it == windowSupportCount.end())
+                continue;
+
+            if (--support_it->second <= 0)
+            {
+                windowSupportCount.erase(support_it);
+                windowSupportLastFrame.erase(feature_id);
+            }
+        }
         local_frames.pop_front();
+    }
 }
 
 int PointFeatureManager::getFeatureCount()
@@ -421,17 +442,19 @@ bool PointFeatureManager::addFeatureCheckParallax(int frame_count, const std::ma
         }
 
         int point_feature_id = id_pts.first;
-        auto it = find_if(pointFeature.begin(), pointFeature.end(), [point_feature_id](const PointFeatureId &it)
-                          { return it.point_feature_id == point_feature_id; });
+        auto index_it = pointFeatureIndex.find(point_feature_id);
 
-        if (it == pointFeature.end())
+        if (index_it == pointFeatureIndex.end())
         {
-            pointFeature.push_back(PointFeatureId(point_feature_id, frame_count));
-            pointFeature.back().point_feature_frame.push_back(f_per_fra);
+            pointFeature.emplace_back(point_feature_id, frame_count);
+            auto it = std::prev(pointFeature.end());
+            pointFeatureIndex.emplace(point_feature_id, it);
+            it->point_feature_frame.push_back(f_per_fra);
             new_point_feature_num++;
         }
-        else if (it->point_feature_id == point_feature_id)
+        else
         {
+            auto it = index_it->second;
             it->point_feature_frame.push_back(f_per_fra);
             last_point_feature_track_num++;
             if (it->point_feature_frame.size() >= 4)
@@ -622,7 +645,10 @@ void PointFeatureManager::removeFailures()
     {
         it_next++;
         if (it->solve_flag == 2)
+        {
+            pointFeatureIndex.erase(it->point_feature_id);
             pointFeature.erase(it);
+        }
     }
 }
 
@@ -819,6 +845,7 @@ void PointFeatureManager::removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::V
             it->point_feature_frame.erase(it->point_feature_frame.begin());
             if (it->point_feature_frame.size() < 2)
             {
+                pointFeatureIndex.erase(it->point_feature_id);
                 pointFeature.erase(it);
                 continue;
             }
@@ -860,7 +887,10 @@ void PointFeatureManager::removeBack()
         {
             it->point_feature_frame.erase(it->point_feature_frame.begin());
             if (it->point_feature_frame.size() == 0)
+            {
+                pointFeatureIndex.erase(it->point_feature_id);
                 pointFeature.erase(it);
+            }
         }
     }
 }
@@ -882,7 +912,10 @@ void PointFeatureManager::removeFront(int frame_count)
                 continue;
             it->point_feature_frame.erase(it->point_feature_frame.begin() + j);
             if (it->point_feature_frame.size() == 0)
+            {
+                pointFeatureIndex.erase(it->point_feature_id);
                 pointFeature.erase(it);
+            }
         }
     }
 }
@@ -901,6 +934,7 @@ void PointFeatureManager::removeOutlier(std::set<int> &outlierIndex)
             auto mpt_it = local_mappoints.find(index);
             if (mpt_it != local_mappoints.end() && mpt_it->second)
                 mpt_it->second->SetBad();
+            pointFeatureIndex.erase(it->point_feature_id);
             pointFeature.erase(it);
         }
     }
@@ -917,15 +951,13 @@ std::pair<int, int> PointFeatureManager::windowSupportStats(int point_feature_id
     if (point_feature_id < 0)
         return std::make_pair(0, -1);
 
-    int support_count = 0;
-    int last_support_frame_id = -1;
-    for (auto it = local_frames.rbegin(); it != local_frames.rend(); ++it)
-    {
-        if (!it->hasObservation(point_feature_id))
-            continue;
-        ++support_count;
-        if (last_support_frame_id < 0)
-            last_support_frame_id = it->frame_id;
-    }
-    return std::make_pair(support_count, last_support_frame_id);
+    const auto support_it = windowSupportCount.find(point_feature_id);
+    if (support_it == windowSupportCount.end())
+        return std::make_pair(0, -1);
+
+    const auto last_frame_it = windowSupportLastFrame.find(point_feature_id);
+    const int last_support_frame_id = last_frame_it == windowSupportLastFrame.end()
+                                          ? -1
+                                          : last_frame_it->second;
+    return std::make_pair(support_it->second, last_support_frame_id);
 }

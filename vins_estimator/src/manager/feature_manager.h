@@ -2,6 +2,7 @@
 #define VINS_MANAGER_FEATURE_MANAGER_H
 
 #include <opencv2/core.hpp>
+#include <unordered_map>
 
 #include "feature_types.h"
 
@@ -58,6 +59,9 @@ class PointFeatureManager
 
   private:
     std::deque<LocalFrameObs> local_frames;
+    std::unordered_map<int, std::list<PointFeatureId>::iterator> pointFeatureIndex;
+    std::unordered_map<int, int> windowSupportCount;
+    std::unordered_map<int, int> windowSupportLastFrame;
     std::map<int, MappointPtr> local_mappoints;
     std::pair<int, int> windowSupportStats(int point_feature_id) const;
     void syncMappointFromPointFeature(PointFeatureId &point_feature,
