@@ -18,7 +18,8 @@ class PointFeatureManager
     void addLocalFrame(int frameCnt, double header,
                        const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
                        VisualTrackingMode tracking_mode, int active_camera_id);
-    bool addFeatureCheckParallax(int frame_count, const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td);
+    bool addFeatureCheckParallax(int frame_count, const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
+                                double td, VisualTrackingMode tracking_mode);
     void updateLocalPoints(Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
                            Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);
     void triangulate(Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);

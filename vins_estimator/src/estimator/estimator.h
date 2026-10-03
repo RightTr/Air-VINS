@@ -103,7 +103,6 @@ class Estimator
     void fastPredictIMU(double t, Eigen::Vector3d linear_acceleration, Eigen::Vector3d angular_velocity);
     bool IMUAvailable(double t);
     void initFirstIMUPose(vector<pair<double, Eigen::Vector3d>> &accVector);
-    bool stereoInitializationReady() const;
     bool should_marginalize_old;
 
     enum SolverFlag

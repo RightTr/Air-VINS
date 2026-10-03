@@ -423,7 +423,8 @@ void PointFeatureManager::updateLocalPoints(Vector3d Ps[], Matrix3d Rs[],
     pruneInactiveLocalMappoints();
 }
 
-bool PointFeatureManager::addFeatureCheckParallax(int frame_count, const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td)
+bool PointFeatureManager::addFeatureCheckParallax(int frame_count, const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
+                                                 double td, VisualTrackingMode tracking_mode)
 {
     ROS_DEBUG("input pointFeature: %d", (int)image.size());
     ROS_DEBUG("num of pointFeature: %d", getFeatureCount());
@@ -446,6 +447,8 @@ bool PointFeatureManager::addFeatureCheckParallax(int frame_count, const std::ma
 
         if (index_it == pointFeatureIndex.end())
         {
+            if (tracking_mode != TRACKING_MODE_STEREO)
+                continue;
             pointFeature.emplace_back(point_feature_id, frame_count);
             auto it = std::prev(pointFeature.end());
             pointFeatureIndex.emplace(point_feature_id, it);
