@@ -1,5 +1,5 @@
 Panels:
-  - Class: rviz_common/Displays
+  - Class: rviz/Displays
     Help Height: 0
     Name: Displays
     Property Tree Widget:
@@ -12,25 +12,25 @@ Panels:
         - /GlobalGroup1/CarModel1
       Splitter Ratio: 0.4651159942150116
     Tree Height: 366
-  - Class: rviz_common/Selection
+  - Class: rviz/Selection
     Name: Selection
-  - Class: rviz_common/Tool Properties
+  - Class: rviz/Tool Properties
     Expanded:
       - /2D Pose Estimate1
       - /2D Nav Goal1
       - /Publish Point1
     Name: Tool Properties
     Splitter Ratio: 0.5886790156364441
-  - Class: rviz_common/Views
+  - Class: rviz/Views
     Expanded:
       - /Current View1
     Name: Views
     Splitter Ratio: 0.5
-  - Class: rviz_common/Time
+  - Class: rviz/Time
     Name: Time
     SyncMode: 0
     SyncSource: PointCloud
-  - Class: rviz_common/Displays
+  - Class: rviz/Displays
     Help Height: 78
     Name: Displays
     Property Tree Widget:
@@ -46,7 +46,7 @@ Visualization Manager:
   Displays:
     - Alpha: 0.5
       Cell Size: 1
-      Class: rviz_default_plugins/Grid
+      Class: rviz/Grid
       Color: 160; 160; 164
       Enabled: true
       Line Style:
@@ -63,7 +63,7 @@ Visualization Manager:
       Reference Frame: <Fixed Frame>
       Value: true
     - Alpha: 1
-      Class: rviz_default_plugins/Axes
+      Class: rviz/Axes
       Enabled: true
       Length: 0.5
       Name: Axes
@@ -71,39 +71,27 @@ Visualization Manager:
       Reference Frame: <Fixed Frame>
       Show Trail: false
       Value: true
-    - Class: rviz_common/Group
+    - Class: rviz/Group
       Displays:
-        - Class: rviz_default_plugins/MarkerArray
+        - Class: rviz/MarkerArray
           Enabled: true
+          Marker Topic: /loop_fusion/pose_graph
           Name: loopLink
           Namespaces:
             {}
           Queue Size: 100
-          Topic:
-            Depth: 100
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /loop_fusion/pose_graph
           Value: true
-        - Class: rviz_default_plugins/MarkerArray
+        - Class: rviz/MarkerArray
           Enabled: true
+          Marker Topic: /loop_fusion/camera_pose_visual
           Name: loopCamera
           Namespaces:
             CameraPoseVisualization: true
           Queue Size: 100
-          Topic:
-            Depth: 100
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /loop_fusion/camera_pose_visual
           Value: true
         - Alpha: 1
           Buffer Length: 1
-          Class: rviz_default_plugins/Path
+          Class: rviz/Path
           Color: 204; 0; 0
           Enabled: true
           Head Diameter: 0.30000001192092896
@@ -122,13 +110,8 @@ Visualization Manager:
           Radius: 0.029999999329447746
           Shaft Diameter: 0.10000000149011612
           Shaft Length: 0.10000000149011612
-          Topic:
-            Depth: 10
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /loop_fusion/pose_graph_path
+          Topic: /loop_fusion/pose_graph_path
+          Unreliable: false
           Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
@@ -138,7 +121,7 @@ Visualization Manager:
             Value: true
           Axis: Z
           Channel Name: intensity
-          Class: rviz_default_plugins/PointCloud
+          Class: rviz/PointCloud
           Color: 255; 255; 255
           Color Transformer: FlatColor
           Decay Time: 10
@@ -153,13 +136,8 @@ Visualization Manager:
           Size (Pixels): 2
           Size (m): 0.009999999776482582
           Style: Points
-          Topic:
-            Depth: 10
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /loop_fusion/margin_cloud_loop_rect
+          Topic: /loop_fusion/margin_cloud_loop_rect
+          Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
           Value: false
@@ -171,7 +149,7 @@ Visualization Manager:
             Value: true
           Axis: Z
           Channel Name: intensity
-          Class: rviz_default_plugins/PointCloud
+          Class: rviz/PointCloud
           Color: 0; 255; 0
           Color Transformer: FlatColor
           Decay Time: 0
@@ -186,38 +164,30 @@ Visualization Manager:
           Size (Pixels): 4
           Size (m): 0.009999999776482582
           Style: Points
-          Topic:
-            Depth: 10
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /loop_fusion/point_cloud_loop_rect
+          Topic: /loop_fusion/point_cloud_loop_rect
+          Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
           Value: false
-        - Class: rviz_default_plugins/Image
+        - Class: rviz/Image
           Enabled: true
+          Image Topic: /loop_fusion/match_image
           Max Value: 1
           Median window: 5
           Min Value: 0
           Name: loop_match_Image
           Normalize Range: true
           Queue Size: 2
-          Topic:
-            Depth: 2
-            Durability Policy: Volatile
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /loop_fusion/match_image
+          Transport Hint: raw
+          Unreliable: false
           Value: true
       Enabled: true
       Name: LoopGroup
-    - Class: rviz_common/Group
+    - Class: rviz/Group
       Displays:
         - Alpha: 1
           Buffer Length: 1
-          Class: rviz_default_plugins/Path
+          Class: rviz/Path
           Color: 25; 255; 0
           Enabled: true
           Head Diameter: 0.30000001192092896
@@ -236,27 +206,16 @@ Visualization Manager:
           Radius: 0.029999999329447746
           Shaft Diameter: 0.10000000149011612
           Shaft Length: 0.10000000149011612
-          Topic:
-            Depth: 10
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /vins_estimator/path
+          Topic: /stir_slam/path
+          Unreliable: false
           Value: true
-        - Class: rviz_default_plugins/MarkerArray
+        - Class: rviz/MarkerArray
           Enabled: true
+          Marker Topic: /stir_slam/camera_pose_visual
           Name: CameraMarker
           Namespaces:
             CameraPoseVisualization: true
           Queue Size: 100
-          Topic:
-            Depth: 100
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /vins_estimator/camera_pose_visual
           Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
@@ -266,7 +225,7 @@ Visualization Manager:
             Value: true
           Axis: Z
           Channel Name: intensity
-          Class: rviz_default_plugins/PointCloud
+          Class: rviz/PointCloud
           Color: 255; 255; 255
           Color Transformer: Intensity
           Decay Time: 0
@@ -281,13 +240,8 @@ Visualization Manager:
           Size (Pixels): 2
           Size (m): 0.009999999776482582
           Style: Points
-          Topic:
-            Depth: 10
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /vins_estimator/point_cloud
+          Topic: /stir_slam/point_cloud
+          Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
           Value: true
@@ -299,7 +253,7 @@ Visualization Manager:
             Value: true
           Axis: Z
           Channel Name: intensity
-          Class: rviz_default_plugins/PointCloud
+          Class: rviz/PointCloud
           Color: 0; 255; 0
           Color Transformer: FlatColor
           Decay Time: 100
@@ -314,38 +268,30 @@ Visualization Manager:
           Size (Pixels): 1
           Size (m): 0.009999999776482582
           Style: Points
-          Topic:
-            Depth: 10
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /vins_estimator/margin_cloud
+          Topic: /stir_slam/margin_cloud
+          Unreliable: false
           Use Fixed Frame: true
           Use rainbow: true
           Value: true
-        - Class: rviz_default_plugins/Image
+        - Class: rviz/Image
           Enabled: true
+          Image Topic: /stir_slam/image_track
           Max Value: 1
           Median window: 5
           Min Value: 0
           Name: track_image
           Normalize Range: true
           Queue Size: 2
-          Topic:
-            Depth: 2
-            Durability Policy: Volatile
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /vins_estimator/image_track
+          Transport Hint: raw
+          Unreliable: false
           Value: true
       Enabled: true
       Name: VIOGroup
-    - Class: rviz_common/Group
+    - Class: rviz/Group
       Displays:
         - Alpha: 1
           Buffer Length: 1
-          Class: rviz_default_plugins/Path
+          Class: rviz/Path
           Color: 0; 0; 255
           Enabled: true
           Head Diameter: 0.30000001192092896
@@ -364,57 +310,34 @@ Visualization Manager:
           Radius: 0.029999999329447746
           Shaft Diameter: 0.10000000149011612
           Shaft Length: 0.10000000149011612
-          Topic:
-            Depth: 10
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /globalEstimator/global_path
+          Topic: /globalEstimator/global_path
+          Unreliable: false
           Value: true
-        - Class: rviz_default_plugins/MarkerArray
+        - Class: rviz/MarkerArray
           Enabled: true
+          Marker Topic: /globalEstimator/car_model
           Name: CarModel
           Namespaces:
             {}
           Queue Size: 100
-          Topic:
-            Depth: 100
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /globalEstimator/car_model
           Value: true
       Enabled: true
       Name: GlobalGroup
-    - Class: rviz_default_plugins/Marker
+    - Class: rviz/Marker
       Enabled: true
+      Marker Topic: /stir_slam/window_keypose
       Name: Marker
       Namespaces:
         window_keypose: true
       Queue Size: 100
-      Topic:
-        Depth: 100
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /vins_estimator/window_keypose
       Value: true
-    - Class: rviz_default_plugins/Marker
+    - Class: rviz/Marker
       Enabled: false
+      Marker Topic: /global_keypose
       Name: Marker
       Namespaces:
         {}
       Queue Size: 100
-      Topic:
-        Depth: 100
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /global_keypose
       Value: false
   Enabled: true
   Global Options:
@@ -424,39 +347,24 @@ Visualization Manager:
     Frame Rate: 30
   Name: root
   Tools:
-    - Class: rviz_default_plugins/MoveCamera
-    - Class: rviz_default_plugins/Select
-    - Class: rviz_default_plugins/FocusCamera
-    - Class: rviz_default_plugins/Measure
-    - Class: rviz_default_plugins/SetInitialPose
+    - Class: rviz/MoveCamera
+    - Class: rviz/Select
+    - Class: rviz/FocusCamera
+    - Class: rviz/Measure
+    - Class: rviz/SetInitialPose
       Theta std deviation: 0.2617993950843811
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /initialpose
+      Topic: /initialpose
       X std deviation: 0.5
       Y std deviation: 0.5
-    - Class: rviz_default_plugins/SetGoal
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /goal_pose
-    - Class: rviz_default_plugins/PublishPoint
+    - Class: rviz/SetGoal
+      Topic: /move_base_simple/goal
+    - Class: rviz/PublishPoint
       Single click: true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /clicked_point
+      Topic: /clicked_point
   Value: true
   Views:
     Current:
-      Class: rviz_default_plugins/ThirdPersonFollower
+      Class: rviz/ThirdPersonFollower
       Distance: 8.726523399353027
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549

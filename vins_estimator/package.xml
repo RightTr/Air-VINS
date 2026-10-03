@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>vins</name>
+  <name>stir_slam</name>
   <version>0.0.0</version>
-  <description>Air-VINS estimator and dataset publisher</description>
+  <description>StirSLAM estimator and dataset publisher</description>
   <maintainer email="qintonguav@gmail.com">qintong</maintainer>
   <license>GPL-3.0</license>
 

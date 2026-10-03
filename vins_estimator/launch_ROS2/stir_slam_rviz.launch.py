@@ -6,7 +6,7 @@ import os
 
 def generate_launch_description():
     rviz_config = os.path.join(
-        get_package_share_directory("vins"), "config", "vins_rviz_config_ros2.rviz"
+        get_package_share_directory("stir_slam"), "config", "stir_slam_rviz_config_ros2.rviz"
     )
     return LaunchDescription([
         Node(

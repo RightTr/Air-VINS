@@ -2,7 +2,7 @@
 <package format="2">
   <name>loop_fusion</name>
   <version>0.0.0</version>
-  <description>Air-VINS visual loop closure</description>
+  <description>StirSLAM visual loop closure</description>
   <maintainer email="tony-ws@todo.todo">tony-ws</maintainer>
   <license>GPL-3.0</license>
 

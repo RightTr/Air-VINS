@@ -1,6 +1,6 @@
 <launch>
   <arg name="data_root" default="/mnt/Data/homebrew_thermal/Nus/run_20250912_180027" />
-  <arg name="config_file" default="$(find vins)/../config/nus_thermal/nus_thermal_stereo_imu_config.yaml" />
+  <arg name="config_file" default="$(find stir_slam)/../config/nus_thermal/nus_thermal_stereo_imu_config.yaml" />
   <arg name="imu_file" default="realsense/imu/imu_synced.txt" />
   <arg name="playback_rate" default="1.0" />
   <arg name="start_index" default="0" />
@@ -12,7 +12,7 @@
   <arg name="subscriber_wait_timeout" default="10.0" />
   <arg name="visualization" default="true" />
 
-  <node name="nus_thermal_publisher" pkg="vins" type="nus_thermal_publisher" output="screen">
+    <node name="nus_thermal_publisher" pkg="stir_slam" type="nus_thermal_publisher" output="screen">
     <param name="data_root" type="string" value="$(arg data_root)" />
     <param name="left_dir" type="string" value="left_thermal/left_motion" />
     <param name="right_dir" type="string" value="right_thermal/right_motion" />
@@ -31,11 +31,11 @@
     <param name="subscriber_wait_timeout" type="double" value="$(arg subscriber_wait_timeout)" />
   </node>
 
-  <node name="vins_estimator" pkg="vins" type="vins_node" output="screen">
+    <node name="stir_slam" pkg="stir_slam" type="stir_slam_node" output="screen">
     <param name="config_file" value="$(arg config_file)" />
   </node>
 
   <group if="$(arg visualization)">
-    <include file="$(find vins)/launch_ROS1/vins_rviz.launch" />
+    <include file="$(find stir_slam)/launch_ROS1/stir_slam_rviz.launch" />
   </group>
 </launch>

@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly WORKSPACE_DIR="$(cd "${REPO_DIR}/../.." && pwd)"
-readonly PACKAGES=(vins loop_fusion)
+readonly PACKAGES=(stir_slam loop_fusion)
 
 usage() {
   echo "Usage: $0 ROS1|ROS2|humble|jazzy"

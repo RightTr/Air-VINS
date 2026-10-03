@@ -278,7 +278,7 @@ multi_view_fallback:
     return true;
 }
 
-void PointFeatureManager::pruneStaleLocalMappoints()
+void PointFeatureManager::pruneInactiveLocalMappoints()
 {
     std::set<int> alive_point_feature_ids;
     for (const auto &it_per_id : pointFeature)
@@ -295,18 +295,18 @@ void PointFeatureManager::pruneStaleLocalMappoints()
 
         if (alive)
         {
-            it->second->ResetStaleCount();
+            it->second->ResetInactiveCount();
             ++it;
             continue;
         }
 
-        it->second->IncreaseStaleCount();
+        it->second->IncreaseInactiveCount();
         const auto support_stats = windowSupportStats(it->first);
         const bool strong_window_support = support_stats.first >= 2;
         const int keep_good_limit = strong_window_support ? 6 : 3;
         const int keep_non_good_limit = strong_window_support ? 4 : 2;
-        const bool keep_temporarily = it->second->IsGood() && it->second->StaleCount() < keep_good_limit;
-        const bool keep_non_good_temporarily = !it->second->IsGood() && it->second->StaleCount() < keep_non_good_limit;
+        const bool keep_temporarily = it->second->IsGood() && it->second->InactiveCount() < keep_good_limit;
+        const bool keep_non_good_temporarily = !it->second->IsGood() && it->second->InactiveCount() < keep_non_good_limit;
         if (keep_temporarily || keep_non_good_temporarily)
         {
             ++it;
@@ -368,7 +368,7 @@ void PointFeatureManager::updateLocalPoints(Vector3d Ps[], Matrix3d Rs[],
 
         mappoint->ClearObversers();
         mappoint->SetTrackCount(static_cast<int>(point_feature.point_feature_frame.size()));
-        mappoint->ResetStaleCount();
+        mappoint->ResetInactiveCount();
         for (int i = 0; i < static_cast<int>(point_feature.point_feature_frame.size()); ++i)
             mappoint->AddObverser(point_feature.start_frame + i, i);
 
@@ -399,7 +399,7 @@ void PointFeatureManager::updateLocalPoints(Vector3d Ps[], Matrix3d Rs[],
         const auto support_stats = windowSupportStats(point_feature.point_feature_id);
         mappoint->SetWindowSupport(support_stats.first, support_stats.second);
     }
-    pruneStaleLocalMappoints();
+    pruneInactiveLocalMappoints();
 }
 
 bool PointFeatureManager::addFeatureCheckParallax(int frame_count, const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image, double td)

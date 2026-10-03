@@ -48,7 +48,7 @@ extern double BIAS_GYR_THRESHOLD;
 extern double SOLVER_TIME;
 extern int NUM_ITERATIONS;
 extern std::string EX_CALIB_RESULT_PATH;
-extern std::string VINS_RESULT_PATH;
+extern std::string STIR_SLAM_RESULT_PATH;
 extern std::string OUTPUT_FOLDER;
 extern std::string IMU_TOPIC;
 extern double TD;

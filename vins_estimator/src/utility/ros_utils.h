@@ -380,7 +380,7 @@ inline std::string package_share_directory(const std::string &package_name)
 #ifdef USE_ROS2
 inline rclcpp::Logger logger()
 {
-    return global_node() ? global_node()->get_logger() : rclcpp::get_logger("air_vins");
+    return global_node() ? global_node()->get_logger() : rclcpp::get_logger("stir_slam");
 }
 
 inline rclcpp::Clock &clock()

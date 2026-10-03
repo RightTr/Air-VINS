@@ -10,7 +10,7 @@ import os
 
 
 def generate_launch_description():
-    share = get_package_share_directory("vins")
+    share = get_package_share_directory("stir_slam")
     args = [
         DeclareLaunchArgument("data_root", default_value="/mnt/Data/homebrew_thermal/Nus/run_20250912_180027"),
         DeclareLaunchArgument("config_file", default_value=os.path.join(share, "config", "nus_thermal", "nus_thermal_stereo_imu_config.yaml")),
@@ -26,7 +26,7 @@ def generate_launch_description():
         DeclareLaunchArgument("visualization", default_value="true"),
     ]
     publisher = Node(
-        package="vins", executable="nus_thermal_publisher", name="nus_thermal_publisher", output="screen",
+        package="stir_slam", executable="nus_thermal_publisher", name="nus_thermal_publisher", output="screen",
         parameters=[{
             "data_root": LaunchConfiguration("data_root"),
             "left_dir": "left_thermal/left_motion", "right_dir": "right_thermal/right_motion",
@@ -43,10 +43,10 @@ def generate_launch_description():
             "subscriber_wait_timeout": ParameterValue(LaunchConfiguration("subscriber_wait_timeout"), value_type=float),
         }],
     )
-    estimator = Node(package="vins", executable="vins_node", name="vins_estimator", output="screen",
+    estimator = Node(package="stir_slam", executable="stir_slam_node", name="stir_slam", output="screen",
                      parameters=[{"config_file": LaunchConfiguration("config_file")}])
     rviz = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(share, "launch", "vins_rviz.launch.py")),
+        PythonLaunchDescriptionSource(os.path.join(share, "launch", "stir_slam_rviz.launch.py")),
         condition=IfCondition(LaunchConfiguration("visualization")),
     )
     return LaunchDescription(args + [publisher, estimator, rviz])

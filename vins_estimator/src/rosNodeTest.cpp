@@ -301,7 +301,7 @@ void cam_switch_callback(const std_msgs::BoolConstPtr &switch_msg)
 
 int main(int argc, char **argv)
 {
-    auto node = ros_utils::init(argc, argv, "vins_estimator");
+    auto node = ros_utils::init(argc, argv, "stir_slam");
     ROS_INFO("init begins");
     // Estimator is a global callback target. Initialize its state here, after
     // every translation unit's global visualization objects are constructed.
@@ -339,11 +339,11 @@ int main(int argc, char **argv)
             node, IMAGE1_TOPIC, 100, img1_callback, ros_utils::QosProfile::SensorData);
     }
     auto sub_restart = ros_utils::create_subscription<std_msgs::Bool>(
-        node, "/vins_restart", 100, restart_callback);
+        node, "/stir_slam/restart", 100, restart_callback);
     auto sub_imu_switch = ros_utils::create_subscription<std_msgs::Bool>(
-        node, "/vins_imu_switch", 100, imu_switch_callback);
+        node, "/stir_slam/imu_switch", 100, imu_switch_callback);
     auto sub_cam_switch = ros_utils::create_subscription<std_msgs::Bool>(
-        node, "/vins_cam_switch", 100, cam_switch_callback);
+        node, "/stir_slam/cam_switch", 100, cam_switch_callback);
 
     auto sync_timer = ros_utils::create_timer(node, 0.002, sync_process);
     ros_utils::spin(node);

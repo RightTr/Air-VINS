@@ -217,7 +217,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
 
     if (SAVE_LOOP_PATH)
     {
-        ofstream loop_path_file(VINS_RESULT_PATH, ios::app);
+        ofstream loop_path_file(STIR_SLAM_RESULT_PATH, ios::app);
         loop_path_file.setf(ios::fixed, ios::floatfield);
         loop_path_file.precision(0);
         loop_path_file << cur_kf->time_stamp * 1e9 << ",";
@@ -916,7 +916,7 @@ void PoseGraph::updatePath()
 
     if (SAVE_LOOP_PATH)
     {
-        ofstream loop_path_file_tmp(VINS_RESULT_PATH, ios::out);
+        ofstream loop_path_file_tmp(STIR_SLAM_RESULT_PATH, ios::out);
         loop_path_file_tmp.close();
     }
 
@@ -952,7 +952,7 @@ void PoseGraph::updatePath()
 
         if (SAVE_LOOP_PATH)
         {
-            ofstream loop_path_file(VINS_RESULT_PATH, ios::app);
+            ofstream loop_path_file(STIR_SLAM_RESULT_PATH, ios::app);
             loop_path_file.setf(ios::fixed, ios::floatfield);
             loop_path_file.precision(0);
             loop_path_file << (*it)->time_stamp * 1e9 << ",";

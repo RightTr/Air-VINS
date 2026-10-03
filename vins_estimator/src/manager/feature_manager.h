@@ -63,7 +63,7 @@ class PointFeatureManager
     void syncMappointFromPointFeature(PointFeatureId &point_feature,
                                       Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
                                       Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);
-    void pruneStaleLocalMappoints();
+    void pruneInactiveLocalMappoints();
     bool triangulateMappointWorldPoint(const PointFeatureId &point_feature,
                                        Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
                                        Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[],

@@ -69,7 +69,7 @@ std::unique_ptr<DeepFeature> loop_deep_feature;
 
 std::string BRIEF_PATTERN_FILE;
 std::string POSE_GRAPH_SAVE_PATH;
-std::string VINS_RESULT_PATH;
+std::string STIR_SLAM_RESULT_PATH;
 CameraPoseVisualization cameraposevisual(1, 0, 0, 1);
 Eigen::Vector3d last_t(-100, -100, -100);
 double last_image_time = -1;
@@ -487,13 +487,13 @@ int main(int argc, char **argv)
 
     fsSettings["topics"]["image0"] >> IMAGE_TOPIC;
     fsSettings["loop_closure"]["pose_graph_save_path"] >> POSE_GRAPH_SAVE_PATH;
-    fsSettings["system"]["output_path"] >> VINS_RESULT_PATH;
+    fsSettings["system"]["output_path"] >> STIR_SLAM_RESULT_PATH;
     fsSettings["loop_closure"]["save_image"] >> DEBUG_IMAGE;
-    std::string output_dir = VINS_RESULT_PATH;
+    std::string output_dir = STIR_SLAM_RESULT_PATH;
 
     LOAD_PREVIOUS_POSE_GRAPH = fsSettings["loop_closure"]["load_previous_pose_graph"];
-    VINS_RESULT_PATH = VINS_RESULT_PATH + "/vio_loop.csv";
-    std::ofstream fout(VINS_RESULT_PATH, std::ios::out);
+    STIR_SLAM_RESULT_PATH = STIR_SLAM_RESULT_PATH + "/vio_loop.csv";
+    std::ofstream fout(STIR_SLAM_RESULT_PATH, std::ios::out);
     fout.close();
 
     int loop_descriptor_method = 1;
@@ -578,17 +578,17 @@ int main(int argc, char **argv)
     }
 
     auto sub_vio = ros_utils::create_subscription<nav_msgs::Odometry>(
-        node, "/vins_estimator/odometry", 2000, vio_callback);
+        node, "/stir_slam/odometry", 2000, vio_callback);
     auto sub_image = ros_utils::create_subscription<sensor_msgs::Image>(
         node, IMAGE_TOPIC, 2000, image_callback, ros_utils::QosProfile::SensorData);
     auto sub_pose = ros_utils::create_subscription<nav_msgs::Odometry>(
-        node, "/vins_estimator/keyframe_pose", 2000, pose_callback);
+        node, "/stir_slam/keyframe_pose", 2000, pose_callback);
     auto sub_extrinsic = ros_utils::create_subscription<nav_msgs::Odometry>(
-        node, "/vins_estimator/extrinsic", 2000, extrinsic_callback);
+        node, "/stir_slam/extrinsic", 2000, extrinsic_callback);
     auto sub_point = ros_utils::create_subscription<sensor_msgs::PointCloud>(
-        node, "/vins_estimator/keyframe_point", 2000, point_callback);
+        node, "/stir_slam/keyframe_point", 2000, point_callback);
     auto sub_margin_point = ros_utils::create_subscription<sensor_msgs::PointCloud>(
-        node, "/vins_estimator/margin_cloud", 2000, margin_point_callback);
+        node, "/stir_slam/margin_cloud", 2000, margin_point_callback);
 
     pub_match_img = ros_utils::create_publisher<sensor_msgs::Image>(node, "match_image", 1000);
     pub_camera_pose_visual = ros_utils::create_publisher<visualization_msgs::MarkerArray>(

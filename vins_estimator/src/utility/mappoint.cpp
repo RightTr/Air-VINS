@@ -4,7 +4,7 @@
 
 Mappoint::Mappoint(int mappoint_id)
     : mappoint_id(mappoint_id), state_(State::UnTriangulated), position_(Eigen::Vector3d::Zero()),
-      has_position_(false), track_count_(0), has_descriptor_(false), stale_count_(0),
+      has_position_(false), track_count_(0), has_descriptor_(false), inactive_count_(0),
       window_support_count_(0), last_window_support_frame_id_(-1)
 {
     descriptor_.setZero();
@@ -12,7 +12,7 @@ Mappoint::Mappoint(int mappoint_id)
 
 Mappoint::Mappoint(int mappoint_id, const Eigen::Vector3d &position)
     : mappoint_id(mappoint_id), state_(State::UnTriangulated), position_(position),
-      has_position_(true), track_count_(0), has_descriptor_(false), stale_count_(0),
+      has_position_(true), track_count_(0), has_descriptor_(false), inactive_count_(0),
       window_support_count_(0), last_window_support_frame_id_(-1)
 {
     descriptor_.setZero();
@@ -111,19 +111,19 @@ int Mappoint::TrackCount() const
     return track_count_;
 }
 
-void Mappoint::ResetStaleCount()
+void Mappoint::ResetInactiveCount()
 {
-    stale_count_ = 0;
+    inactive_count_ = 0;
 }
 
-void Mappoint::IncreaseStaleCount()
+void Mappoint::IncreaseInactiveCount()
 {
-    ++stale_count_;
+    ++inactive_count_;
 }
 
-int Mappoint::StaleCount() const
+int Mappoint::InactiveCount() const
 {
-    return stale_count_;
+    return inactive_count_;
 }
 
 void Mappoint::SetWindowSupport(int support_count, int last_support_frame_id)

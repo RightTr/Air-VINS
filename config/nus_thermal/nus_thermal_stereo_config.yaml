@@ -5,7 +5,7 @@ system:
   imu: 0
   num_of_cam: 2
   multiple_thread: 1
-  output_path: "/workspace/src/VINS-Fusion/output/"
+  output_path: "/root/stirslam_ws/install/stir_slam/share/stir_slam/output/"
 
 topics:
   imu: "/imu0"
@@ -48,7 +48,7 @@ feature_tracker:
 
 deep_feature:
   enabled: 1
-  model_dir: "/root/stirslam_ws/install/vins/share/vins/output"
+  model_dir: "/root/stirslam_ws/install/stir_slam/share/stir_slam/output"
   matcher: 0  # 0 for LightGlue, 1 for SuperGlue
   max_keypoints: 150
   keypoint_threshold: 0.004
@@ -66,8 +66,8 @@ keyframe:
 
 loop_closure:
   descriptor_method: 1
-  vprnet_engine_path: "/root/stirslam_ws/install/vins/share/vins/output/ResNet50_512_eigenplaces.engine"
-  vprnet_onnx_path: "/root/stirslam_ws/install/vins/share/vins/output/ResNet50_512_eigenplaces.onnx"
+  vprnet_engine_path: "/root/stirslam_ws/install/stir_slam/share/stir_slam/output/ResNet50_512_eigenplaces.engine"
+  vprnet_onnx_path: "/root/stirslam_ws/install/stir_slam/share/stir_slam/output/ResNet50_512_eigenplaces.onnx"
   loop_threshold: 0.75
   loop_margin: 0.05
   exclude_recent: 50

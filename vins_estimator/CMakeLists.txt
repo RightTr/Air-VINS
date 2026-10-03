@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(vins)
+project(stir_slam)
 
 set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD 17)
@@ -56,13 +56,13 @@ add_subdirectory(
   ${PROJECT_SOURCE_DIR}/../deepFeature/3rdparty/tensorrtbuffer
   ${CMAKE_CURRENT_BINARY_DIR}/deepFeature_tensorrtbuffer)
 
-set(VINS_INCLUDE_DIRS
+set(STIR_SLAM_INCLUDE_DIRS
   ${EIGEN3_INCLUDE_DIRS} ${CUDA_INCLUDE_DIRS} ${TENSORRT_INCLUDE_DIR}
   ${PROJECT_SOURCE_DIR}/.. ${PROJECT_SOURCE_DIR}/src
   ${PROJECT_SOURCE_DIR}/../deepFeature ${PROJECT_SOURCE_DIR}/../deepFeature/include
   ${PROJECT_SOURCE_DIR}/../deepFeature/3rdparty/tensorrtbuffer/include)
 
-set(VINS_SOURCES
+set(STIR_SLAM_SOURCES
   src/estimator/parameters.cpp src/estimator/estimator.cpp
   src/manager/feature_manager.cpp
   src/factor/pose_local_parameterization.cpp
@@ -79,31 +79,31 @@ set(VINS_SOURCES
   ../deepFeature/src/light_glue.cpp
   ../deepFeature/src/point_matcher.cc ../deepFeature/src/utils.cc)
 
-add_library(vins_lib ${VINS_SOURCES})
-target_include_directories(vins_lib PUBLIC ${VINS_INCLUDE_DIRS})
-target_link_libraries(vins_lib ${OpenCV_LIBS} ${CERES_LIBRARIES} ${CUDA_LIBRARIES}
+add_library(stir_slam_lib ${STIR_SLAM_SOURCES})
+target_include_directories(stir_slam_lib PUBLIC ${STIR_SLAM_INCLUDE_DIRS})
+target_link_libraries(stir_slam_lib ${OpenCV_LIBS} ${CERES_LIBRARIES} ${CUDA_LIBRARIES}
   ${NVINFER_LIBRARY} ${NVONNXPARSER_LIBRARY} tensorrtbuffer)
 
-add_executable(vins_node src/rosNodeTest.cpp)
-target_include_directories(vins_node PRIVATE ${VINS_INCLUDE_DIRS})
-target_link_libraries(vins_node vins_lib)
+add_executable(stir_slam_node src/rosNodeTest.cpp)
+target_include_directories(stir_slam_node PRIVATE ${STIR_SLAM_INCLUDE_DIRS})
+target_link_libraries(stir_slam_node stir_slam_lib)
 
 add_executable(nus_thermal_publisher src/nus_thermal_publisher.cpp)
-target_include_directories(nus_thermal_publisher PRIVATE ${VINS_INCLUDE_DIRS})
+target_include_directories(nus_thermal_publisher PRIVATE ${STIR_SLAM_INCLUDE_DIRS})
 target_link_libraries(nus_thermal_publisher ${OpenCV_LIBS})
-set_target_properties(vins_node nus_thermal_publisher
+set_target_properties(stir_slam_node nus_thermal_publisher
   PROPERTIES INSTALL_RPATH "$ORIGIN")
 
 if(ROS_EDITION STREQUAL "ROS1")
-  target_include_directories(vins_lib PUBLIC ${catkin_INCLUDE_DIRS})
-  target_link_libraries(vins_lib ${catkin_LIBRARIES})
+  target_include_directories(stir_slam_lib PUBLIC ${catkin_INCLUDE_DIRS})
+  target_link_libraries(stir_slam_lib ${catkin_LIBRARIES})
   target_link_libraries(nus_thermal_publisher ${catkin_LIBRARIES})
 else()
-  set(VINS_ROS2_DEPENDENCIES rclcpp ament_index_cpp tf2 tf2_ros ${ROS_DEPENDENCIES})
-  ament_target_dependencies(vins_lib ${VINS_ROS2_DEPENDENCIES})
-  ament_target_dependencies(vins_node ${VINS_ROS2_DEPENDENCIES})
-  ament_target_dependencies(nus_thermal_publisher ${VINS_ROS2_DEPENDENCIES})
-  install(TARGETS vins_lib vins_node nus_thermal_publisher DESTINATION lib/${PROJECT_NAME})
+  set(STIR_SLAM_ROS2_DEPENDENCIES rclcpp ament_index_cpp tf2 tf2_ros ${ROS_DEPENDENCIES})
+  ament_target_dependencies(stir_slam_lib ${STIR_SLAM_ROS2_DEPENDENCIES})
+  ament_target_dependencies(stir_slam_node ${STIR_SLAM_ROS2_DEPENDENCIES})
+  ament_target_dependencies(nus_thermal_publisher ${STIR_SLAM_ROS2_DEPENDENCIES})
+  install(TARGETS stir_slam_lib stir_slam_node nus_thermal_publisher DESTINATION lib/${PROJECT_NAME})
   install(FILES src/utility/ros_utils.h DESTINATION include/${PROJECT_NAME}/utility)
   install(DIRECTORY launch_ROS2/ DESTINATION share/${PROJECT_NAME}/launch)
   install(DIRECTORY ../config DESTINATION share/${PROJECT_NAME})

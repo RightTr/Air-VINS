@@ -48,7 +48,7 @@ void registerPub(const ros_utils::NodeHandle &n)
     pub_camera_pose = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "camera_pose", 1000);
     pub_camera_pose_visual = ros_utils::ros_advertise<visualization_msgs::MarkerArray>(n, "camera_pose_visual", 1000);
     pub_keyframe_point = ros_utils::ros_advertise<sensor_msgs::PointCloud>(n, "keyframe_point", 1000);
-    pub_keyframe_pose = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "/vins_estimator/keyframe_pose", 1000);
+    pub_keyframe_pose = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "/stir_slam/keyframe_pose", 1000);
     pub_keyframe_path = ros_utils::ros_advertise<nav_msgs::Path>(n, "/keyframe_path", 1000);
     pub_keyframe_marker = ros_utils::ros_advertise<visualization_msgs::Marker>(n, "/global_keypose", 1000);
     pub_extrinsic = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "extrinsic", 1000);
@@ -193,7 +193,7 @@ void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
     ros_utils::ros_publish(pub_path, path);
 
         // write result to file
-        ofstream foutC(VINS_RESULT_PATH, ios::app);
+        ofstream foutC(STIR_SLAM_RESULT_PATH, ios::app);
         foutC.setf(ios::fixed, ios::floatfield);
         foutC.precision(0);
         foutC << ros_utils::time_to_sec(header.stamp) * 1e9 << ",";
@@ -559,7 +559,7 @@ void pubKeyframe(const Estimator &estimator)
         ros_utils::ros_publish(pub_keyframe_pose, keyframe_pose);
 
         const auto good_points = estimator.point_manager.collectGoodKeyframePoints();
-        ROS_INFO_STREAM_THROTTLE(5.0, "[vins_estimator] keyframe good points=" << good_points.size());
+        ROS_INFO_STREAM_THROTTLE(5.0, "[stir_slam] keyframe good points=" << good_points.size());
         sensor_msgs::PointCloud keyframe_point_msg;
         keyframe_point_msg.header = header;
         keyframe_point_msg.header.frame_id = "world";
