@@ -27,9 +27,6 @@ extern nav_msgs::Path path;
 extern nav_msgs::Path keyframe_path;
 extern visualization_msgs::Marker keyframe_marker;
 extern ros_utils::Publisher<sensor_msgs::Image> pub_deep_match;
-extern ros_utils::Publisher<sensor_msgs::Image> pub_line_match;
-extern ros_utils::Publisher<visualization_msgs::Marker> pub_map_line;
-extern ros_utils::Publisher<visualization_msgs::Marker> pub_window_map_line;
 extern int IMAGE_ROW, IMAGE_COL;
 
 void registerPub(const ros_utils::NodeHandle &n);
@@ -39,7 +36,6 @@ void pubLatestOdometry(const Eigen::Vector3d &P, const Eigen::Quaterniond &Q, co
 
 void pubTrackImage(const cv::Mat &imgTrack, const double t);
 void pubDeepMatchImage(const cv::Mat &imgMatch, const double t);
-void pubLineMatchImage(const cv::Mat &imgMatch, const double t);
 
 void printStatistics(const Estimator &estimator, double t);
 
@@ -53,8 +49,6 @@ void pubCameraPose(const Estimator &estimator, const std_msgs::Header &header);
 
 void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header);
 
-void pubGolbalMapLine(const Estimator &estimator, const std_msgs::Header &header);
-void pubWindowMapLine(const Estimator &estimator, const std_msgs::Header &header);
 
 void pubTF(const Estimator &estimator, const std_msgs::Header &header);
 

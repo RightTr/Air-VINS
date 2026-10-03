@@ -9,7 +9,6 @@
 
 class PointMatcher;
 class SuperPoint;
-class PLNet;
 
 struct DeepFeatureOptions
 {
@@ -20,8 +19,6 @@ struct DeepFeatureOptions
     int remove_borders = 4;
     int image_width = 640;
     int image_height = 512;
-    float line_threshold = 0.5f;
-    float line_length_threshold = 50.0f;
 };
 
 class DeepFeature
@@ -30,18 +27,12 @@ public:
     DeepFeature() = default;
     ~DeepFeature() = default;
 
-    // mode: 1 = SuperPoint, 2 = PLNET
+    // mode: 1 = SuperPoint
     bool init(int mode, const DeepFeatureOptions &options);
 
     bool ready() const { return ready_; }
 
     bool extractPoints(const cv::Mat &image, Eigen::Matrix<float, 259, Eigen::Dynamic> &points);
-
-    bool extractLines(const cv::Mat &image, std::vector<Eigen::Vector4d> &lines);
-
-    bool extractPointsLines(const cv::Mat &image,
-                           Eigen::Matrix<float, 259, Eigen::Dynamic> &points,
-                           std::vector<Eigen::Vector4d> &lines);
 
     bool matchPoints(const Eigen::Matrix<float, 259, Eigen::Dynamic> &features0,
                      const Eigen::Matrix<float, 259, Eigen::Dynamic> &features1,
@@ -54,6 +45,5 @@ private:
     bool ready_ = false;
 
     std::shared_ptr<SuperPoint> superpoint_;
-    std::shared_ptr<PLNet> plnet_;
     std::shared_ptr<PointMatcher> point_matcher_;
 };

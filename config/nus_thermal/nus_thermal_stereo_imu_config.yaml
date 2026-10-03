@@ -56,17 +56,6 @@ deep_feature:
   stereo_y_threshold: 1.0
   min_stereo_disparity: 4.0
 
-line_feature:
-  enabled: 0
-  threshold: 0.7
-  min_track_cnt: 2
-  max_cnt: 100
-  min_length: 50.0
-  stereo_y_threshold: 1.0
-  min_stereo_disparity: 4.0
-  match_vote_threshold: 2
-  match_score_threshold: 0.8
-
 keyframe:
   min_init_stereo_feature: 10
   lost_num_match: 10

@@ -22,7 +22,6 @@
 
 #include "parameters.h"
 #include "../manager/point_feature_manager.h"
-#include "../manager/line_feature_manager.h"
 #include "../utility/utility.h"
 #include "../utility/tic_toc.h"
 #include "../initial/solve_5pts.h"
@@ -30,13 +29,11 @@
 #include "../initial/initial_alignment.h"
 #include "../initial/initial_ex_rotation.h"
 #include "../factor/imu_factor.h"
-#include "../factor/line_parameterization.h"
 #include "../factor/pose_local_parameterization.h"
 #include "../factor/marginalization_factor.h"
 #include "../factor/projectionTwoFrameOneCamFactor.h"
 #include "../factor/projectionTwoFrameTwoCamFactor.h"
 #include "../factor/projectionOneFrameTwoCamFactor.h"
-#include "../factor/line_projection_factor.h"
 #include "../featureTracker/feature_tracker.h"
 
 typedef map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureFrameMap;
@@ -45,7 +42,6 @@ struct VisualMeasurement
 {
     double header;
     FeatureFrameMap feature_frame;
-    LineFeatureFrameMap line_frame;
     VisualTrackingMode tracking_mode;
     int active_camera_id;
 
@@ -59,12 +55,6 @@ struct VisualMeasurement
     {
     }
 
-    VisualMeasurement(double _header, const FeatureFrameMap &_feature_frame, const LineFeatureFrameMap &_line_frame,
-                      VisualTrackingMode _tracking_mode, int _active_camera_id)
-        : header(_header), feature_frame(_feature_frame), line_frame(_line_frame),
-          tracking_mode(_tracking_mode), active_camera_id(_active_camera_id)
-    {
-    }
 };
 
 
@@ -84,7 +74,7 @@ class Estimator
     void resetFeatureTracker();
     void processIMU(double t, double dt, const Vector3d &linear_acceleration, const Vector3d &angular_velocity);
     void processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
-                      const LineFeatureFrameMap &lines, const double header,
+                      const double header,
                       VisualTrackingMode tracking_mode, int active_camera_id);
     void processMeasurements();
     void changeSensorType(int use_imu, int use_stereo);
@@ -106,14 +96,9 @@ class Estimator
     void getPoseInWorldFrame(Eigen::Matrix4d &T);
     void getPoseInWorldFrame(int index, Eigen::Matrix4d &T);
     void outliersRejection(set<int> &removeIndex);
-    void lineOutliersRejection(std::map<int, std::set<int>> &removeObservations);
     double reprojectionError(Matrix3d &Ri, Vector3d &Pi, Matrix3d &rici, Vector3d &tici,
                                      Matrix3d &Rj, Vector3d &Pj, Matrix3d &ricj, Vector3d &ticj, 
                                      double depth, Vector3d &uvi, Vector3d &uvj);
-    Eigen::Matrix<double, 3, 1> projectLinePixel(const Matrix3d &Rwb, const Vector3d &Pwb,
-                                                 const Matrix3d &rici, const Vector3d &tici,
-                                                 const Eigen::Matrix<double, 6, 1> &line_plucker,
-                                                 const Eigen::Vector4d &intrinsics) const;
     void updateLatestStates();
     void fastPredictIMU(double t, Eigen::Vector3d linear_acceleration, Eigen::Vector3d angular_velocity);
     bool IMUAvailable(double t);
@@ -177,7 +162,6 @@ class Estimator
     int inputImageCnt;
 
     PointFeatureManager point_manager;
-    LineFeatureManager line_manager;
     MotionEstimator m_estimator;
     InitialEXRotation initial_ex_rotation;
 
@@ -194,7 +178,6 @@ class Estimator
     double para_Pose[WINDOW_SIZE + 1][SIZE_POSE];
     double para_SpeedBias[WINDOW_SIZE + 1][SIZE_SPEEDBIAS];
     double para_Feature[NUM_OF_F][SIZE_FEATURE];
-    double para_LineFeature[NUM_OF_LINE_F][4];
     double para_Ex_Pose[2][SIZE_POSE];
     double para_Retrive_Pose[SIZE_POSE];
     double para_Td[1][1];
@@ -208,7 +191,6 @@ class Estimator
 
     Eigen::Vector3d initP;
     Eigen::Matrix3d initR;
-    Eigen::Vector4d line_camera_intrinsics[2];
 
     double latest_time;
     Eigen::Vector3d latest_P, latest_V, latest_Ba, latest_Bg, latest_acc_0, latest_gyr_0;

@@ -71,7 +71,7 @@ set(LOOP_FUSION_SOURCES
   src/vprnet/vprnet.cpp ../vins_estimator/src/featureTracker/deep_feature.cpp
   ../deepFeature/src/light_glue.cpp ../deepFeature/src/point_matcher.cc
   ../deepFeature/src/super_glue.cpp ../deepFeature/src/super_point.cpp
-  ../deepFeature/src/utils.cc ../deepFeature/src/plnet.cpp
+  ../deepFeature/src/utils.cc
   ../deepFeature/3rdparty/tensorrtbuffer/src/logger.cpp
   ../deepFeature/3rdparty/tensorrtbuffer/src/sample_options.cpp
   ../deepFeature/3rdparty/tensorrtbuffer/src/sample_utils.cpp)

@@ -30,70 +30,12 @@ ros_utils::Publisher<nav_msgs::Odometry> pub_extrinsic;
 
 ros_utils::Publisher<sensor_msgs::Image> pub_image_track;
 ros_utils::Publisher<sensor_msgs::Image> pub_deep_match;
-ros_utils::Publisher<sensor_msgs::Image> pub_line_match;
-ros_utils::Publisher<visualization_msgs::Marker> pub_map_line;
-ros_utils::Publisher<visualization_msgs::Marker> pub_window_map_line;
 
 CameraPoseVisualization cameraposevisual(1, 0, 0, 1);
 static double sum_of_path = 0;
 static Vector3d last_path(0.0, 0.0, 0.0);
 
 size_t pub_counter = 0;
-static std::map<int, std::pair<Eigen::Vector3d, Eigen::Vector3d>> persistent_map_lines;
-
-// Helper: convert Plucker line (6x1) to a short segment for visualization
-bool lineToSegment(const Eigen::Matrix<double, 6, 1> &line,
-                          Eigen::Vector3d &seg_start,
-                          Eigen::Vector3d &seg_end)
-{
-    const Eigen::Vector3d moment = line.head<3>();
-    const Eigen::Vector3d direction = line.tail<3>();
-    const double dir_norm = direction.norm();
-    if (!moment.allFinite() || !direction.allFinite() || dir_norm < 1e-9)
-        return false;
-    const Eigen::Vector3d anchor = direction.cross(moment) / (dir_norm * dir_norm);
-    const Eigen::Vector3d offset = direction.normalized() * 0.5;
-    seg_start = anchor - offset;
-    seg_end = anchor + offset;
-    return true;
-}
-
-// Helper: append a line segment (no color) to a Marker
-void appendLineSegment(visualization_msgs::Marker &marker,
-                              const Eigen::Vector3d &seg_start,
-                              const Eigen::Vector3d &seg_end)
-{
-    geometry_msgs::Point p1;
-    geometry_msgs::Point p2;
-    p1.x = seg_start.x();
-    p1.y = seg_start.y();
-    p1.z = seg_start.z();
-    p2.x = seg_end.x();
-    p2.y = seg_end.y();
-    p2.z = seg_end.z();
-    marker.points.push_back(p1);
-    marker.points.push_back(p2);
-}
-
-// Helper: append a colored line segment to a Marker
-void appendLineSegmentColored(visualization_msgs::Marker &marker,
-                                     const Eigen::Vector3d &seg_start,
-                                     const Eigen::Vector3d &seg_end,
-                                     const std_msgs::ColorRGBA &color)
-{
-    geometry_msgs::Point p1;
-    geometry_msgs::Point p2;
-    p1.x = seg_start.x();
-    p1.y = seg_start.y();
-    p1.z = seg_start.z();
-    p2.x = seg_end.x();
-    p2.y = seg_end.y();
-    p2.z = seg_end.z();
-    marker.points.push_back(p1);
-    marker.points.push_back(p2);
-    marker.colors.push_back(color);
-    marker.colors.push_back(color);
-}
 
 void registerPub(const ros_utils::NodeHandle &n)
 {
@@ -112,9 +54,6 @@ void registerPub(const ros_utils::NodeHandle &n)
     pub_extrinsic = ros_utils::ros_advertise<nav_msgs::Odometry>(n, "extrinsic", 1000);
     pub_image_track = ros_utils::ros_advertise<sensor_msgs::Image>(n, "image_track", 1000);
     pub_deep_match = ros_utils::ros_advertise<sensor_msgs::Image>(n, "/deep_match", 1000);
-    pub_line_match = ros_utils::ros_advertise<sensor_msgs::Image>(n, "line_match", 1000);
-    pub_map_line = ros_utils::ros_advertise<visualization_msgs::Marker>(n, "global_mapline", 1000);
-    pub_window_map_line = ros_utils::ros_advertise<visualization_msgs::Marker>(n, "window_mapline", 1000);
 
     cameraposevisual.setScale(0.1);
     cameraposevisual.setLineWidth(0.01);
@@ -138,9 +77,6 @@ void shutdownPub()
     pub_extrinsic.reset();
     pub_image_track.reset();
     pub_deep_match.reset();
-    pub_line_match.reset();
-    pub_map_line.reset();
-    pub_window_map_line.reset();
 #endif
 }
 
@@ -181,18 +117,6 @@ void pubDeepMatchImage(const cv::Mat &imgMatch, const double t)
     sensor_msgs::ImagePtr imgMatchMsg = cv_bridge::CvImage(header, "bgr8", imgMatch).toImageMsg();
     ros_utils::ros_publish(pub_deep_match, *imgMatchMsg);
 }
-
-void pubLineMatchImage(const cv::Mat &imgMatch, const double t)
-{
-    if (imgMatch.empty())
-        return;
-    std_msgs::Header header;
-    header.frame_id = "world";
-    header.stamp = ros_utils::time_from_sec(t);
-    sensor_msgs::ImagePtr imgMatchMsg = cv_bridge::CvImage(header, "bgr8", imgMatch).toImageMsg();
-    ros_utils::ros_publish(pub_line_match, *imgMatchMsg);
-}
-
 
 void printStatistics(const Estimator &estimator, double t)
 {
@@ -418,6 +342,7 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
     ros_utils::ros_publish(pub_margin_cloud, margin_cloud);
 }
 
+#if 0 // line feature map visualization removed for point-only tracking
 std_msgs::ColorRGBA markerColorById(int id)
 {
     uint32_t x = static_cast<uint32_t>(id * 2654435761u);
@@ -516,6 +441,8 @@ void pubWindowMapLine(const Estimator &estimator, const std_msgs::Header &header
     ros_utils::ros_publish(pub_window_map_line, window_lines);
 }
 
+
+#endif
 
 void pubTF(const Estimator &estimator, const std_msgs::Header &header)
 {

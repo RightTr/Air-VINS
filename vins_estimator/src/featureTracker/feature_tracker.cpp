@@ -66,6 +66,7 @@ cv::Mat makeDeepMatchImage(const cv::Mat &prev_img,
     return out;
 }
 
+#if 0 // line feature helpers removed for point-only tracking
 double lineLength(const Eigen::Vector4d &line)
 {
     return (line.head<2>() - line.tail<2>()).norm();
@@ -322,6 +323,7 @@ cv::Scalar colorById(int id)
     uint32_t x = static_cast<uint32_t>(id * 2654435761u);
     return cv::Scalar(50 + (x & 0x7F), 50 + ((x >> 8) & 0x7F), 80 + ((x >> 16) & 0x7F));
 }
+#endif
 
 } // namespace
 
@@ -363,14 +365,10 @@ FeatureTracker::FeatureTracker()
 {
     stereo_cam = 0;
     n_id = 0;
-    line_n_id = 0;
     primary_camera_id = 0;
     camera_count = 0;
     left_deep_features.resize(259, 0);
     right_deep_features.resize(259, 0);
-    prev_line_points.resize(259, 0);
-    cur_line_points.resize(259, 0);
-    right_line_points.resize(259, 0);
 }
 
 void FeatureTracker::resetTrackingState()
@@ -403,21 +401,6 @@ void FeatureTracker::resetTrackingState()
     cur_un_right_pts_map.clear();
     prev_un_right_pts_map.clear();
     prevLeftPtsMap.clear();
-    line_feature_frame.clear();
-    prev_lines.clear();
-    cur_lines.clear();
-    cur_right_lines.clear();
-    line_ids.clear();
-    prev_line_ids.clear();
-    line_track_cnt.clear();
-    right_line_ids.clear();
-    cur_right_line_match_left.clear();
-    prev_points_on_lines.clear();
-    cur_points_on_lines.clear();
-    right_points_on_lines.clear();
-    prev_line_points.resize(259, 0);
-    cur_line_points.resize(259, 0);
-    right_line_points.resize(259, 0);
     left_deep_features.resize(259, 0);
     right_deep_features.resize(259, 0);
     cur_time = 0;
@@ -429,30 +412,9 @@ void FeatureTracker::clearState()
 {
     resetTrackingState();
     n_id = 0;
-    line_n_id = 0;
     primary_camera_id = 0;
     cameras = std::array<Camera, 2>{};
     camera_count = 0;
-}
-
-void FeatureTracker::initLineFeatureFrontend()
-{
-    if (line_deep_feature)
-        return;
-
-    DeepFeatureOptions options;
-    options.matcher = DEEP_FEATURE_MATCHER;
-    options.model_dir = DEEP_FEATURE_MODEL_DIR;
-    options.image_width = COL;
-    options.image_height = ROW;
-    options.max_keypoints = DEEP_FEATURE_MAX_KEYPOINTS;
-    options.keypoint_threshold = static_cast<float>(DEEP_FEATURE_KEYPOINT_THRESHOLD);
-    options.remove_borders = DEEP_FEATURE_REMOVE_BORDERS;
-    options.line_threshold = static_cast<float>(LINE_THRESHOLD);
-    options.line_length_threshold = static_cast<float>(LINE_MIN_LENGTH);
-
-    line_deep_feature = std::make_shared<DeepFeature>();
-    line_deep_feature->init(2, options);
 }
 
 void FeatureTracker::initDeepFeatureFrontend()
@@ -670,14 +632,9 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         }
         prev_un_right_pts_map = cur_un_right_pts_map;
     }
-    if (LINE_BA)
-        processLineFeatures(cur_img, rightImg);
-
     if(SHOW_TRACK)
     {
         drawTrack(cur_img, rightImg, ids, cur_pts, cur_right_pts, prevLeftPtsMap);
-        if (LINE_BA)
-            drawLineTrack(cur_img, rightImg);
     }
 
     prev_img = cur_img;
@@ -929,14 +886,9 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         prev_un_right_pts_map = cur_un_right_pts_map;
     }
 
-    if (LINE_BA)
-        processLineFeatures(cur_img, rightImg);
-
     if (SHOW_TRACK)
     {
         drawTrack(cur_img, rightImg, ids, cur_pts, cur_right_pts, prevLeftPtsMap);
-        if (LINE_BA)
-            drawLineTrack(cur_img, rightImg);
     }
 
     if (DEEP_FEATURE && !mixed_history_sources)
@@ -1019,6 +971,7 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
     return featureFrame;
 }
 
+#if 0 // line feature frontend removed: point tracking is the only visual feature path
 void FeatureTracker::processLineFeatures(const cv::Mat &left_img, const cv::Mat &right_img)
 {
     line_feature_frame.clear();
@@ -1247,6 +1200,7 @@ LineFeatureFrameMap FeatureTracker::getLineFrame() const
 {
     return line_feature_frame;
 }
+#endif
 
 void FeatureTracker::rejectWithF()
 {
@@ -1297,8 +1251,6 @@ void FeatureTracker::setCameraIntrinsics(const std::array<Eigen::Vector4d, 2> &i
 
     if (DEEP_FEATURE && !deep_feature)
         initDeepFeatureFrontend();
-    if (LINE_BA && !line_deep_feature)
-        initLineFeatureFrontend();
 }
 
 void FeatureTracker::showUndistortion(const string &name)

@@ -64,20 +64,19 @@ set(VINS_INCLUDE_DIRS
 
 set(VINS_SOURCES
   src/estimator/parameters.cpp src/estimator/estimator.cpp
-  src/manager/point_feature_manager.cpp src/manager/line_feature_manager.cpp
-  src/factor/line_parameterization.cpp src/factor/line_projection_factor.cpp
+  src/manager/point_feature_manager.cpp
   src/factor/pose_local_parameterization.cpp
   src/factor/projectionTwoFrameOneCamFactor.cpp
   src/factor/projectionTwoFrameTwoCamFactor.cpp
   src/factor/projectionOneFrameTwoCamFactor.cpp src/factor/marginalization_factor.cpp
-  src/utility/utility.cpp src/utility/line_geometry.cpp src/utility/mapline.cpp
+  src/utility/utility.cpp
   src/utility/mappoint.cpp src/utility/visualization.cpp
   src/utility/CameraPoseVisualization.cpp
   src/initial/solve_5pts.cpp src/initial/initial_aligment.cpp
   src/initial/initial_sfm.cpp src/initial/initial_ex_rotation.cpp
   src/featureTracker/feature_tracker.cpp src/featureTracker/deep_feature.cpp
   ../deepFeature/src/super_point.cpp ../deepFeature/src/super_glue.cpp
-  ../deepFeature/src/light_glue.cpp ../deepFeature/src/plnet.cpp
+  ../deepFeature/src/light_glue.cpp
   ../deepFeature/src/point_matcher.cc ../deepFeature/src/utils.cc)
 
 add_library(vins_lib ${VINS_SOURCES})

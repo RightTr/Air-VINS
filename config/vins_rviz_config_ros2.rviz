@@ -258,34 +258,6 @@ Visualization Manager:
             Reliability Policy: Reliable
             Value: /vins_estimator/camera_pose_visual
           Value: true
-        - Class: rviz_default_plugins/Marker
-          Enabled: true
-          Name: GlobalMapLines
-          Namespaces:
-            {}
-          Queue Size: 100
-          Topic:
-            Depth: 100
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /vins_estimator/global_mapline
-          Value: true
-        - Class: rviz_default_plugins/Marker
-          Enabled: true
-          Name: WindowMapLines
-          Namespaces:
-            {}
-          Queue Size: 100
-          Topic:
-            Depth: 100
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /vins_estimator/window_mapline
-          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -367,21 +339,6 @@ Visualization Manager:
             Reliability Policy: Reliable
             Value: /vins_estimator/image_track
           Value: true
-        - Class: rviz_default_plugins/Image
-          Enabled: false
-          Max Value: 1
-          Median window: 5
-          Min Value: 0
-          Name: line_match_image
-          Normalize Range: true
-          Queue Size: 2
-          Topic:
-            Depth: 2
-            Durability Policy: Volatile
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /vins_estimator/line_match
-          Value: false
       Enabled: true
       Name: VIOGroup
     - Class: rviz_common/Group
@@ -538,8 +495,6 @@ Window Geometry:
   Width: 1854
   X: 66
   Y: 32
-  line_match_image:
-    collapsed: false
   loop_match_Image:
     collapsed: false
   track_image:
