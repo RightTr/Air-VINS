@@ -64,7 +64,7 @@ set(VINS_INCLUDE_DIRS
 
 set(VINS_SOURCES
   src/estimator/parameters.cpp src/estimator/estimator.cpp
-  src/manager/point_feature_manager.cpp
+  src/manager/feature_manager.cpp
   src/factor/pose_local_parameterization.cpp
   src/factor/projectionTwoFrameOneCamFactor.cpp
   src/factor/projectionTwoFrameTwoCamFactor.cpp

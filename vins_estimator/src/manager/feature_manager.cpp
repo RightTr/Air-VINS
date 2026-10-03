@@ -1,4 +1,4 @@
-#include "point_feature_manager.h"
+#include "feature_manager.h"
 #include <cmath>
 #include <limits>
 #include <utility>
