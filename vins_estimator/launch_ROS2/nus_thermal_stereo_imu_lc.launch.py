@@ -12,7 +12,7 @@ import os
 def generate_launch_description():
     share = get_package_share_directory("stir_slam")
     args = [
-        DeclareLaunchArgument("data_root", default_value="/mnt/Data/homebrew_thermal/Nus/run_20250910_152028"),
+        DeclareLaunchArgument("data_root", default_value="/mnt/Data/homebrew_thermal/Nus/run_20250912_181939"),
         DeclareLaunchArgument("config_file", default_value=os.path.join(share, "config", "nus_thermal", "nus_thermal_stereo_imu_config.yaml")),
         DeclareLaunchArgument("imu_file", default_value="realsense/imu/imu_synced.txt"),
         DeclareLaunchArgument("playback_rate", default_value="1.0"),
@@ -29,7 +29,7 @@ def generate_launch_description():
         package="stir_slam", executable="nus_thermal_publisher", name="nus_thermal_publisher", output="screen",
         parameters=[{
             "data_root": LaunchConfiguration("data_root"),
-            "left_dir": "left_thermal/associated_left", "right_dir": "right_thermal/associated_right",
+            "left_dir": "left_thermal/left_motion", "right_dir": "right_thermal/right_motion",
             "imu_file": LaunchConfiguration("imu_file"),
             "image0_topic": "/cam0/image_raw", "image1_topic": "/cam1/image_raw", "imu_topic": "/imu0",
             "publish_imu": True,

@@ -865,7 +865,8 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
                 const cv::Point2f right_pt(right_features(1, match.trainIdx), right_features(2, match.trainIdx));
                 const double y_error = std::abs(left_pt.y - right_pt.y);
                 const double disparity = left_pt.x - right_pt.x;
-                if (y_error > DEEP_FEATURE_STEREO_Y_THRESHOLD || disparity < DEEP_FEATURE_MIN_STEREO_DISPARITY) continue;
+                if (y_error > DEEP_FEATURE_STEREO_Y_THRESHOLD || disparity < DEEP_FEATURE_MIN_STEREO_DISPARITY ||
+                    disparity > DEEP_FEATURE_MAX_STEREO_DISPARITY) continue;
                 ids_right.push_back(ids[match.queryIdx]);
                 cur_right_pts.push_back(right_pt);
                 accepted_right_feature_indexes.push_back(match.trainIdx);

@@ -94,5 +94,9 @@ if(ROS_EDITION STREQUAL "ROS1")
 else()
   ament_target_dependencies(loop_fusion_node rclcpp ament_index_cpp tf2 tf2_ros ${ROS_DEPENDENCIES})
   install(TARGETS loop_fusion_node DESTINATION lib/${PROJECT_NAME})
+  install(FILES
+    ${PROJECT_SOURCE_DIR}/../support_files/brief_k10L6.bin
+    ${PROJECT_SOURCE_DIR}/../support_files/brief_pattern.yml
+    DESTINATION share/${PROJECT_NAME}/support_files)
   ament_package()
 endif()

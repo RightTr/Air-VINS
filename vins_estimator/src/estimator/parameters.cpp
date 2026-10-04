@@ -61,6 +61,7 @@ double DEEP_FEATURE_KEYPOINT_THRESHOLD;
 int DEEP_FEATURE_REMOVE_BORDERS;
 double DEEP_FEATURE_STEREO_Y_THRESHOLD;
 double DEEP_FEATURE_MIN_STEREO_DISPARITY;
+double DEEP_FEATURE_MAX_STEREO_DISPARITY;
 double FEATURE_MIN_DEPTH;
 double FEATURE_MAX_DEPTH;
 int ENABLE_NUC_HANDLE;
@@ -134,6 +135,7 @@ void readParameters(std::string config_file)
     DEEP_FEATURE_REMOVE_BORDERS = 4;
     DEEP_FEATURE_STEREO_Y_THRESHOLD = 2.0;
     DEEP_FEATURE_MIN_STEREO_DISPARITY = 1.0;
+    DEEP_FEATURE_MAX_STEREO_DISPARITY = 96.0;
     FEATURE_MIN_DEPTH = 0.3;
     FEATURE_MAX_DEPTH = 40.0;
     ENABLE_NUC_HANDLE = 0;
@@ -151,6 +153,7 @@ void readParameters(std::string config_file)
     readOptionalParam(fsSettings, "deep_feature", "remove_borders", DEEP_FEATURE_REMOVE_BORDERS);
     readOptionalParam(fsSettings, "deep_feature", "stereo_y_threshold", DEEP_FEATURE_STEREO_Y_THRESHOLD);
     readOptionalParam(fsSettings, "deep_feature", "min_stereo_disparity", DEEP_FEATURE_MIN_STEREO_DISPARITY);
+    readOptionalParam(fsSettings, "deep_feature", "max_stereo_disparity", DEEP_FEATURE_MAX_STEREO_DISPARITY);
     readOptionalParam(fsSettings, "feature_tracker", "min_depth", FEATURE_MIN_DEPTH);
     readOptionalParam(fsSettings, "feature_tracker", "max_depth", FEATURE_MAX_DEPTH);
     readOptionalParam(fsSettings, "nuc", "enable_handle", ENABLE_NUC_HANDLE);

@@ -19,6 +19,7 @@
 #include <cv_bridge/cv_bridge.h>
 #endif
 #include <iostream>
+#include <fstream>
 #include <mutex>
 #include <memory>
 #include <queue>
@@ -461,11 +462,23 @@ int main(int argc, char **argv)
     ROW = fsSettings["camera"]["image_height"];
     COL = fsSettings["camera"]["image_width"];
     std::string pkg_path = ros_utils::package_share_directory("loop_fusion");
-    string vocabulary_file = pkg_path + "/../support_files/brief_k10L6.bin";
+    std::string support_files_dir = pkg_path;
+#ifdef USE_ROS1
+    support_files_dir += "/../support_files";
+#else
+    support_files_dir += "/support_files";
+#endif
+    string vocabulary_file = support_files_dir + "/brief_k10L6.bin";
+    BRIEF_PATTERN_FILE = support_files_dir + "/brief_pattern.yml";
+    if (!std::ifstream(vocabulary_file, std::ios::binary).good() ||
+        !std::ifstream(BRIEF_PATTERN_FILE).good())
+    {
+        ROS_ERROR_STREAM("Missing loop-closure BRIEF resources in " << support_files_dir);
+        return 1;
+    }
     cout << "vocabulary_file" << vocabulary_file << endl;
     posegraph.loadVocabulary(vocabulary_file);
 
-    BRIEF_PATTERN_FILE = pkg_path + "/../support_files/brief_pattern.yml";
     cout << "BRIEF_PATTERN_FILE" << BRIEF_PATTERN_FILE << endl;
 
     const cv::FileNode cam0_node = fsSettings["camera"]["cam0_intrinsics"];
