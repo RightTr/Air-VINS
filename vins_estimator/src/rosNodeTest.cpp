@@ -318,6 +318,13 @@ int main(int argc, char **argv)
     readParameters(config_file);
     estimator.setParameter();
 
+    // Offline stereo playback can request reliable delivery for all sensor topics.
+    // Keep the original sensor-data QoS for existing live-camera launches.
+    bool reliable_sensor_qos = false;
+    ros_utils::param(node, "reliable_sensor_qos", reliable_sensor_qos, false);
+    const auto sensor_qos = reliable_sensor_qos ? ros_utils::QosProfile::Reliable
+                                                : ros_utils::QosProfile::SensorData;
+
     ROS_WARN("waiting for image and imu...");
 
     registerPub(node);
@@ -326,17 +333,17 @@ int main(int argc, char **argv)
     if(USE_IMU)
     {
         sub_imu = ros_utils::create_subscription<sensor_msgs::Imu>(
-            node, IMU_TOPIC, 2000, imu_callback, ros_utils::QosProfile::SensorData, true);
+            node, IMU_TOPIC, 2000, imu_callback, sensor_qos, true);
     }
     auto sub_feature = ros_utils::create_subscription<sensor_msgs::PointCloud>(
         node, "/feature_tracker/feature", 2000, feature_callback);
     auto sub_img0 = ros_utils::create_subscription<sensor_msgs::Image>(
-        node, IMAGE0_TOPIC, 100, img0_callback, ros_utils::QosProfile::SensorData);
+        node, IMAGE0_TOPIC, 100, img0_callback, sensor_qos);
     ros_utils::Subscription<sensor_msgs::Image> sub_img1;
     if(STEREO)
     {
         sub_img1 = ros_utils::create_subscription<sensor_msgs::Image>(
-            node, IMAGE1_TOPIC, 100, img1_callback, ros_utils::QosProfile::SensorData);
+            node, IMAGE1_TOPIC, 100, img1_callback, sensor_qos);
     }
     auto sub_restart = ros_utils::create_subscription<std_msgs::Bool>(
         node, "/stir_slam/restart", 100, restart_callback);
@@ -350,6 +357,8 @@ int main(int argc, char **argv)
     ros_utils::stop_timer(sync_timer);
 
     estimator.shutdown();
+    // Release TensorRT resources before global/static destruction at process exit.
+    estimator.featureTracker.deep_feature.reset();
     shutdownPub();
 #ifdef USE_ROS2
     sync_timer.reset();

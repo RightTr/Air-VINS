@@ -1,0 +1,19 @@
+tartan_thermal_publisher:
+  ros__parameters:
+    data_root: /mnt/Data/TartanThermal/TartanRGBT_dataset/day1/undistorted_images_all_cameras_20250822_115703
+    left_dir: thermal_left_rect_8
+    right_dir: thermal_right_rect_8
+    imu_dir: zed_imu_raw
+    image0_topic: /cam0/image_raw
+    image1_topic: /cam1/image_raw
+    imu_topic: /imu0
+    left_frame_id: thermal_left/optical_frame
+    right_frame_id: thermal_right/optical_frame
+    imu_frame_id: zed_imu_link
+    publish_imu: true
+    playback_rate: 1.0
+    start_index: 0
+    max_frames: 0
+    stereo_stamp_tolerance: 0.003
+    subscriber_wait_timeout: 10.0
+    loop: false

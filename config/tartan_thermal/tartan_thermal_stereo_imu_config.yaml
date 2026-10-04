@@ -1,0 +1,81 @@
+%YAML:1.0
+
+# TartanRGBT thermal stereo + ZED IMU. See README.md for calibration provenance.
+system:
+  imu: 1
+  num_of_cam: 2
+  multiple_thread: 1
+  output_path: "/root/stirslam_ws/install/stir_slam/share/stir_slam/output/tartan_thermal"
+
+topics:
+  imu: "/imu0"
+  image0: "/cam0/image_raw"
+  image1: "/cam1/image_raw"
+
+camera:
+  image_width: 640
+  image_height: 512
+  cam0_intrinsics: [421.23237248, 420.80872096, 317.55165969, 255.54588954]
+  cam1_intrinsics: [417.36729084, 417.03044824, 314.30001610, 255.89962207]
+  # T_zed_imu_link_thermal_optical, composed from calibration/tf_static.json.
+  estimate_extrinsic: 0
+  body_T_cam0: !!opencv-matrix
+    rows: 4
+    cols: 4
+    dt: d
+    data: [-0.001708372500, -0.001383056501, 0.999997584306, 0.000017309513,
+           -0.999974865466, -0.006878767138, -0.001717847435, 0.035431298886,
+           0.006881126401, -0.999975384556, -0.001371270242, -0.031763319435,
+           0.0, 0.0, 0.0, 1.0]
+  body_T_cam1: !!opencv-matrix
+    rows: 4
+    cols: 4
+    dt: d
+    data: [-0.001708372500, -0.001383056501, 0.999997584306, -0.000187732771,
+           -0.999974865466, -0.006878767138, -0.001717847435, -0.084587684417,
+           0.006881126401, -0.999975384556, -0.001371270242, -0.030937432882,
+           0.0, 0.0, 0.0, 1.0]
+
+feature_tracker:
+  max_cnt: 400
+  min_dist: 30
+  freq: 10
+  F_threshold: 1.0
+  show_track: 1
+  flow_back: 1
+  min_depth: 0.1
+  max_depth: 8.0
+
+deep_feature:
+  enabled: 1
+  model_dir: "/root/stirslam_ws/install/stir_slam/share/stir_slam/output"
+  matcher: 0
+  max_keypoints: 400
+  keypoint_threshold: 0.004
+  remove_borders: 4
+  stereo_y_threshold: 3.0
+  min_stereo_disparity: 4.0
+  max_stereo_disparity: 420.0
+
+keyframe:
+  min_init_stereo_feature: 10
+  lost_num_match: 10
+  min_num_match: 30
+  max_num_match: 80
+  tracking_point_rate: 0.7
+  tracking_parallax_rate: 0.1
+
+nuc:
+  enable_handle: 1
+
+estimator:
+  max_solver_time: 0.04
+  max_num_iterations: 8
+  keyframe_parallax: 5.0
+  acc_n: 0.1
+  gyr_n: 0.01
+  acc_w: 0.001
+  gyr_w: 0.0001
+  g_norm: 9.81
+  estimate_td: 0
+  td: 0.0

@@ -179,17 +179,19 @@ sensor_msgs::Imu makeImuMessage(const ImuSample &sample, const std::string &fram
     return message;
 }
 
-template <typename ImagePublisher, typename ImuPublisher>
-void waitForSubscribers(const ImagePublisher &left, const ImagePublisher &right,
-                        const ImuPublisher &imu, bool publish_imu, double timeout_seconds)
+void waitForSubscribers(const ros_utils::Publisher<sensor_msgs::Image> &left,
+                        const ros_utils::Publisher<sensor_msgs::Image> &right,
+                        const ros_utils::Publisher<sensor_msgs::Imu> &imu,
+                        bool publish_imu, double timeout_seconds)
 {
     if (timeout_seconds <= 0.0)
         return;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_seconds);
     while (ros_utils::ok() && std::chrono::steady_clock::now() < deadline)
     {
-        if (ros_utils::subscription_count(left) > 0 && ros_utils::subscription_count(right) > 0 &&
-            (!publish_imu || ros_utils::subscription_count(imu) > 0))
+        if (ros_utils::subscription_count<sensor_msgs::Image>(left) > 0 &&
+            ros_utils::subscription_count<sensor_msgs::Image>(right) > 0 &&
+            (!publish_imu || ros_utils::subscription_count<sensor_msgs::Imu>(imu) > 0))
             return;
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
@@ -247,13 +249,13 @@ int main(int argc, char **argv)
         std::min(pairs.size(), static_cast<size_t>(start_index) + static_cast<size_t>(max_frames));
 
     auto pub_left = ros_utils::ros_advertise<sensor_msgs::Image>(
-        node, image0_topic, 10, false, ros_utils::QosProfile::SensorData);
+        node, image0_topic, 10, false, ros_utils::QosProfile::Reliable);
     auto pub_right = ros_utils::ros_advertise<sensor_msgs::Image>(
-        node, image1_topic, 10, false, ros_utils::QosProfile::SensorData);
+        node, image1_topic, 10, false, ros_utils::QosProfile::Reliable);
     ros_utils::Publisher<sensor_msgs::Imu> pub_imu;
     if (publish_imu)
         pub_imu = ros_utils::ros_advertise<sensor_msgs::Imu>(
-            node, imu_topic, 2000, false, ros_utils::QosProfile::SensorData);
+            node, imu_topic, 2000, false, ros_utils::QosProfile::Reliable);
 
     ROS_INFO_STREAM("TartanThermal: " << (end_index - static_cast<size_t>(start_index))
                     << " stereo pairs, " << imu_samples.size() << " IMU samples, rate=" << playback_rate);
