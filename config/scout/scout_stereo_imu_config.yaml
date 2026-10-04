@@ -1,0 +1,42 @@
+%YAML:1.0
+
+# Scout stereo + IMU. The node subscribes to live ROS 2 topics directly.
+# Fill all blank values and both camera extrinsic matrices before launching.
+system:
+  imu: 1
+  num_of_cam: 2
+  multiple_thread: ""
+  output_path: ""
+
+topics:
+  image0: ""
+  image1: ""
+  imu: ""
+
+camera:
+  image_width: ""
+  image_height: ""
+  cam0_intrinsics: []  # [fx, fy, cx, cy]
+  cam1_intrinsics: []  # [fx, fy, cx, cy]
+  estimate_extrinsic: ""
+  body_T_cam0: ""  # Replace with a 4x4 !!opencv-matrix.
+  body_T_cam1: ""  # Replace with a 4x4 !!opencv-matrix.
+
+feature_tracker:
+  max_cnt: ""
+  min_dist: ""
+  F_threshold: ""
+  show_track: ""
+  flow_back: ""
+
+estimator:
+  max_solver_time: ""
+  max_num_iterations: ""
+  keyframe_parallax: ""
+  acc_n: ""
+  gyr_n: ""
+  acc_w: ""
+  gyr_w: ""
+  g_norm: ""
+  estimate_td: ""
+  td: ""

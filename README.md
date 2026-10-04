@@ -115,31 +115,7 @@ This project expects rectified, zero-distortion pinhole images. Store each camer
 rectify them before passing them to VINS.
 
 ## 7. Docker Support
-To further facilitate the building process, we add docker in our code. Docker environment is like a sandbox, thus makes our code environment-independent. To run with docker, first make sure [ros](http://wiki.ros.org/ROS/Installation) and [docker](https://docs.docker.com/install/linux/docker-ce/ubuntu/) are installed on your machine. Then add your account to `docker` group by `sudo usermod -aG docker $YOUR_USER_NAME`. **Relaunch the terminal or logout and re-login if you get `Permission denied` error**, type:
-```
-cd ~/catkin_ws/src/VINS-Fusion/docker
-make build
-```
-Note that the docker building process may take a while depends on your network and machine. After VINS-Fusion successfully built, you can run vins estimator with script `run.sh`.
-Script `run.sh` can take several flags and arguments. Flag `-k` means KITTI, `-l` represents loop fusion, and `-g` stands for global fusion. You can get the usage details by `./run.sh -h`. Here are some examples with this script:
-```
-# Euroc Monocualr camera + IMU
-./run.sh ~/catkin_ws/src/VINS-Fusion/config/euroc/euroc_mono_imu_config.yaml
-
-# Euroc Stereo cameras + IMU with loop fusion
-./run.sh -l ~/catkin_ws/src/VINS-Fusion/config/euroc/euroc_mono_imu_config.yaml
-
-# KITTI Odometry (Stereo)
-./run.sh -k ~/catkin_ws/src/VINS-Fusion/config/kitti_odom/kitti_config00-02.yaml YOUR_DATASET_FOLDER/sequences/00/
-
-# KITTI Odometry (Stereo) with loop fusion
-./run.sh -kl ~/catkin_ws/src/VINS-Fusion/config/kitti_odom/kitti_config00-02.yaml YOUR_DATASET_FOLDER/sequences/00/
-
-#  KITTI GPS Fusion (Stereo + GPS)
-./run.sh -kg ~/catkin_ws/src/VINS-Fusion/config/kitti_raw/kitti_10_03_config.yaml YOUR_DATASET_FOLDER/2011_10_03_drive_0027_sync/
-
-```
-In Euroc cases, you need open another terminal and play your bag file. If you need modify the code, simply re-run `./run.sh` with proper auguments after your changes.
+Use `./docker/build.sh x86` on an x86_64 Linux machine or `./docker/build.sh jetson` on an AGX Orin with L4T R36.5. The two Dockerfiles, image tags, Jetson runtime checks, and host/container ROS 2 topic test are documented in [docker/README.md](docker/README.md).
 
 
 ## 8. Acknowledgements

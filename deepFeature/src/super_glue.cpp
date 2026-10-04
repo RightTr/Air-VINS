@@ -148,7 +148,7 @@ bool SuperGlue::infer(const Eigen::Matrix<float, 259, Eigen::Dynamic> &features0
     }
     }
 
-    assert(engine_->getNbBindings() == 7);
+    assert(engine_->getNbIOTensors() == 7);
 
     const char* keypoints_0_name = superglue_config_.input_tensor_names[0].c_str();
     const char* scores_0_name = superglue_config_.input_tensor_names[1].c_str();
@@ -182,7 +182,7 @@ bool SuperGlue::infer(const Eigen::Matrix<float, 259, Eigen::Dynamic> &features0
 
     buffers.copyInputToDevice();
 
-    bool status = context_->executeV2(buffers.getDeviceBindings().data());
+    bool status = buffers.execute(*context_);
     if (!status) {
         return false;
     }

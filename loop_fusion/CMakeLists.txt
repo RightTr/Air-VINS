@@ -43,6 +43,7 @@ find_package(Eigen3 REQUIRED)
 
 find_path(TENSORRT_INCLUDE_DIR NvInfer.h PATHS /usr/include /usr/local/include
   /usr/src/tensorrt/include /usr/include/aarch64-linux-gnu /usr/include/x86_64-linux-gnu)
+include(${PROJECT_SOURCE_DIR}/../cmake/TensorRTApi.cmake)
 find_path(CUDA_INCLUDE_DIR cuda_runtime_api.h PATHS /usr/local/cuda/include /usr/include
   /usr/include/aarch64-linux-gnu /usr/include/x86_64-linux-gnu)
 find_library(NVINFER_LIBRARY nvinfer PATHS /usr/lib /usr/local/lib

@@ -126,7 +126,7 @@ bool SuperPointLightGlue::infer(const Eigen::Matrix<float, 258, Eigen::Dynamic> 
     }
   }
 
-  assert(engine_->getNbBindings() == 5);
+  assert(engine_->getNbIOTensors() == 5);
 
   const char* keypoints_0_name = lightglue_config_.input_tensor_names[0].c_str();
   const char* keypoints_1_name = lightglue_config_.input_tensor_names[1].c_str();
@@ -156,7 +156,7 @@ bool SuperPointLightGlue::infer(const Eigen::Matrix<float, 258, Eigen::Dynamic> 
 
   buffers.copyInputToDevice();
 
-  bool status = context_->executeV2(buffers.getDeviceBindings().data());
+  bool status = buffers.execute(*context_);
   if (!status) {
     return false;
   }
