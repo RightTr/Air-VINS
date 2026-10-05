@@ -9,6 +9,8 @@
 
 #include "parameters.h"
 #include <algorithm>
+#include <cmath>
+#include <stdexcept>
 
 double INIT_DEPTH;
 double MIN_PARALLAX;
@@ -37,6 +39,7 @@ std::string EX_CALIB_RESULT_PATH;
 std::string STIR_SLAM_RESULT_PATH;
 std::string OUTPUT_FOLDER;
 std::string IMU_TOPIC;
+std::string IMU_ACCEL_TOPIC, IMU_GYRO_TOPIC;
 int ROW, COL;
 double TD;
 int NUM_OF_CAM;
@@ -48,6 +51,8 @@ std::string IMAGE0_TOPIC, IMAGE1_TOPIC;
 std::string FISHEYE_MASK;
 std::array<Eigen::Vector4d, 2> CAM_INTRINSICS{
     Eigen::Vector4d::Zero(), Eigen::Vector4d::Zero()};
+std::array<cv::Mat, 2> RECTIFY_MAP_1;
+std::array<cv::Mat, 2> RECTIFY_MAP_2;
 int MAX_CNT;
 int MIN_DIST;
 double F_THRESHOLD;
@@ -97,6 +102,86 @@ bool readCameraIntrinsics(cv::FileStorage &fsSettings, const std::string &name,
         intrinsics(i) = static_cast<double>(node[i]);
 
     return intrinsics.allFinite() && intrinsics.x() > 0.0 && intrinsics.y() > 0.0;
+}
+
+bool readCameraDistortion(cv::FileStorage &fsSettings, const std::string &name,
+                          cv::Mat &distortion)
+{
+    const cv::FileNode node = fsSettings["camera"][name];
+    if (node.empty() || !node.isSeq() || node.size() != 5)
+        return false;
+
+    distortion = cv::Mat(1, 5, CV_64F);
+    for (int i = 0; i < 5; ++i)
+    {
+        const double value = static_cast<double>(node[i]);
+        if (!std::isfinite(value))
+            return false;
+        distortion.at<double>(0, i) = value;
+    }
+    return true;
+}
+
+cv::Mat cameraMatrix(const Eigen::Vector4d &intrinsics)
+{
+    return (cv::Mat_<double>(3, 3) << intrinsics.x(), 0.0, intrinsics.z(),
+                                      0.0, intrinsics.y(), intrinsics.w(),
+                                      0.0, 0.0, 1.0);
+}
+
+void rectifyStereoParameters(cv::FileStorage &fsSettings)
+{
+    int rectify_stereo = 0;
+    readOptionalParam(fsSettings, "camera", "rectify_stereo", rectify_stereo);
+    if (!rectify_stereo)
+        return;
+
+    if (NUM_OF_CAM != 2 || ROW <= 0 || COL <= 0)
+        throw std::runtime_error("rectify_stereo requires two cameras and valid image dimensions");
+
+    cv::Mat D0, D1;
+    if (!readCameraDistortion(fsSettings, "cam0_distortion", D0) ||
+        !readCameraDistortion(fsSettings, "cam1_distortion", D1))
+        throw std::runtime_error("rectify_stereo requires five finite distortion values per camera: [k1,k2,p1,p2,k3]");
+
+    double alpha = 0.0;
+    readOptionalParam(fsSettings, "camera", "rectify_alpha", alpha);
+    if (!std::isfinite(alpha) || alpha < 0.0 || alpha > 1.0)
+        throw std::runtime_error("rectify_alpha must be between 0 and 1");
+
+    // OpenCV stereoRectify takes the transform from raw left to raw right.
+    const Eigen::Matrix3d R_right_left = RIC[1].transpose() * RIC[0];
+    const Eigen::Vector3d t_right_left = RIC[1].transpose() * (TIC[0] - TIC[1]);
+    cv::Mat R, t;
+    cv::eigen2cv(R_right_left, R);
+    cv::eigen2cv(t_right_left, t);
+
+    const cv::Size image_size(COL, ROW);
+    const cv::Mat K0 = cameraMatrix(CAM_INTRINSICS[0]);
+    const cv::Mat K1 = cameraMatrix(CAM_INTRINSICS[1]);
+    cv::Mat R0_rect, R1_rect, P0_rect, P1_rect, Q;
+    cv::stereoRectify(K0, D0, K1, D1, image_size, R, t,
+                      R0_rect, R1_rect, P0_rect, P1_rect, Q,
+                      cv::CALIB_ZERO_DISPARITY, alpha, image_size);
+    cv::initUndistortRectifyMap(K0, D0, R0_rect, P0_rect, image_size, CV_16SC2,
+                                RECTIFY_MAP_1[0], RECTIFY_MAP_2[0]);
+    cv::initUndistortRectifyMap(K1, D1, R1_rect, P1_rect, image_size, CV_16SC2,
+                                RECTIFY_MAP_1[1], RECTIFY_MAP_2[1]);
+
+    for (int i = 0; i < 2; ++i)
+    {
+        const cv::Mat &rect_rotation = i == 0 ? R0_rect : R1_rect;
+        const cv::Mat &projection = i == 0 ? P0_rect : P1_rect;
+        Eigen::Matrix3d R_rect;
+        cv::cv2eigen(rect_rotation, R_rect);
+        // The rectified camera frame is rotated relative to the raw camera frame.
+        RIC[i] = RIC[i] * R_rect.transpose();
+        CAM_INTRINSICS[i] << projection.at<double>(0, 0), projection.at<double>(1, 1),
+                             projection.at<double>(0, 2), projection.at<double>(1, 2);
+    }
+    ROS_INFO_STREAM("Stereo images rectified: " << COL << "x" << ROW
+                    << ", fx=" << CAM_INTRINSICS[0].x()
+                    << ", baseline=" << t_right_left.norm() << " m");
 }
 } // namespace
 
@@ -171,6 +256,8 @@ void readParameters(std::string config_file)
     if(USE_IMU)
     {
         fsSettings["topics"]["imu"] >> IMU_TOPIC;
+        fsSettings["topics"]["imu_accel"] >> IMU_ACCEL_TOPIC;
+        fsSettings["topics"]["imu_gyro"] >> IMU_GYRO_TOPIC;
         printf("IMU_TOPIC: %s\n", IMU_TOPIC.c_str());
         ACC_N = fsSettings["estimator"]["acc_n"];
         ACC_W = fsSettings["estimator"]["acc_w"];
@@ -187,6 +274,8 @@ void readParameters(std::string config_file)
     MIN_PARALLAX = MIN_PARALLAX / FOCAL_LENGTH;
 
     fsSettings["system"]["output_path"] >> OUTPUT_FOLDER;
+    if (OUTPUT_FOLDER.empty())
+        OUTPUT_FOLDER = joinPath(configPath, "../../output");
     STIR_SLAM_RESULT_PATH = OUTPUT_FOLDER + "/vio.csv";
     std::cout << "result path " << STIR_SLAM_RESULT_PATH << std::endl;
     std::ofstream fout(STIR_SLAM_RESULT_PATH, std::ios::out);
@@ -263,6 +352,8 @@ void readParameters(std::string config_file)
     ROW = fsSettings["camera"]["image_height"];
     COL = fsSettings["camera"]["image_width"];
     ROS_INFO("ROW: %d COL: %d ", ROW, COL);
+
+    rectifyStereoParameters(fsSettings);
 
     if(!USE_IMU)
     {

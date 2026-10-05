@@ -1,42 +1,77 @@
 %YAML:1.0
 
-# Scout stereo + IMU. The node subscribes to live ROS 2 topics directly.
-# Fill all blank values and both camera extrinsic matrices before launching.
+# Scout stereo thermal + IMU. The node subscribes to live raw image topics.
+# Calibration source: Calibration parameters.docx (Scout calibration document).
+# Image size is assumed to be 640x512; verify against the published messages.
+# Body uses the RGB camera origin and orientation. The RGB-to-IMU translation is
+# not in the calibration document, so these body_T_cam values assume it is zero.
 system:
   imu: 1
   num_of_cam: 2
-  multiple_thread: ""
-  output_path: ""
+  multiple_thread: 1
+  output_path: ""  # Defaults to the workspace/package output directory.
 
 topics:
-  image0: ""
-  image1: ""
+  image0: "/guide_left/image"
+  image1: "/guide_right/image"
+  # RealSense publishes accel and gyro separately; the node interpolates accel
+  # at each gyro timestamp. Use imu only for a pre-combined sensor_msgs/Imu topic.
   imu: ""
+  imu_accel: "/realsense/imu/accel"
+  imu_gyro: "/realsense/imu/gyro"
 
 camera:
-  image_width: ""
-  image_height: ""
-  cam0_intrinsics: []  # [fx, fy, cx, cy]
-  cam1_intrinsics: []  # [fx, fy, cx, cy]
-  estimate_extrinsic: ""
-  body_T_cam0: ""  # Replace with a 4x4 !!opencv-matrix.
-  body_T_cam1: ""  # Replace with a 4x4 !!opencv-matrix.
+  image_width: 640
+  image_height: 512
+  # Raw camera intrinsics. rectify_stereo replaces these with the rectified
+  # projection intrinsics at startup, before feature tracking begins.
+  cam0_intrinsics: [401.855283, 402.415658, 329.563855, 263.783339]
+  cam1_intrinsics: [401.116455, 401.789989, 311.082463, 251.753843]
+  cam0_distortion: [-0.399347, 0.234754, 0.0, 0.0, -0.078159]  # [k1,k2,p1,p2,k3]
+  cam1_distortion: [-0.376356, 0.177351, 0.0, 0.0, -0.040225]
+  rectify_stereo: 1
+  rectify_alpha: 0.0
+  estimate_extrinsic: 0
+  # Raw RGB/body <- left thermal camera. The document gives this rotation to
+  # four decimal places; it was projected onto SO(3) before writing here.
+  body_T_cam0: !!opencv-matrix
+    rows: 4
+    cols: 4
+    dt: d
+    data: [0.999979419057, -0.006194120760, -0.001671625244, 0.003713250000,
+           0.006205670234, 0.999956280786, 0.006994724637, -0.002168280000,
+           0.001628225993, -0.007004954234, 0.999974139414, -0.000867580000,
+           0.0, 0.0, 0.0, 1.0]
+  # RGB/body <- right thermal camera. Interpret the document's negative-X
+  # calibrated stereo T as left-to-right (consistent with its +X rough baseline),
+  # then invert that transform before composition.
+  body_T_cam1: !!opencv-matrix
+    rows: 4
+    cols: 4
+    dt: d
+    data: [0.999381701766, -0.025490242672, -0.024216957082, 0.127896405041,
+           0.025908188432, 0.999517988924, 0.017104269848, -0.000171273216,
+           0.023769291725, -0.017721111513, 0.999560394883, 0.001940508179,
+           0.0, 0.0, 0.0, 1.0]
 
+# Initial tracking/solver settings, copied from the existing NUS stereo IMU
+# profile. Tune for Scout imagery and frame rate after checking live topics.
 feature_tracker:
-  max_cnt: ""
-  min_dist: ""
-  F_threshold: ""
-  show_track: ""
-  flow_back: ""
+  max_cnt: 400
+  min_dist: 30
+  F_threshold: 1.0
+  show_track: 1
+  flow_back: 1
 
 estimator:
-  max_solver_time: ""
-  max_num_iterations: ""
-  keyframe_parallax: ""
-  acc_n: ""
-  gyr_n: ""
-  acc_w: ""
-  gyr_w: ""
-  g_norm: ""
-  estimate_td: ""
-  td: ""
+  max_solver_time: 0.04
+  max_num_iterations: 8
+  keyframe_parallax: 5.0
+  # Provisional IMU noise values from NUS; replace using Scout IMU calibration.
+  acc_n: 0.1
+  gyr_n: 0.01
+  acc_w: 0.001
+  gyr_w: 0.0001
+  g_norm: 9.81
+  estimate_td: 0
+  td: 0.0

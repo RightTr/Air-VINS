@@ -51,6 +51,7 @@ extern std::string EX_CALIB_RESULT_PATH;
 extern std::string STIR_SLAM_RESULT_PATH;
 extern std::string OUTPUT_FOLDER;
 extern std::string IMU_TOPIC;
+extern std::string IMU_ACCEL_TOPIC, IMU_GYRO_TOPIC;
 extern double TD;
 extern int ESTIMATE_TD;
 extern int ROLLING_SHUTTER;
@@ -65,6 +66,9 @@ extern map<int, Eigen::Vector3d> pts_gt;
 extern std::string IMAGE0_TOPIC, IMAGE1_TOPIC;
 extern std::string FISHEYE_MASK;
 extern std::array<Eigen::Vector4d, 2> CAM_INTRINSICS;
+// Empty unless the input stereo images need in-node undistortion/rectification.
+extern std::array<cv::Mat, 2> RECTIFY_MAP_1;
+extern std::array<cv::Mat, 2> RECTIFY_MAP_2;
 extern int MAX_CNT;
 extern int MIN_DIST;
 extern double F_THRESHOLD;
