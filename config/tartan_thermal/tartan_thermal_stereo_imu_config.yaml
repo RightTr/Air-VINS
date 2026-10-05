@@ -1,6 +1,5 @@
 %YAML:1.0
 
-# TartanRGBT thermal stereo + ZED IMU. See README.md for calibration provenance.
 system:
   imu: 1
   num_of_cam: 2
