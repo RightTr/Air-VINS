@@ -188,8 +188,9 @@ void waitForSubscribers(const ImagePublisher &left, const ImagePublisher &right,
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_seconds);
     while (ros_utils::ok() && std::chrono::steady_clock::now() < deadline)
     {
-        if (ros_utils::subscription_count(left) > 0 && ros_utils::subscription_count(right) > 0 &&
-            (!publish_imu || ros_utils::subscription_count(imu) > 0))
+        if (ros_utils::subscription_count<sensor_msgs::Image>(left) > 0 &&
+            ros_utils::subscription_count<sensor_msgs::Image>(right) > 0 &&
+            (!publish_imu || ros_utils::subscription_count<sensor_msgs::Imu>(imu) > 0))
             return;
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
