@@ -1,0 +1,66 @@
+%YAML:1.0
+
+# Scout stereo only; no IMU subscription or inertial fusion.
+# Calibration source: Calibration parameters.docx (Scout calibration document).
+# Image size is assumed to be 640x512; verify against the published messages.
+# body_T_cam0/body_T_cam1 retain the calibrated RGB/body-to-camera transforms.
+system:
+  imu: 0
+  num_of_cam: 2
+  multiple_thread: 1
+  output_path: ""
+
+topics:
+  image0: "/guide_left/image"
+  image1: "/guide_right/image"
+
+camera:
+  image_width: 640
+  image_height: 512
+  cam0_intrinsics: [401.855283, 402.415658, 329.563855, 263.783339]
+  cam1_intrinsics: [401.116455, 401.789989, 311.082463, 251.753843]
+  cam0_distortion: [-0.399347, 0.234754, 0.0, 0.0, -0.078159]
+  cam1_distortion: [-0.376356, 0.177351, 0.0, 0.0, -0.040225]
+  rectify_stereo: 1
+  rectify_alpha: 0.0
+  estimate_extrinsic: 0
+  body_T_cam0: !!opencv-matrix
+    rows: 4
+    cols: 4
+    dt: d
+    data: [0.999979419057, -0.006194120760, -0.001671625244, 0.003713250000,
+           0.006205670234, 0.999956280786, 0.006994724637, -0.002168280000,
+           0.001628225993, -0.007004954234, 0.999974139414, -0.000867580000,
+           0.0, 0.0, 0.0, 1.0]
+  body_T_cam1: !!opencv-matrix
+    rows: 4
+    cols: 4
+    dt: d
+    data: [0.999381701766, -0.025490242672, -0.024216957082, 0.127896405041,
+           0.025908188432, 0.999517988924, 0.017104269848, -0.000171273216,
+           0.023769291725, -0.017721111513, 0.999560394883, 0.001940508179,
+           0.0, 0.0, 0.0, 1.0]
+
+feature_tracker:
+  max_cnt: 400
+  min_dist: 30
+  F_threshold: 1.0
+  show_track: 1
+  flow_back: 1
+  min_depth: 0.3
+  max_depth: 40.0
+
+deep_feature:
+  enabled: 1
+  matcher: 0
+  max_keypoints: 400
+  keypoint_threshold: 0.004
+  remove_borders: 4
+  stereo_y_threshold: 3.0
+  min_stereo_disparity: 1.3
+  max_stereo_disparity: 175.0
+
+estimator:
+  max_solver_time: 0.04
+  max_num_iterations: 8
+  keyframe_parallax: 5.0

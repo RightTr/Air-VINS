@@ -97,13 +97,14 @@ void sync_process()
             {
                 double time0 = ros_utils::time_to_sec(img0_buf.front()->header.stamp);
                 double time1 = ros_utils::time_to_sec(img1_buf.front()->header.stamp);
-                // 0.003s sync tolerance
-                if(time0 < time1 - 0.003)
+                // Allow up to 10 ms timestamp skew between stereo images.
+                constexpr double stereo_sync_tolerance = 0.010;
+                if(time0 < time1 - stereo_sync_tolerance)
                 {
                     img0_buf.pop();
                     printf("throw img0\n");
                 }
-                else if(time0 > time1 + 0.003)
+                else if(time0 > time1 + stereo_sync_tolerance)
                 {
                     img1_buf.pop();
                     printf("throw img1\n");
