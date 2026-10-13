@@ -82,148 +82,127 @@ bool sameImageExact(const cv::Mat &a, const cv::Mat &b)
 void sync_process()
 {
     static cv::Mat prev_image0, prev_image1;
-    static bool skipped_visual_update = false;
-    static bool nuc_mono_fallback = false;
-    static int nuc_recovery_streak = 0;
-    static int nuc_active_camera_id = 0;
-    const int nuc_recovery_required = 3;
-    if(STEREO)
+    static int nuc_camera = -1;  // -1: stereo, 0: left mono, 1: right mono
+    static int recovery_count = 0;
+    constexpr int recovery_required = 3;
+
+    if (STEREO)
+    {
+        cv::Mat image0, image1;
+        sensor_msgs::ImageConstPtr image0_msg, image1_msg;
+        double time = 0.0;
         {
-            cv::Mat image0, image1;
-            std_msgs::Header header;
-            double time = 0;
-            m_buf.lock();
+            std::lock_guard<std::mutex> lock(m_buf);
             if (!img0_buf.empty() && !img1_buf.empty())
             {
-                double time0 = ros_utils::time_to_sec(img0_buf.front()->header.stamp);
-                double time1 = ros_utils::time_to_sec(img1_buf.front()->header.stamp);
+                const double time0 = ros_utils::time_to_sec(img0_buf.front()->header.stamp);
+                const double time1 = ros_utils::time_to_sec(img1_buf.front()->header.stamp);
                 // Allow up to 10 ms timestamp skew between stereo images.
                 constexpr double stereo_sync_tolerance = 0.010;
-                if(time0 < time1 - stereo_sync_tolerance)
+                if (time0 < time1 - stereo_sync_tolerance)
                 {
                     img0_buf.pop();
                     printf("throw img0\n");
                 }
-                else if(time0 > time1 + stereo_sync_tolerance)
+                else if (time0 > time1 + stereo_sync_tolerance)
                 {
                     img1_buf.pop();
                     printf("throw img1\n");
                 }
                 else
                 {
-                    time = ros_utils::time_to_sec(img0_buf.front()->header.stamp);
-                    header = img0_buf.front()->header;
-                    image0 = getImageFromMsg(img0_buf.front());
+                    time = time0;
+                    image0_msg = img0_buf.front();
+                    image1_msg = img1_buf.front();
                     img0_buf.pop();
-                    image1 = getImageFromMsg(img1_buf.front());
                     img1_buf.pop();
-                    //printf("find img0 and img1\n");
                 }
             }
-            m_buf.unlock();
-            if(!image0.empty())
+        }
+
+        if (!image0_msg || !image1_msg)
+            return;
+
+        image0 = getImageFromMsg(image0_msg);
+        image1 = getImageFromMsg(image1_msg);
+        if (!RECTIFY_MAP_1[0].empty())
+        {
+            const cv::Size expected_size(COL, ROW);
+            if (image0.size() != expected_size || image1.size() != expected_size)
             {
-                if (!RECTIFY_MAP_1[0].empty())
-                {
-                    const cv::Size expected_size(COL, ROW);
-                    if (image0.size() != expected_size || image1.size() != expected_size)
-                    {
-                        ROS_ERROR_THROTTLE(1.0, "Stereo image size does not match calibration %dx%d", COL, ROW);
-                        return;
-                    }
-                    cv::Mat rectified0, rectified1;
-                    cv::remap(image0, rectified0, RECTIFY_MAP_1[0], RECTIFY_MAP_2[0], cv::INTER_LINEAR);
-                    cv::remap(image1, rectified1, RECTIFY_MAP_1[1], RECTIFY_MAP_2[1], cv::INTER_LINEAR);
-                    image0 = rectified0;
-                    image1 = rectified1;
-                }
-                bool left_frozen = false;
-                bool right_frozen = false;
-                if (ENABLE_NUC_HANDLE)
-                {
-                    left_frozen = sameImageExact(image0, prev_image0);
-                    right_frozen = sameImageExact(image1, prev_image1);
-                }
-
-                if (ENABLE_NUC_HANDLE && left_frozen && right_frozen)
-                {
-                    if (!skipped_visual_update)
-                    {
-                        ROS_WARN("NUC: both thermal cameras frozen, skip visual update");
-                        skipped_visual_update = true;
-                    }
-                    nuc_recovery_streak = 0;
-                }
-                else if (ENABLE_NUC_HANDLE && left_frozen)
-                {
-                    ROS_WARN_THROTTLE(1.0, "NUC: left thermal camera frozen, use right camera as monocular input");
-                    nuc_active_camera_id = 1;
-                    estimator.inputImage(time, image1, cv::Mat(), 1, false, TRACKING_MODE_NUC_LEFT_ONLY);
-                    nuc_mono_fallback = true;
-                    nuc_recovery_streak = 0;
-                    skipped_visual_update = false;
-                }
-                else if (ENABLE_NUC_HANDLE && right_frozen)
-                {
-                    ROS_WARN_THROTTLE(1.0, "NUC: right thermal camera frozen, use left camera as monocular input");
-                    nuc_active_camera_id = 0;
-                    estimator.inputImage(time, image0, cv::Mat(), 0, false, TRACKING_MODE_NUC_RIGHT_ONLY);
-                    nuc_mono_fallback = true;
-                    nuc_recovery_streak = 0;
-                    skipped_visual_update = false;
-                }
-                else
-                {
-                    if (nuc_mono_fallback)
-                    {
-                        nuc_recovery_streak++;
-                        if (nuc_recovery_streak < nuc_recovery_required)
-                        {
-                            ROS_WARN_THROTTLE(1.0, "NUC: waiting for stable stereo recovery (%d/%d)", nuc_recovery_streak, nuc_recovery_required);
-                            if (nuc_active_camera_id == 1)
-                                estimator.inputImage(time, image1, cv::Mat(), 1, false, TRACKING_MODE_NUC_LEFT_ONLY);
-                            else
-                                estimator.inputImage(time, image0, cv::Mat(), 0, false, TRACKING_MODE_NUC_RIGHT_ONLY);
-                        }
-                        else
-                        {
-                            ROS_WARN("NUC: stereo recovered, keep tracked landmarks and resume stereo updates");
-                            estimator.inputImage(time, image0, image1, 0, true, TRACKING_MODE_STEREO);
-                            nuc_mono_fallback = false;
-                            nuc_recovery_streak = 0;
-                        }
-                    }
-                    else
-                    {
-                        estimator.inputImage(time, image0, image1, 0, true, TRACKING_MODE_STEREO);
-                    }
-                    if (!nuc_mono_fallback)
-                        nuc_recovery_streak = 0;
-                    skipped_visual_update = false;
-                }
-
-                prev_image0 = image0.clone();
-                prev_image1 = image1.clone();
+                ROS_ERROR_THROTTLE(1.0, "Stereo image size does not match calibration %dx%d", COL, ROW);
+                return;
             }
+            cv::Mat rectified0, rectified1;
+            cv::remap(image0, rectified0, RECTIFY_MAP_1[0], RECTIFY_MAP_2[0], cv::INTER_LINEAR);
+            cv::remap(image1, rectified1, RECTIFY_MAP_1[1], RECTIFY_MAP_2[1], cv::INTER_LINEAR);
+            image0 = rectified0;
+            image1 = rectified1;
+        }
+
+        const bool left_frozen = ENABLE_NUC_HANDLE && sameImageExact(image0, prev_image0);
+        const bool right_frozen = ENABLE_NUC_HANDLE && sameImageExact(image1, prev_image1);
+        const auto input_mono = [&](int camera_id)
+        {
+            if (camera_id == 0)
+                estimator.inputImage(time, image0, cv::Mat(), 0, false, TRACKING_MODE_NUC_RIGHT_ONLY);
+            else
+                estimator.inputImage(time, image1, cv::Mat(), 1, false, TRACKING_MODE_NUC_LEFT_ONLY);
+        };
+
+        if (ENABLE_NUC_HANDLE && left_frozen && right_frozen)
+        {
+            ROS_WARN_THROTTLE(1.0, "NUC: both thermal cameras frozen, skip visual update");
+            recovery_count = 0;
+        }
+        else if (ENABLE_NUC_HANDLE && (left_frozen || right_frozen))
+        {
+            nuc_camera = left_frozen ? 1 : 0;
+            recovery_count = 0;
+            if (left_frozen)
+                ROS_WARN_THROTTLE(1.0, "NUC: left thermal camera frozen, use right camera as monocular input");
+            else
+                ROS_WARN_THROTTLE(1.0, "NUC: right thermal camera frozen, use left camera as monocular input");
+            input_mono(nuc_camera);
+        }
+        else if (nuc_camera >= 0 && ++recovery_count < recovery_required)
+        {
+            ROS_WARN_THROTTLE(1.0, "NUC: waiting for stable stereo recovery (%d/%d)", recovery_count, recovery_required);
+            input_mono(nuc_camera);
         }
         else
         {
-            cv::Mat image;
-            std_msgs::Header header;
-            double time = 0;
-            m_buf.lock();
-            if(!img0_buf.empty())
-            {
-                time = ros_utils::time_to_sec(img0_buf.front()->header.stamp);
-                header = img0_buf.front()->header;
-                image = getImageFromMsg(img0_buf.front());
-                img0_buf.pop();
-            }
-            m_buf.unlock();
-            if(!image.empty())
-                estimator.inputImage(time, image);
+            if (nuc_camera >= 0)
+                ROS_WARN("NUC: stereo recovered, keep tracked landmarks and resume stereo updates");
+            estimator.inputImage(time, image0, image1, 0, true, TRACKING_MODE_STEREO);
+            nuc_camera = -1;
+            recovery_count = 0;
         }
 
+        prev_image0 = image0.clone();
+        prev_image1 = image1.clone();
+    }
+    else
+    {
+        cv::Mat image;
+        sensor_msgs::ImageConstPtr image_msg;
+        double time = 0.0;
+        {
+            std::lock_guard<std::mutex> lock(m_buf);
+            if (!img0_buf.empty())
+            {
+                image_msg = img0_buf.front();
+                time = ros_utils::time_to_sec(image_msg->header.stamp);
+                img0_buf.pop();
+            }
+        }
+        if (image_msg)
+        {
+            image = getImageFromMsg(image_msg);
+            if (!image.empty())
+                estimator.inputImage(time, image);
+        }
+    }
 }
 
 
