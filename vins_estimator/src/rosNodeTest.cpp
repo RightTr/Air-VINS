@@ -10,11 +10,13 @@
  *******************************************************/
 
 #include <stdio.h>
-#include <deque>
 #include <queue>
 #include <map>
 #include <mutex>
 #include <opencv2/opencv.hpp>
+#ifdef USE_ROS2
+#include <rclcpp/executors/multi_threaded_executor.hpp>
+#endif
 #include "estimator/estimator.h"
 #include "estimator/parameters.h"
 #include "utility/visualization.h"
@@ -22,7 +24,6 @@
 
 Estimator estimator;
 
-queue<sensor_msgs::ImuConstPtr> imu_buf;
 queue<sensor_msgs::PointCloudConstPtr> feature_buf;
 queue<sensor_msgs::ImageConstPtr> img0_buf;
 queue<sensor_msgs::ImageConstPtr> img1_buf;
@@ -240,93 +241,6 @@ void imu_callback(const sensor_msgs::ImuConstPtr &imu_msg)
     return;
 }
 
-// RealSense publishes acceleration and angular velocity in separate Imu
-// messages. Pair them by sensor timestamps; never use the zero-filled fields
-// from the other stream as measurements.
-class SplitImuSynchronizer
-{
-public:
-    void addAccel(const sensor_msgs::ImuConstPtr &msg)
-    {
-        if (!accels_.empty() && stamp(msg) <= stamp(accels_.back()))
-            return;
-        accels_.push_back(msg);
-        if (accels_.size() > max_queue_size_)
-            accels_.pop_front();
-        process();
-    }
-
-    void addGyro(const sensor_msgs::ImuConstPtr &msg)
-    {
-        if (!gyros_.empty() && stamp(msg) <= stamp(gyros_.back()))
-            return;
-        gyros_.push_back(msg);
-        if (gyros_.size() > max_queue_size_)
-        {
-            gyros_.pop_front();
-            ROS_WARN_THROTTLE(5.0, "Dropping gyro samples while waiting for acceleration");
-        }
-        process();
-    }
-
-private:
-    static double stamp(const sensor_msgs::ImuConstPtr &msg)
-    {
-        return ros_utils::time_to_sec(msg->header.stamp);
-    }
-
-    static Eigen::Vector3d acceleration(const sensor_msgs::ImuConstPtr &msg)
-    {
-        return Eigen::Vector3d(msg->linear_acceleration.x,
-                               msg->linear_acceleration.y,
-                               msg->linear_acceleration.z);
-    }
-
-    void process()
-    {
-        while (!gyros_.empty() && !accels_.empty())
-        {
-            const double t = stamp(gyros_.front());
-            while (accels_.size() > 1 && stamp(accels_[1]) < t)
-                accels_.pop_front();
-            const double t0 = stamp(accels_.front());
-            if (t < t0 || t <= last_output_time_)
-            {
-                gyros_.pop_front();
-                continue;
-            }
-            if (t > stamp(accels_.back()))
-                return;  // Wait for the next acceleration sample.
-
-            Eigen::Vector3d acc = acceleration(accels_.front());
-            if (t > t0)
-            {
-                if (accels_.size() < 2)
-                    return;
-                const double t1 = stamp(accels_[1]);
-                if (t1 - t0 > 0.05)
-                {
-                    ROS_WARN_THROTTLE(5.0, "IMU acceleration gap exceeds 50 ms; skipping gyro sample");
-                    gyros_.pop_front();
-                    continue;
-                }
-                const double ratio = (t - t0) / (t1 - t0);
-                acc += ratio * (acceleration(accels_[1]) - acc);
-            }
-
-            const auto &angular = gyros_.front()->angular_velocity;
-            estimator.inputIMU(t, acc, Eigen::Vector3d(angular.x, angular.y, angular.z));
-            last_output_time_ = t;
-            gyros_.pop_front();
-        }
-    }
-
-    static constexpr size_t max_queue_size_ = 1000;
-    std::deque<sensor_msgs::ImuConstPtr> accels_, gyros_;
-    double last_output_time_ = 0.0;
-};
-
-
 void feature_callback(const sensor_msgs::PointCloudConstPtr &feature_msg)
 {
     map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> featureFrame;
@@ -418,10 +332,9 @@ int main(int argc, char **argv)
 
     readParameters(config_file);
     if (IMAGE0_TOPIC.empty() || (STEREO && IMAGE1_TOPIC.empty()) ||
-        (USE_IMU && IMU_TOPIC.empty() &&
-         (IMU_ACCEL_TOPIC.empty() || IMU_GYRO_TOPIC.empty())))
+        (USE_IMU && IMU_TOPIC.empty()))
     {
-        ROS_ERROR("Configure image topics and either topics.imu or both topics.imu_accel/topics.imu_gyro");
+        ROS_ERROR("Configure image topics and topics.imu");
         return 1;
     }
     estimator.setParameter();
@@ -438,12 +351,25 @@ int main(int argc, char **argv)
     registerPub(node);
 
     ros_utils::Subscription<sensor_msgs::Imu> sub_imu;
-    ros_utils::Subscription<sensor_msgs::Imu> sub_imu_accel, sub_imu_gyro;
-    std::shared_ptr<SplitImuSynchronizer> split_imu;
+#ifdef USE_ROS2
+    rclcpp::CallbackGroup::SharedPtr imu_callback_group;
+#endif
     if(USE_IMU)
     {
+#ifdef USE_ROS2
+        // Image processing can block the default callback group for longer
+        // than one IMU period. Receive IMU on its own executor thread.
+        imu_callback_group = node->create_callback_group(
+            rclcpp::CallbackGroupType::MutuallyExclusive);
+        rclcpp::SubscriptionOptions imu_options;
+        imu_options.callback_group = imu_callback_group;
+        sub_imu = node->create_subscription<sensor_msgs::Imu>(
+            IMU_TOPIC, ros_utils::qos(2000, ros_utils::QosProfile::SensorData),
+            imu_callback, imu_options);
+#else
         sub_imu = ros_utils::create_subscription<sensor_msgs::Imu>(
             node, IMU_TOPIC, 2000, imu_callback, ros_utils::QosProfile::SensorData, true);
+#endif
     }
     auto sub_feature = ros_utils::create_subscription<sensor_msgs::PointCloud>(
         node, "/feature_tracker/feature", 2000, feature_callback);
@@ -463,7 +389,14 @@ int main(int argc, char **argv)
         node, "/stir_slam/cam_switch", 100, cam_switch_callback);
 
     auto sync_timer = ros_utils::create_timer(node, 0.002, sync_process);
+#ifdef USE_ROS2
+    rclcpp::executors::MultiThreadedExecutor executor(rclcpp::ExecutorOptions(), 2);
+    executor.add_node(node);
+    executor.spin();
+    executor.remove_node(node);
+#else
     ros_utils::spin(node);
+#endif
     ros_utils::stop_timer(sync_timer);
 
     estimator.shutdown();
@@ -478,8 +411,6 @@ int main(int argc, char **argv)
     sub_img1.reset();
     sub_img0.reset();
     sub_feature.reset();
-    sub_imu_accel.reset();
-    sub_imu_gyro.reset();
     sub_imu.reset();
     ros_utils::global_node().reset();
     node.reset();

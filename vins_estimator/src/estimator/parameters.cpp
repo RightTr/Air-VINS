@@ -39,7 +39,6 @@ std::string EX_CALIB_RESULT_PATH;
 std::string STIR_SLAM_RESULT_PATH;
 std::string OUTPUT_FOLDER;
 std::string IMU_TOPIC;
-std::string IMU_ACCEL_TOPIC, IMU_GYRO_TOPIC;
 int ROW, COL;
 double TD;
 int NUM_OF_CAM;
@@ -256,8 +255,6 @@ void readParameters(std::string config_file)
     if(USE_IMU)
     {
         fsSettings["topics"]["imu"] >> IMU_TOPIC;
-        fsSettings["topics"]["imu_accel"] >> IMU_ACCEL_TOPIC;
-        fsSettings["topics"]["imu_gyro"] >> IMU_GYRO_TOPIC;
         printf("IMU_TOPIC: %s\n", IMU_TOPIC.c_str());
         ACC_N = fsSettings["estimator"]["acc_n"];
         ACC_W = fsSettings["estimator"]["acc_w"];

@@ -51,7 +51,6 @@ extern std::string EX_CALIB_RESULT_PATH;
 extern std::string STIR_SLAM_RESULT_PATH;
 extern std::string OUTPUT_FOLDER;
 extern std::string IMU_TOPIC;
-extern std::string IMU_ACCEL_TOPIC, IMU_GYRO_TOPIC;
 extern double TD;
 extern int ESTIMATE_TD;
 extern int ROLLING_SHUTTER;
