@@ -77,7 +77,7 @@ class Estimator
                       const double header,
                       VisualTrackingMode tracking_mode, int active_camera_id);
     void processMeasurements();
-    void changeSensorType(int use_imu, int use_stereo);
+    void changeCameraType(int use_stereo);
 
     // internal
     void clearState();

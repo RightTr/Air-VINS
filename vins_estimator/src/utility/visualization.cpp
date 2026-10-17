@@ -157,8 +157,6 @@ void printStatistics(const Estimator &estimator, double t)
     sum_of_path += (estimator.Ps[WINDOW_SIZE] - last_path).norm();
     last_path = estimator.Ps[WINDOW_SIZE];
     ROS_DEBUG("sum of path %f", sum_of_path);
-    if (ESTIMATE_TD)
-        ROS_INFO("td %f", estimator.td);
 }
 
 void pubOdometry(const Estimator &estimator, const std_msgs::Header &header)
@@ -341,108 +339,6 @@ void pubPointCloud(const Estimator &estimator, const std_msgs::Header &header)
     }
     ros_utils::ros_publish(pub_margin_cloud, margin_cloud);
 }
-
-#if 0 // line feature map visualization removed for point-only tracking
-std_msgs::ColorRGBA markerColorById(int id)
-{
-    uint32_t x = static_cast<uint32_t>(id * 2654435761u);
-    std_msgs::ColorRGBA color;
-    color.r = 0.25 + static_cast<double>(x & 0xFF) / 512.0;
-    color.g = 0.25 + static_cast<double>((x >> 8) & 0xFF) / 512.0;
-    color.b = 0.35 + static_cast<double>((x >> 16) & 0xFF) / 512.0;
-    color.a = 1.0;
-    return color;
-}
-
-void pubGolbalMapLine(const Estimator &estimator, const std_msgs::Header &header)
-{
-    visualization_msgs::Marker map_lines;
-    map_lines.header = header;
-    map_lines.header.frame_id = "world";
-    map_lines.ns = "map_lines";
-    map_lines.id = 0;
-    map_lines.type = visualization_msgs::Marker::LINE_LIST;
-    map_lines.action = visualization_msgs::Marker::ADD;
-    map_lines.pose.orientation.w = 1.0;
-    map_lines.scale.x = 0.03;
-    map_lines.color.b = 1.0;
-    map_lines.color.a = 1.0;
-    map_lines.lifetime = ros_utils::zero_duration();
-
-    // Only promote lines that have already stabilized inside the current window.
-    auto isStableForGlobal = [&](const auto &line_it)
-    {
-        return estimator.line_manager.useFeatureForOptimization(line_it) &&
-               line_it.endFrame() <= WINDOW_SIZE - 3;
-    };
-
-    {
-        const auto &line_features = estimator.line_manager.line_feature;
-        for (const auto &line_it : line_features)
-        {
-            if (!isStableForGlobal(line_it))
-                continue;
-            Eigen::Vector3d seg_start;
-            Eigen::Vector3d seg_end;
-            if (!::lineToSegment(line_it.line_3d_world, seg_start, seg_end))
-                continue;
-            persistent_map_lines[line_it.line_id] = std::make_pair(seg_start, seg_end);
-        }
-    }
-
-    for (const auto &line_it : persistent_map_lines)
-    {
-        appendLineSegmentColored(map_lines, line_it.second.first, line_it.second.second, markerColorById(line_it.first));
-    }
-
-    if (map_lines.points.empty())
-        map_lines.action = visualization_msgs::Marker::DELETE;
-
-    ros_utils::ros_publish(pub_map_line, map_lines);
-}
-
-void pubWindowMapLine(const Estimator &estimator, const std_msgs::Header &header)
-{
-    visualization_msgs::Marker window_lines;
-    window_lines.header = header;
-    window_lines.header.frame_id = "world";
-    window_lines.ns = "window_map_lines";
-    window_lines.id = 0;
-    window_lines.type = visualization_msgs::Marker::LINE_LIST;
-    window_lines.action = visualization_msgs::Marker::ADD;
-    window_lines.pose.orientation.w = 1.0;
-    window_lines.scale.x = 0.03;
-    window_lines.color.r = 1.0;
-    window_lines.color.g = 0.0;
-    window_lines.color.b = 0.0;
-    window_lines.color.a = 1.0;
-    window_lines.lifetime = ros_utils::zero_duration();
-
-    {
-        const auto &line_features = estimator.line_manager.line_feature;
-        for (const auto &line_it : line_features)
-        {
-            if (!estimator.line_manager.useFeatureForOptimization(line_it))
-                continue;
-            const Eigen::Vector3d moment = line_it.line_3d_world.head<3>();
-            const Eigen::Vector3d direction = line_it.line_3d_world.tail<3>();
-            const double dir_norm = direction.norm();
-            if (!moment.allFinite() || !direction.allFinite() || dir_norm < 1e-9)
-                continue;
-            const Eigen::Vector3d anchor = direction.cross(moment) / (dir_norm * dir_norm);
-            const Eigen::Vector3d offset = direction.normalized() * 0.5;
-            appendLineSegment(window_lines, anchor - offset, anchor + offset);
-        }
-    }
-
-    if (window_lines.points.empty())
-        window_lines.action = visualization_msgs::Marker::DELETE;
-
-    ros_utils::ros_publish(pub_window_map_line, window_lines);
-}
-
-
-#endif
 
 void pubTF(const Estimator &estimator, const std_msgs::Header &header)
 {

@@ -29,20 +29,31 @@ queue<sensor_msgs::ImageConstPtr> img0_buf;
 queue<sensor_msgs::ImageConstPtr> img1_buf;
 std::mutex m_buf;
 
-
+namespace
+{
+void enqueue_image(queue<sensor_msgs::ImageConstPtr> &image_queue,
+                   const sensor_msgs::ImageConstPtr &image)
+{
+    if (MODE == 0 && image_queue.size() >= 2)
+    {
+        image_queue.pop();
+    }
+    image_queue.push(image);
+}
+} // namespace
 
 
 void img0_callback(const sensor_msgs::ImageConstPtr &img_msg)
 {
     m_buf.lock();
-    img0_buf.push(img_msg);
+    enqueue_image(img0_buf, img_msg);
     m_buf.unlock();
 }
 
 void img1_callback(const sensor_msgs::ImageConstPtr &img_msg)
 {
     m_buf.lock();
-    img1_buf.push(img_msg);
+    enqueue_image(img1_buf, img_msg);
     m_buf.unlock();
 }
 
@@ -125,20 +136,11 @@ void sync_process()
 
         image0 = getImageFromMsg(image0_msg);
         image1 = getImageFromMsg(image1_msg);
-        if (!RECTIFY_MAP_1[0].empty())
-        {
-            const cv::Size expected_size(COL, ROW);
-            if (image0.size() != expected_size || image1.size() != expected_size)
-            {
-                ROS_ERROR_THROTTLE(1.0, "Stereo image size does not match calibration %dx%d", COL, ROW);
-                return;
-            }
-            cv::Mat rectified0, rectified1;
-            cv::remap(image0, rectified0, RECTIFY_MAP_1[0], RECTIFY_MAP_2[0], cv::INTER_LINEAR);
-            cv::remap(image1, rectified1, RECTIFY_MAP_1[1], RECTIFY_MAP_2[1], cv::INTER_LINEAR);
-            image0 = rectified0;
-            image1 = rectified1;
-        }
+        cv::Mat rectified0, rectified1;
+        cv::remap(image0, rectified0, RECTIFY_MAP_1[0], RECTIFY_MAP_2[0], cv::INTER_LINEAR);
+        cv::remap(image1, rectified1, RECTIFY_MAP_1[1], RECTIFY_MAP_2[1], cv::INTER_LINEAR);
+        image0 = rectified0;
+        image1 = rectified1;
 
         const bool left_frozen = ENABLE_NUC_HANDLE && sameImageExact(image0, prev_image0);
         const bool right_frozen = ENABLE_NUC_HANDLE && sameImageExact(image1, prev_image1);
@@ -200,7 +202,11 @@ void sync_process()
         {
             image = getImageFromMsg(image_msg);
             if (!image.empty())
-                estimator.inputImage(time, image);
+            {
+                cv::Mat rectified;
+                cv::remap(image, rectified, RECTIFY_MAP_1[0], RECTIFY_MAP_2[0], cv::INTER_LINEAR);
+                estimator.inputImage(time, rectified);
+            }
         }
     }
 }
@@ -264,32 +270,17 @@ void restart_callback(const std_msgs::BoolConstPtr &restart_msg)
     return;
 }
 
-void imu_switch_callback(const std_msgs::BoolConstPtr &switch_msg)
-{
-    if (switch_msg->data == true)
-    {
-        //ROS_WARN("use IMU!");
-        estimator.changeSensorType(1, STEREO);
-    }
-    else
-    {
-        //ROS_WARN("disable IMU!");
-        estimator.changeSensorType(0, STEREO);
-    }
-    return;
-}
-
 void cam_switch_callback(const std_msgs::BoolConstPtr &switch_msg)
 {
     if (switch_msg->data == true)
     {
         //ROS_WARN("use stereo!");
-        estimator.changeSensorType(USE_IMU, 1);
+        estimator.changeCameraType(1);
     }
     else
     {
         //ROS_WARN("use mono camera (left)!");
-        estimator.changeSensorType(USE_IMU, 0);
+        estimator.changeCameraType(0);
     }
     return;
 }
@@ -312,7 +303,7 @@ int main(int argc, char **argv)
 
     readParameters(config_file);
     if (IMAGE0_TOPIC.empty() || (STEREO && IMAGE1_TOPIC.empty()) ||
-        (USE_IMU && IMU_TOPIC.empty()))
+        IMU_TOPIC.empty())
     {
         ROS_ERROR("Configure image topics and topics.imu");
         return 1;
@@ -334,8 +325,6 @@ int main(int argc, char **argv)
 #ifdef USE_ROS2
     rclcpp::CallbackGroup::SharedPtr imu_callback_group;
 #endif
-    if(USE_IMU)
-    {
 #ifdef USE_ROS2
         // Image processing can block the default callback group for longer
         // than one IMU period. Receive IMU on its own executor thread.
@@ -350,21 +339,19 @@ int main(int argc, char **argv)
         sub_imu = ros_utils::create_subscription<sensor_msgs::Imu>(
             node, IMU_TOPIC, 2000, imu_callback, ros_utils::QosProfile::SensorData, true);
 #endif
-    }
     auto sub_feature = ros_utils::create_subscription<sensor_msgs::PointCloud>(
         node, "/feature_tracker/feature", 2000, feature_callback);
+    const int image_subscription_depth = MODE == 0 ? 2 : 2000;
     auto sub_img0 = ros_utils::create_subscription<sensor_msgs::Image>(
-        node, IMAGE0_TOPIC, 100, img0_callback, sensor_qos);
+        node, IMAGE0_TOPIC, image_subscription_depth, img0_callback, sensor_qos);
     ros_utils::Subscription<sensor_msgs::Image> sub_img1;
     if(STEREO)
     {
         sub_img1 = ros_utils::create_subscription<sensor_msgs::Image>(
-            node, IMAGE1_TOPIC, 100, img1_callback, sensor_qos);
+            node, IMAGE1_TOPIC, image_subscription_depth, img1_callback, sensor_qos);
     }
     auto sub_restart = ros_utils::create_subscription<std_msgs::Bool>(
         node, "/stir_slam/restart", 100, restart_callback);
-    auto sub_imu_switch = ros_utils::create_subscription<std_msgs::Bool>(
-        node, "/stir_slam/imu_switch", 100, imu_switch_callback);
     auto sub_cam_switch = ros_utils::create_subscription<std_msgs::Bool>(
         node, "/stir_slam/cam_switch", 100, cam_switch_callback);
 
@@ -386,7 +373,6 @@ int main(int argc, char **argv)
 #ifdef USE_ROS2
     sync_timer.reset();
     sub_cam_switch.reset();
-    sub_imu_switch.reset();
     sub_restart.reset();
     sub_img1.reset();
     sub_img0.reset();

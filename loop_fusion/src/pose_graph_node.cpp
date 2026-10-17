@@ -571,8 +571,13 @@ int main(int argc, char **argv)
         }
     }
 
-    int USE_IMU = fsSettings["system"]["imu"];
-    posegraph.setIMUFlag(USE_IMU);
+    const int use_imu = fsSettings["system"]["imu"];
+    if (use_imu != 1)
+    {
+        ROS_ERROR("IMU is required: set system.imu to 1");
+        return 1;
+    }
+    posegraph.startOptimization();
     fsSettings.release();
 
     if (LOAD_PREVIOUS_POSE_GRAPH)

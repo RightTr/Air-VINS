@@ -43,8 +43,8 @@ int ROW, COL;
 double TD;
 int NUM_OF_CAM;
 int STEREO;
-int USE_IMU;
 int MULTIPLE_THREAD;
+int MODE = 0;
 map<int, Eigen::Vector3d> pts_gt;
 std::string IMAGE0_TOPIC, IMAGE1_TOPIC;
 std::string FISHEYE_MASK;
@@ -103,22 +103,26 @@ bool readCameraIntrinsics(cv::FileStorage &fsSettings, const std::string &name,
     return intrinsics.allFinite() && intrinsics.x() > 0.0 && intrinsics.y() > 0.0;
 }
 
-bool readCameraDistortion(cv::FileStorage &fsSettings, const std::string &name,
-                          cv::Mat &distortion)
+cv::Mat readCameraDistortion(cv::FileStorage &fsSettings, const std::string &name,
+                             bool *has_distortion = nullptr)
 {
     const cv::FileNode node = fsSettings["camera"][name];
-    if (node.empty() || !node.isSeq() || node.size() != 5)
-        return false;
+    if (has_distortion)
+        *has_distortion = !node.empty();
+    if (node.empty())
+        return cv::Mat::zeros(1, 5, CV_64F);
+    if (!node.isSeq() || node.size() != 5)
+        throw std::runtime_error(name + " must contain five distortion values");
 
-    distortion = cv::Mat(1, 5, CV_64F);
+    cv::Mat distortion(1, 5, CV_64F);
     for (int i = 0; i < 5; ++i)
     {
         const double value = static_cast<double>(node[i]);
         if (!std::isfinite(value))
-            return false;
+            throw std::runtime_error(name + " contains a non-finite distortion value");
         distortion.at<double>(0, i) = value;
     }
-    return true;
+    return distortion;
 }
 
 cv::Mat cameraMatrix(const Eigen::Vector4d &intrinsics)
@@ -128,20 +132,34 @@ cv::Mat cameraMatrix(const Eigen::Vector4d &intrinsics)
                                       0.0, 0.0, 1.0);
 }
 
+void rectifyMonoParameters(cv::FileStorage &fsSettings)
+{
+    const cv::Mat distortion = readCameraDistortion(fsSettings, "cam0_distortion");
+    const cv::Mat K = cameraMatrix(CAM_INTRINSICS[0]);
+    cv::initUndistortRectifyMap(K, distortion, cv::Mat(), K,
+                                cv::Size(COL, ROW), CV_16SC2,
+                                RECTIFY_MAP_1[0], RECTIFY_MAP_2[0]);
+}
+
 void rectifyStereoParameters(cv::FileStorage &fsSettings)
 {
-    int rectify_stereo = 0;
-    readOptionalParam(fsSettings, "camera", "rectify_stereo", rectify_stereo);
-    if (!rectify_stereo)
+    bool has_distortion0, has_distortion1;
+    const cv::Mat D0 = readCameraDistortion(fsSettings, "cam0_distortion", &has_distortion0);
+    const cv::Mat D1 = readCameraDistortion(fsSettings, "cam1_distortion", &has_distortion1);
+    if (has_distortion0 != has_distortion1)
+        throw std::runtime_error("stereo cameras must both provide distortion or both omit it");
+
+    const cv::Size image_size(COL, ROW);
+    const cv::Mat K0 = cameraMatrix(CAM_INTRINSICS[0]);
+    const cv::Mat K1 = cameraMatrix(CAM_INTRINSICS[1]);
+    if (!has_distortion0)
+    {
+        cv::initUndistortRectifyMap(K0, D0, cv::Mat(), K0, image_size, CV_16SC2,
+                                    RECTIFY_MAP_1[0], RECTIFY_MAP_2[0]);
+        cv::initUndistortRectifyMap(K1, D1, cv::Mat(), K1, image_size, CV_16SC2,
+                                    RECTIFY_MAP_1[1], RECTIFY_MAP_2[1]);
         return;
-
-    if (NUM_OF_CAM != 2 || ROW <= 0 || COL <= 0)
-        throw std::runtime_error("rectify_stereo requires two cameras and valid image dimensions");
-
-    cv::Mat D0, D1;
-    if (!readCameraDistortion(fsSettings, "cam0_distortion", D0) ||
-        !readCameraDistortion(fsSettings, "cam1_distortion", D1))
-        throw std::runtime_error("rectify_stereo requires five finite distortion values per camera: [k1,k2,p1,p2,k3]");
+    }
 
     double alpha = 0.0;
     readOptionalParam(fsSettings, "camera", "rectify_alpha", alpha);
@@ -155,9 +173,6 @@ void rectifyStereoParameters(cv::FileStorage &fsSettings)
     cv::eigen2cv(R_right_left, R);
     cv::eigen2cv(t_right_left, t);
 
-    const cv::Size image_size(COL, ROW);
-    const cv::Mat K0 = cameraMatrix(CAM_INTRINSICS[0]);
-    const cv::Mat K1 = cameraMatrix(CAM_INTRINSICS[1]);
     cv::Mat R0_rect, R1_rect, P0_rect, P1_rect, Q;
     cv::stereoRectify(K0, D0, K1, D1, image_size, R, t,
                       R0_rect, R1_rect, P0_rect, P1_rect, Q,
@@ -178,9 +193,6 @@ void rectifyStereoParameters(cv::FileStorage &fsSettings)
         CAM_INTRINSICS[i] << projection.at<double>(0, 0), projection.at<double>(1, 1),
                              projection.at<double>(0, 2), projection.at<double>(1, 2);
     }
-    ROS_INFO_STREAM("Stereo images rectified: " << COL << "x" << ROW
-                    << ", fx=" << CAM_INTRINSICS[0].x()
-                    << ", baseline=" << t_right_left.norm() << " m");
 }
 } // namespace
 
@@ -249,21 +261,21 @@ void readParameters(std::string config_file)
     readOptionalParam(fsSettings, "keyframe", "tracking_parallax_rate", KEYFRAME_TRACKING_PARALLAX_RATE);
 
     MULTIPLE_THREAD = fsSettings["system"]["multiple_thread"];
+    MODE = 0;
+    readOptionalParam(fsSettings, "system", "mode", MODE);
 
-    USE_IMU = fsSettings["system"]["imu"];
-    printf("USE_IMU: %d\n", USE_IMU);
-    if(USE_IMU)
-    {
-        fsSettings["topics"]["imu"] >> IMU_TOPIC;
-        printf("IMU_TOPIC: %s\n", IMU_TOPIC.c_str());
-        ACC_N = fsSettings["estimator"]["acc_n"];
-        ACC_W = fsSettings["estimator"]["acc_w"];
-        GYR_N = fsSettings["estimator"]["gyr_n"];
-        GYR_W = fsSettings["estimator"]["gyr_w"];
-        G.z() = fsSettings["estimator"]["g_norm"];
-        TD = fsSettings["estimator"]["td"];
-        ESTIMATE_TD = fsSettings["estimator"]["estimate_td"];
-    }
+    const int use_imu = fsSettings["system"]["imu"];
+    if (use_imu != 1)
+        throw std::runtime_error("IMU is required: set system.imu to 1");
+    fsSettings["topics"]["imu"] >> IMU_TOPIC;
+    printf("IMU_TOPIC: %s\n", IMU_TOPIC.c_str());
+    ACC_N = fsSettings["estimator"]["acc_n"];
+    ACC_W = fsSettings["estimator"]["acc_w"];
+    GYR_N = fsSettings["estimator"]["gyr_n"];
+    GYR_W = fsSettings["estimator"]["gyr_w"];
+    G.z() = fsSettings["estimator"]["g_norm"];
+    TD = fsSettings["estimator"]["td"];
+    ESTIMATE_TD = fsSettings["estimator"]["estimate_td"];
 
     SOLVER_TIME = fsSettings["estimator"]["max_solver_time"];
     NUM_ITERATIONS = fsSettings["estimator"]["max_num_iterations"];
@@ -348,16 +360,10 @@ void readParameters(std::string config_file)
 
     ROW = fsSettings["camera"]["image_height"];
     COL = fsSettings["camera"]["image_width"];
-    ROS_INFO("ROW: %d COL: %d ", ROW, COL);
-
-    rectifyStereoParameters(fsSettings);
-
-    if(!USE_IMU)
-    {
-        ESTIMATE_EXTRINSIC = 0;
-        ESTIMATE_TD = 0;
-        printf("no imu, fix extrinsic param; no time offset calibration\n");
-    }
+    if (NUM_OF_CAM == 1)
+        rectifyMonoParameters(fsSettings);
+    else
+        rectifyStereoParameters(fsSettings);
 
     fsSettings.release();
 }

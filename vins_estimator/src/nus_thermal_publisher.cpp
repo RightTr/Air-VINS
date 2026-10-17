@@ -263,7 +263,6 @@ int main(int argc, char **argv)
     int max_frames = 0;
     bool loop = false;
     bool rectify_images = true;
-    bool publish_imu = false;
     double rectify_alpha = 0.0;
 
     ros_utils::param(node, "data_root", data_root, std::string("/mnt/Data/homebrew_thermal/Nus/run_20250912_180927"));
@@ -281,7 +280,6 @@ int main(int argc, char **argv)
     ros_utils::param(node, "max_frames", max_frames, 0);
     ros_utils::param(node, "loop", loop, false);
     ros_utils::param(node, "rectify_images", rectify_images, true);
-    ros_utils::param(node, "publish_imu", publish_imu, false);
     ros_utils::param(node, "rectify_alpha", rectify_alpha, 0.0);
 
     if (playback_rate <= 0.0)
@@ -300,15 +298,15 @@ int main(int argc, char **argv)
     const std::string imu_path = imu_file.empty() || imu_file[0] == '/' ? imu_file : joinPath(data_root, imu_file);
     const std::vector<Frame> left_frames = loadFrames(left_path);
     const std::vector<Frame> right_frames = loadFrames(right_path);
-    const std::vector<ImuSample> imu_samples = publish_imu ? loadImuSamples(imu_path) : std::vector<ImuSample>();
+    const std::vector<ImuSample> imu_samples = loadImuSamples(imu_path);
     if (left_frames.empty() || right_frames.empty())
     {
         ROS_ERROR_STREAM("No frames found. left=" << left_frames.size() << " right=" << right_frames.size());
         return 1;
     }
-    if (publish_imu && imu_samples.empty())
+    if (imu_samples.empty())
     {
-        ROS_ERROR_STREAM("publish_imu is true but no IMU samples were loaded from " << imu_path);
+        ROS_ERROR_STREAM("No IMU samples were loaded from " << imu_path);
         return 1;
     }
 
@@ -332,37 +330,32 @@ int main(int argc, char **argv)
         node, image0_topic, 10, false, ros_utils::QosProfile::SensorData);
     auto pub_right = ros_utils::ros_advertise<sensor_msgs::Image>(
         node, image1_topic, 10, false, ros_utils::QosProfile::SensorData);
-    ros_utils::Publisher<sensor_msgs::Imu> pub_imu;
-    if (publish_imu)
-        pub_imu = ros_utils::ros_advertise<sensor_msgs::Imu>(
-            node, imu_topic, 2000, false, ros_utils::QosProfile::SensorData);
+    auto pub_imu = ros_utils::ros_advertise<sensor_msgs::Imu>(
+        node, imu_topic, 2000, false, ros_utils::QosProfile::SensorData);
     const Rectifier rectifier = makeNusThermalRectifier(rectify_images, rectify_alpha);
 
     ROS_INFO_STREAM("Publishing NUS thermal stereo sequence"
                     << " left=" << left_path
                     << " right=" << right_path
-                    << " imu=" << (publish_imu ? imu_path : std::string("disabled"))
+                    << " imu=" << imu_path
                     << " pairs=" << (end_index - static_cast<size_t>(start_index))
                     << " playback_rate=" << playback_rate);
 
     do
     {
-        size_t imu_index = publish_imu ? firstImuIndexForImageTime(imu_samples, left_frames[start_index].stamp) : 0;
+        size_t imu_index = firstImuIndexForImageTime(imu_samples, left_frames[start_index].stamp);
         for (size_t i = static_cast<size_t>(start_index); ros_utils::ok() && i < end_index; ++i)
         {
             const ros_utils::Time stamp = ros_utils::time_from_sec(left_frames[i].stamp);
-            if (publish_imu)
+            while (imu_index < imu_samples.size() && imu_samples[imu_index].stamp < left_frames[i].stamp)
             {
-                while (imu_index < imu_samples.size() && imu_samples[imu_index].stamp < left_frames[i].stamp)
-                {
-                    ros_utils::ros_publish(pub_imu, makeImuMsg(imu_samples[imu_index], imu_frame_id));
-                    ++imu_index;
-                }
-                if (imu_index < imu_samples.size())
-                {
-                    ros_utils::ros_publish(pub_imu, makeImuMsg(imu_samples[imu_index], imu_frame_id));
-                    ++imu_index;
-                }
+                ros_utils::ros_publish(pub_imu, makeImuMsg(imu_samples[imu_index], imu_frame_id));
+                ++imu_index;
+            }
+            if (imu_index < imu_samples.size())
+            {
+                ros_utils::ros_publish(pub_imu, makeImuMsg(imu_samples[imu_index], imu_frame_id));
+                ++imu_index;
             }
             sensor_msgs::ImagePtr left_msg = readMonoImage(left_frames[i].path, stamp, left_frame_id, rectifier, true);
             sensor_msgs::ImagePtr right_msg = readMonoImage(right_frames[i].path, stamp, right_frame_id, rectifier, false);

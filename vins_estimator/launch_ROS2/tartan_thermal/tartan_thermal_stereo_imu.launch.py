@@ -41,7 +41,6 @@ def generate_launch_description():
         output="screen",
         parameters=[publisher_config, {
             "data_root": LaunchConfiguration("data_root"),
-            "publish_imu": True,
             "playback_rate": ParameterValue(LaunchConfiguration("playback_rate"), value_type=float),
             "start_index": ParameterValue(LaunchConfiguration("start_index"), value_type=int),
             "max_frames": ParameterValue(LaunchConfiguration("max_frames"), value_type=int),

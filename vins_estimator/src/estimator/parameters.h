@@ -57,15 +57,15 @@ extern int ROLLING_SHUTTER;
 extern int ROW, COL;
 extern int NUM_OF_CAM;
 extern int STEREO;
-extern int USE_IMU;
 extern int MULTIPLE_THREAD;
+extern int MODE;  // 0: online, 1: offline
 // pts_gt for debug purpose;
 extern map<int, Eigen::Vector3d> pts_gt;
 
 extern std::string IMAGE0_TOPIC, IMAGE1_TOPIC;
 extern std::string FISHEYE_MASK;
 extern std::array<Eigen::Vector4d, 2> CAM_INTRINSICS;
-// Empty unless the input stereo images need in-node undistortion/rectification.
+// Image remap tables prepared for every configured camera at startup.
 extern std::array<cv::Mat, 2> RECTIFY_MAP_1;
 extern std::array<cv::Mat, 2> RECTIFY_MAP_2;
 extern int MAX_CNT;

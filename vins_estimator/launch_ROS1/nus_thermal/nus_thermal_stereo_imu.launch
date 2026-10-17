@@ -20,7 +20,6 @@
     <param name="image0_topic" type="string" value="/cam0/image_raw" />
     <param name="image1_topic" type="string" value="/cam1/image_raw" />
     <param name="imu_topic" type="string" value="/imu0" />
-    <param name="publish_imu" type="bool" value="true" />
     <param name="playback_rate" type="double" value="$(arg playback_rate)" />
     <param name="start_index" type="int" value="$(arg start_index)" />
     <param name="max_frames" type="int" value="$(arg max_frames)" />

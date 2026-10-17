@@ -9,6 +9,7 @@ system:
   imu: 1
   num_of_cam: 2
   multiple_thread: 1
+  mode: 0  # 0: online, drop old frames; 1: offline, process every queued frame
   output_path: ""  # Defaults to the workspace/package output directory.
 
 topics:
@@ -19,13 +20,12 @@ topics:
 camera:
   image_width: 640
   image_height: 512
-  # Raw camera intrinsics. rectify_stereo replaces these with the rectified
+  # Raw camera intrinsics. Stereo rectification replaces these with the rectified
   # projection intrinsics at startup, before feature tracking begins.
   cam0_intrinsics: [401.855283, 402.415658, 329.563855, 263.783339]
   cam1_intrinsics: [401.116455, 401.789989, 311.082463, 251.753843]
   cam0_distortion: [-0.399347, 0.234754, 0.0, 0.0, -0.078159]  # [k1,k2,p1,p2,k3]
   cam1_distortion: [-0.376356, 0.177351, 0.0, 0.0, -0.040225]
-  rectify_stereo: 1
   rectify_alpha: 0.0
   estimate_extrinsic: 0
   # Raw RGB/body <- left thermal camera. The document gives this rotation to
@@ -66,8 +66,8 @@ feature_tracker:
 deep_feature:
   enabled: 1
   matcher: 0  # SuperPoint + LightGlue
-  max_keypoints: 400
-  keypoint_threshold: 0.004
+  max_keypoints: 600
+  keypoint_threshold: 0.0025
   remove_borders: 4
   stereo_y_threshold: 3.0
   # With fx=422 px and baseline=0.12423 m, this covers about 0.3-40 m.
@@ -78,11 +78,13 @@ estimator:
   max_solver_time: 0.04
   max_num_iterations: 8
   keyframe_parallax: 5.0
-  # Provisional IMU noise values from NUS; replace using Scout IMU calibration.
-  acc_n: 0.1
-  gyr_n: 0.01
+  # Conservative values above the stationary RealSense sample noise observed
+  # on 2026-10-17 (about 0.01 m/s^2 and 0.003 rad/s per axis).
+  acc_n: 0.03
+  gyr_n: 0.005
   acc_w: 0.001
   gyr_w: 0.0001
   g_norm: 9.81
-  estimate_td: 0
+  # Host callback timestamps can have a fixed camera/IMU delivery offset.
+  estimate_td: 1
   td: 0.0

@@ -32,7 +32,6 @@ def generate_launch_description():
             "left_dir": "left_thermal/left_motion", "right_dir": "right_thermal/right_motion",
             "imu_file": LaunchConfiguration("imu_file"),
             "image0_topic": "/cam0/image_raw", "image1_topic": "/cam1/image_raw", "imu_topic": "/imu0",
-            "publish_imu": True,
             "playback_rate": ParameterValue(LaunchConfiguration("playback_rate"), value_type=float),
             "start_index": ParameterValue(LaunchConfiguration("start_index"), value_type=int),
             "max_frames": ParameterValue(LaunchConfiguration("max_frames"), value_type=int),

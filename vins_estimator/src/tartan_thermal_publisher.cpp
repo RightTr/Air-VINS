@@ -182,7 +182,7 @@ sensor_msgs::Imu makeImuMessage(const ImuSample &sample, const std::string &fram
 void waitForSubscribers(const ros_utils::Publisher<sensor_msgs::Image> &left,
                         const ros_utils::Publisher<sensor_msgs::Image> &right,
                         const ros_utils::Publisher<sensor_msgs::Imu> &imu,
-                        bool publish_imu, double timeout_seconds)
+                        double timeout_seconds)
 {
     if (timeout_seconds <= 0.0)
         return;
@@ -191,7 +191,7 @@ void waitForSubscribers(const ros_utils::Publisher<sensor_msgs::Image> &left,
     {
         if (ros_utils::subscription_count<sensor_msgs::Image>(left) > 0 &&
             ros_utils::subscription_count<sensor_msgs::Image>(right) > 0 &&
-            (!publish_imu || ros_utils::subscription_count<sensor_msgs::Imu>(imu) > 0))
+            ros_utils::subscription_count<sensor_msgs::Imu>(imu) > 0)
             return;
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
@@ -207,7 +207,7 @@ int main(int argc, char **argv)
     std::string left_frame_id, right_frame_id, imu_frame_id;
     double playback_rate = 1.0, stereo_stamp_tolerance = 0.003, subscriber_wait_timeout = 10.0;
     int start_index = 0, max_frames = 0;
-    bool publish_imu = true, loop = false;
+    bool loop = false;
 
     ros_utils::param(node, "data_root", data_root,
                      std::string("/mnt/Data/TartanThermal/TartanRGBT_dataset/day1/undistorted_images_all_cameras_20250822_115703"));
@@ -225,7 +225,6 @@ int main(int argc, char **argv)
     ros_utils::param(node, "subscriber_wait_timeout", subscriber_wait_timeout, 10.0);
     ros_utils::param(node, "start_index", start_index, 0);
     ros_utils::param(node, "max_frames", max_frames, 0);
-    ros_utils::param(node, "publish_imu", publish_imu, true);
     ros_utils::param(node, "loop", loop, false);
 
     if (playback_rate <= 0.0 || stereo_stamp_tolerance < 0.0 || subscriber_wait_timeout < 0.0 ||
@@ -237,8 +236,8 @@ int main(int argc, char **argv)
 
     const auto pairs = loadPairs(resolvePath(data_root, left_dir), resolvePath(data_root, right_dir),
                                  stereo_stamp_tolerance);
-    const auto imu_samples = publish_imu ? loadImu(resolvePath(data_root, imu_dir)) : std::vector<ImuSample>{};
-    if (pairs.empty() || (publish_imu && imu_samples.empty()) ||
+    const auto imu_samples = loadImu(resolvePath(data_root, imu_dir));
+    if (pairs.empty() || imu_samples.empty() ||
         static_cast<size_t>(start_index) >= pairs.size())
     {
         ROS_ERROR_STREAM("No usable data or start_index out of range: pairs=" << pairs.size()
@@ -252,14 +251,12 @@ int main(int argc, char **argv)
         node, image0_topic, 10, false, ros_utils::QosProfile::Reliable);
     auto pub_right = ros_utils::ros_advertise<sensor_msgs::Image>(
         node, image1_topic, 10, false, ros_utils::QosProfile::Reliable);
-    ros_utils::Publisher<sensor_msgs::Imu> pub_imu;
-    if (publish_imu)
-        pub_imu = ros_utils::ros_advertise<sensor_msgs::Imu>(
-            node, imu_topic, 2000, false, ros_utils::QosProfile::Reliable);
+    auto pub_imu = ros_utils::ros_advertise<sensor_msgs::Imu>(
+        node, imu_topic, 2000, false, ros_utils::QosProfile::Reliable);
 
     ROS_INFO_STREAM("TartanThermal: " << (end_index - static_cast<size_t>(start_index))
                     << " stereo pairs, " << imu_samples.size() << " IMU samples, rate=" << playback_rate);
-    waitForSubscribers(pub_left, pub_right, pub_imu, publish_imu, subscriber_wait_timeout);
+    waitForSubscribers(pub_left, pub_right, pub_imu, subscriber_wait_timeout);
 
     do
     {
@@ -280,13 +277,10 @@ int main(int argc, char **argv)
 
             // Include the first IMU sample after this image, as VINS needs it to
             // interpolate IMU integration to the image timestamp.
-            if (publish_imu)
-            {
-                while (imu_index < imu_samples.size() && imu_samples[imu_index].stamp < pairs[i].stamp)
-                    ros_utils::ros_publish(pub_imu, makeImuMessage(imu_samples[imu_index++], imu_frame_id));
-                if (imu_index < imu_samples.size())
-                    ros_utils::ros_publish(pub_imu, makeImuMessage(imu_samples[imu_index++], imu_frame_id));
-            }
+            while (imu_index < imu_samples.size() && imu_samples[imu_index].stamp < pairs[i].stamp)
+                ros_utils::ros_publish(pub_imu, makeImuMessage(imu_samples[imu_index++], imu_frame_id));
+            if (imu_index < imu_samples.size())
+                ros_utils::ros_publish(pub_imu, makeImuMessage(imu_samples[imu_index++], imu_frame_id));
 
             auto left = readImage(pairs[i].left_path, pairs[i].stamp, left_frame_id);
             auto right = readImage(pairs[i].right_path, pairs[i].stamp, right_frame_id);

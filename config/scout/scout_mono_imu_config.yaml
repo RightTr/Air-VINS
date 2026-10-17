@@ -1,0 +1,58 @@
+%YAML:1.0
+
+# Scout left infrared camera with RealSense IMU.
+# Run the camera driver with use_host_time:=true.
+system:
+  imu: 1
+  num_of_cam: 1
+  multiple_thread: 1
+  mode: 0  # 0: online; 1: offline
+  output_path: ""
+
+topics:
+  image0: "/guide_left/image"
+  image1: ""
+  imu: "/realsense/imu/data"
+
+camera:
+  image_width: 640
+  image_height: 512
+  cam0_intrinsics: [401.855283, 402.415658, 329.563855, 263.783339]
+  cam0_distortion: [-0.399347, 0.234754, 0.0, 0.0, -0.078159]
+  estimate_extrinsic: 0
+  body_T_cam0: !!opencv-matrix
+    rows: 4
+    cols: 4
+    dt: d
+    data: [0.999979419057, -0.006194120760, -0.001671625244, 0.003713250000,
+           0.006205670234, 0.999956280786, 0.006994724637, -0.002168280000,
+           0.001628225993, -0.007004954234, 0.999974139414, -0.000867580000,
+           0.0, 0.0, 0.0, 1.0]
+
+feature_tracker:
+  max_cnt: 400
+  min_dist: 30
+  F_threshold: 1.0
+  show_track: 1
+  flow_back: 1
+  min_depth: 0.3
+  max_depth: 40.0
+
+deep_feature:
+  enabled: 1
+  matcher: 0
+  max_keypoints: 700
+  keypoint_threshold: 0.002
+  remove_borders: 4
+
+estimator:
+  max_solver_time: 0.04
+  max_num_iterations: 8
+  keyframe_parallax: 5.0
+  acc_n: 0.03
+  gyr_n: 0.005
+  acc_w: 0.001
+  gyr_w: 0.0001
+  g_norm: 9.81
+  estimate_td: 1
+  td: 0.0

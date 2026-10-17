@@ -4,6 +4,7 @@ system:
   imu: 1
   num_of_cam: 2
   multiple_thread: 1
+  mode: 0  # 0: online, drop old frames; 1: offline, process every queued frame
   output_path: "/root/stirslam_ws/install/stir_slam/share/stir_slam/output/tartan_thermal"
 
 topics:

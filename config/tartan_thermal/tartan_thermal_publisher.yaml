@@ -10,7 +10,6 @@ tartan_thermal_publisher:
     left_frame_id: thermal_left/optical_frame
     right_frame_id: thermal_right/optical_frame
     imu_frame_id: zed_imu_link
-    publish_imu: true
     playback_rate: 1.0
     start_index: 0
     max_frames: 0

@@ -1,0 +1,62 @@
+%YAML:1.0
+
+# D455F color camera + built-in IMU, device serial 253822301280.
+# Camera intrinsics and camera-to-IMU extrinsics queried with librealsense
+# at 640x480 BGR8, 30 Hz on 2026-10-17.
+# The driver must run with use_host_time:=true so both topics use Unix time.
+system:
+  imu: 1
+  num_of_cam: 1
+  multiple_thread: 1
+  mode: 0  # 0: online, drop old frames; 1: offline, process every queued frame
+  output_path: ""
+
+topics:
+  image0: "/realsense/rgb/image"
+  image1: ""
+  imu: "/realsense/imu/data"
+
+camera:
+  image_width: 640
+  image_height: 480
+  cam0_intrinsics: [388.305511475, 387.767913818, 317.348144531, 245.914642334]
+  # Raw color inverse Brown-Conrady coefficients used for undistortion.
+  cam0_distortion: [-0.0552409216762, 0.0605476722121, -0.00024825532455, 0.0000845436443342, -0.0192784033716]
+  estimate_extrinsic: 0
+  # IMU/accelerometer frame <- raw color optical frame, from get_extrinsics_to.
+  body_T_cam0: !!opencv-matrix
+    rows: 4
+    cols: 4
+    dt: d
+    data: [0.999998033047, -0.000539206143003, -0.00191087753046, 0.028999986127,
+           0.00052986870287, 0.999987959862, -0.00488362414762, 0.00734602520242,
+           0.00191348779481, 0.0048826020211, 0.999986231327, 0.0157627444714,
+           0.0, 0.0, 0.0, 1.0]
+
+feature_tracker:
+  max_cnt: 400
+  min_dist: 30
+  F_threshold: 1.0
+  show_track: 1
+  flow_back: 1
+  min_depth: 0.3
+  max_depth: 40.0
+
+deep_feature:
+  enabled: 1
+  matcher: 0
+  max_keypoints: 400
+  keypoint_threshold: 0.004
+  remove_borders: 4
+
+estimator:
+  max_solver_time: 0.04
+  max_num_iterations: 8
+  keyframe_parallax: 5.0
+  acc_n: 0.03
+  gyr_n: 0.005
+  acc_w: 0.001
+  gyr_w: 0.0001
+  g_norm: 9.81
+  estimate_td: 1
+  td: 0.0
