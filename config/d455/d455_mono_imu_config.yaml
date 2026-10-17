@@ -43,7 +43,7 @@ feature_tracker:
   max_depth: 40.0
 
 deep_feature:
-  enabled: 1
+  enabled: 2
   matcher: 0
   max_keypoints: 400
   keypoint_threshold: 0.004

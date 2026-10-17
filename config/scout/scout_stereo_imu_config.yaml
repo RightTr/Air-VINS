@@ -50,29 +50,36 @@ camera:
            0.023769291725, -0.017721111513, 0.999560394883, 0.001940508179,
            0.0, 0.0, 0.0, 1.0]
 
-# Initial tracking/solver settings, copied from the existing NUS stereo IMU
-# profile. Tune for Scout imagery and frame rate after checking live topics.
+# Tracking and map-depth thresholds from 0a8fbef's NUS thermal profile.
 feature_tracker:
   max_cnt: 400
   min_dist: 30
   F_threshold: 1.0
   show_track: 1
   flow_back: 1
-  min_depth: 0.3
-  max_depth: 40.0
+  min_depth: 0.1
+  max_depth: 8.0
 
 # The model directory defaults to ../../output relative to this config file.
 # That resolves to the model files in both the source and installed package.
 deep_feature:
-  enabled: 1
-  matcher: 0  # SuperPoint + LightGlue
-  max_keypoints: 600
-  keypoint_threshold: 0.0025
+  enabled: 2  # 0: KLT, 1: SuperPoint + Glue, 2: PLNet + Glue
+  matcher: 0  # LightGlue
+  max_keypoints: 800
+  keypoint_threshold: 0.0015
   remove_borders: 4
-  stereo_y_threshold: 3.0
-  # With fx=422 px and baseline=0.12423 m, this covers about 0.3-40 m.
-  min_stereo_disparity: 1.3
+  stereo_ransac: 1
+  stereo_y_threshold: 1.0
+  min_stereo_disparity: 4.0
   max_stereo_disparity: 175.0
+
+keyframe:
+  min_init_stereo_feature: 10
+  lost_num_match: 10
+  min_num_match: 30
+  max_num_match: 80
+  tracking_point_rate: 0.7
+  tracking_parallax_rate: 0.1
 
 estimator:
   max_solver_time: 0.04

@@ -63,6 +63,7 @@ int DEEP_FEATURE_MATCHER;
 int DEEP_FEATURE_MAX_KEYPOINTS;
 double DEEP_FEATURE_KEYPOINT_THRESHOLD;
 int DEEP_FEATURE_REMOVE_BORDERS;
+int DEEP_FEATURE_STEREO_RANSAC;
 double DEEP_FEATURE_STEREO_Y_THRESHOLD;
 double DEEP_FEATURE_MIN_STEREO_DISPARITY;
 double DEEP_FEATURE_MAX_STEREO_DISPARITY;
@@ -229,6 +230,7 @@ void readParameters(std::string config_file)
     DEEP_FEATURE_MAX_KEYPOINTS = std::max(MAX_CNT, static_cast<int>(MAX_CNT * 3 / 2));
     DEEP_FEATURE_KEYPOINT_THRESHOLD = 0.003;
     DEEP_FEATURE_REMOVE_BORDERS = 4;
+    DEEP_FEATURE_STEREO_RANSAC = 0;
     DEEP_FEATURE_STEREO_Y_THRESHOLD = 2.0;
     DEEP_FEATURE_MIN_STEREO_DISPARITY = 1.0;
     DEEP_FEATURE_MAX_STEREO_DISPARITY = 96.0;
@@ -247,6 +249,7 @@ void readParameters(std::string config_file)
     readOptionalParam(fsSettings, "deep_feature", "max_keypoints", DEEP_FEATURE_MAX_KEYPOINTS);
     readOptionalParam(fsSettings, "deep_feature", "keypoint_threshold", DEEP_FEATURE_KEYPOINT_THRESHOLD);
     readOptionalParam(fsSettings, "deep_feature", "remove_borders", DEEP_FEATURE_REMOVE_BORDERS);
+    readOptionalParam(fsSettings, "deep_feature", "stereo_ransac", DEEP_FEATURE_STEREO_RANSAC);
     readOptionalParam(fsSettings, "deep_feature", "stereo_y_threshold", DEEP_FEATURE_STEREO_Y_THRESHOLD);
     readOptionalParam(fsSettings, "deep_feature", "min_stereo_disparity", DEEP_FEATURE_MIN_STEREO_DISPARITY);
     readOptionalParam(fsSettings, "deep_feature", "max_stereo_disparity", DEEP_FEATURE_MAX_STEREO_DISPARITY);

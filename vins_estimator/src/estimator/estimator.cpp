@@ -439,6 +439,27 @@ void Estimator::processIMU(double t, double dt, const Vector3d &linear_accelerat
     gyr_0 = angular_velocity; 
 }
 
+bool Estimator::stereoInitializationReady() const
+{
+    const int min_stereo_observations = std::max(KEYFRAME_MIN_INIT_STEREO_FEATURE, KEYFRAME_MIN_NUM_MATCH);
+    const int stereo_observations = point_manager.countCurrentStereoObservations();
+    const int tracked_points = point_manager.last_point_feature_track_num;
+    const int long_tracks = point_manager.long_point_feature_track_num;
+    const int good_mappoints = point_manager.countGoodLocalMappoints();
+    const bool ready = stereo_observations >= min_stereo_observations &&
+                       tracked_points >= KEYFRAME_MIN_NUM_MATCH &&
+                       long_tracks >= KEYFRAME_MIN_NUM_MATCH &&
+                       good_mappoints >= KEYFRAME_MIN_INIT_STEREO_FEATURE;
+    if (!ready)
+        ROS_WARN_THROTTLE(2.0,
+                          "waiting for stable stereo initialization: stereo=%d/%d tracked=%d/%d long=%d/%d good=%d/%d",
+                          stereo_observations, min_stereo_observations,
+                          tracked_points, KEYFRAME_MIN_NUM_MATCH,
+                          long_tracks, KEYFRAME_MIN_NUM_MATCH,
+                          good_mappoints, KEYFRAME_MIN_INIT_STEREO_FEATURE);
+    return ready;
+}
+
 void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
                              const double header,
                              VisualTrackingMode tracking_mode, int active_camera_id)
@@ -518,12 +539,18 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
         // stereo + IMU initilization
         if(STEREO)
         {
-            point_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
-            if (tracking_mode == TRACKING_MODE_STEREO)
-                point_manager.triangulate(Ps, Rs, tic, ric);
+            point_manager.triangulate(Ps, Rs, tic, ric);
             point_manager.updateLocalPoints(Ps, Rs, tic, ric);
+            point_manager.initFramePoseByPnP(frame_count, Ps, Rs, tic, ric, active_camera_id);
             if (frame_count == WINDOW_SIZE)
             {
+                if (!stereoInitializationReady())
+                {
+                    should_marginalize_old = true;
+                    marginalization_flag = MARGIN_OLD;
+                    slideWindow();
+                    return;
+                }
                 map<double, ImageFrame>::iterator frame_it;
                 int i = 0;
                 for (frame_it = all_image_frame.begin(); frame_it != all_image_frame.end(); frame_it++)
@@ -561,8 +588,7 @@ void Estimator::processImage(const map<int, vector<pair<int, Eigen::Matrix<doubl
     else
     {
         TicToc t_solve;
-        if (tracking_mode == TRACKING_MODE_STEREO)
-            point_manager.triangulate(Ps, Rs, tic, ric);
+        point_manager.triangulate(Ps, Rs, tic, ric);
         point_manager.updateLocalPoints(Ps, Rs, tic, ric);
         optimization();
         set<int> removeIndex;

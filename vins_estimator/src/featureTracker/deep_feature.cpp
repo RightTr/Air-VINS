@@ -8,6 +8,7 @@
 #include "deepFeature/include/super_point.h"
 #include "deepFeature/include/super_glue.h"
 #include "deepFeature/include/light_glue.h"
+#include "deepFeature/include/plnet.h"
 #include "deepFeature/include/point_matcher.h"
 #include "deepFeature/include/read_configs.h"
 #include "deepFeature/include/utils.h"
@@ -106,9 +107,42 @@ bool DeepFeature::init(int mode, const DeepFeatureOptions &options)
         return true;
     }
 
+    case 2:
+    {
+        PLNetConfig plnet_config;
+        plnet_config.use_superpoint = 0;
+        plnet_config.max_keypoints = options.max_keypoints;
+        plnet_config.keypoint_threshold = options.keypoint_threshold;
+        plnet_config.remove_borders = options.remove_borders;
+        plnet_config.SetModelPath(options.model_dir);
+
+        plnet_ = std::make_shared<PLNet>(plnet_config);
+        if (!plnet_->build())
+        {
+            ROS_ERROR("DeepFeature: Failed to build PLNet engine");
+            ready_ = false;
+            return false;
+        }
+
+        PointMatcherConfig pm_config = buildPointMatcherConfig(options);
+        point_matcher_ = std::make_shared<PointMatcher>(pm_config);
+        if (!point_matcher_->ready())
+        {
+            ROS_ERROR("DeepFeature: Failed to initialize PointMatcher for PLNet");
+            ready_ = false;
+            return false;
+        }
+
+        ready_ = true;
+        ROS_INFO("DeepFeature: Initialized mode=2 (PLNet + %s), image=%dx%d",
+                 options.matcher == 1 ? "SuperGlue" : "LightGlue",
+                 options.image_width, options.image_height);
+        return true;
+    }
+
     default:
         ready_ = false;
-        ROS_ERROR("DeepFeature: invalid mode %d. Supported: 1=SuperPoint", mode);
+        ROS_ERROR("DeepFeature: invalid mode %d. Supported: 1=SuperPoint, 2=PLNet", mode);
         return false;
     }
 }
@@ -126,6 +160,19 @@ bool DeepFeature::extractPoints(const cv::Mat &image, Eigen::Matrix<float, 259, 
             return false;
         }
         return superpoint_->infer(image, points);
+    }
+
+    case 2:
+    {
+        if (!ready_ || !plnet_)
+        {
+            ROS_WARN_THROTTLE(5.0, "ExtractPoints: PLNet not ready");
+            points.resize(259, 0);
+            return false;
+        }
+        std::vector<Eigen::Vector4d> lines;
+        Eigen::Matrix<float, 259, Eigen::Dynamic> junctions;
+        return plnet_->infer(image, points, lines, junctions);
     }
 
     default:

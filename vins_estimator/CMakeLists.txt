@@ -78,6 +78,7 @@ set(STIR_SLAM_SOURCES
   src/featureTracker/feature_tracker.cpp src/featureTracker/deep_feature.cpp
   ../deepFeature/src/super_point.cpp ../deepFeature/src/super_glue.cpp
   ../deepFeature/src/light_glue.cpp
+  ../deepFeature/src/plnet.cpp
   ../deepFeature/src/point_matcher.cc ../deepFeature/src/utils.cc)
 
 add_library(stir_slam_lib ${STIR_SLAM_SOURCES})

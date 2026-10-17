@@ -1,4 +1,5 @@
 #include "feature_manager.h"
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <utility>
@@ -48,10 +49,7 @@ PointFeatureManager::PointFeatureManager()
 void PointFeatureManager::clearState()
 {
     pointFeature.clear();
-    pointFeatureIndex.clear();
     local_frames.clear();
-    windowSupportCount.clear();
-    windowSupportLastFrame.clear();
     local_mappoints.clear();
     last_point_feature_track_num = 0;
     last_average_parallax = 0.0;
@@ -75,27 +73,9 @@ void PointFeatureManager::addLocalFrame(
         if (id_pts.second.empty())
             continue;
         local_frame.addObservation(id_pts.first, id_pts.second[0].first, id_pts.second[0].second);
-        ++windowSupportCount[id_pts.first];
-        windowSupportLastFrame[id_pts.first] = frameCnt;
     }
     while (local_frames.size() > WINDOW_SIZE + 1)
-    {
-        const LocalFrameObs &oldest_frame = local_frames.front();
-        for (const auto &observation : oldest_frame.observations)
-        {
-            const int feature_id = observation.first;
-            auto support_it = windowSupportCount.find(feature_id);
-            if (support_it == windowSupportCount.end())
-                continue;
-
-            if (--support_it->second <= 0)
-            {
-                windowSupportCount.erase(support_it);
-                windowSupportLastFrame.erase(feature_id);
-            }
-        }
         local_frames.pop_front();
-    }
 }
 
 int PointFeatureManager::getFeatureCount()
@@ -227,8 +207,8 @@ multi_view_fallback:
         P.rightCols<1>() = -R.transpose() * t;
 
         const Eigen::Vector3d f = bearing.normalized();
-        svd_A.row(svd_idx++) = f[0] * P.row(2) - f[2] * P.row(0);
-        svd_A.row(svd_idx++) = f[1] * P.row(2) - f[2] * P.row(1);
+        svd_A.row(svd_idx++) = f[0] * P.row(2) - P.row(0);
+        svd_A.row(svd_idx++) = f[1] * P.row(2) - P.row(1);
         return true;
     };
 
@@ -299,7 +279,7 @@ multi_view_fallback:
     return true;
 }
 
-void PointFeatureManager::pruneInactiveLocalMappoints()
+void PointFeatureManager::pruneStaleLocalMappoints()
 {
     std::set<int> alive_point_feature_ids;
     for (const auto &it_per_id : pointFeature)
@@ -316,18 +296,18 @@ void PointFeatureManager::pruneInactiveLocalMappoints()
 
         if (alive)
         {
-            it->second->ResetInactiveCount();
+            it->second->ResetStaleCount();
             ++it;
             continue;
         }
 
-        it->second->IncreaseInactiveCount();
+        it->second->IncreaseStaleCount();
         const auto support_stats = windowSupportStats(it->first);
         const bool strong_window_support = support_stats.first >= 2;
         const int keep_good_limit = strong_window_support ? 6 : 3;
         const int keep_non_good_limit = strong_window_support ? 4 : 2;
-        const bool keep_temporarily = it->second->IsGood() && it->second->InactiveCount() < keep_good_limit;
-        const bool keep_non_good_temporarily = !it->second->IsGood() && it->second->InactiveCount() < keep_non_good_limit;
+        const bool keep_temporarily = it->second->IsGood() && it->second->StaleCount() < keep_good_limit;
+        const bool keep_non_good_temporarily = !it->second->IsGood() && it->second->StaleCount() < keep_non_good_limit;
         if (keep_temporarily || keep_non_good_temporarily)
         {
             ++it;
@@ -389,13 +369,39 @@ void PointFeatureManager::updateLocalPoints(Vector3d Ps[], Matrix3d Rs[],
 
         mappoint->ClearObversers();
         mappoint->SetTrackCount(static_cast<int>(point_feature.point_feature_frame.size()));
-        mappoint->ResetInactiveCount();
+        mappoint->ResetStaleCount();
         for (int i = 0; i < static_cast<int>(point_feature.point_feature_frame.size()); ++i)
             mappoint->AddObverser(point_feature.start_frame + i, i);
 
         if (point_feature.solve_flag == 2)
         {
             mappoint->SetBad();
+        }
+        else if (mappoint->IsUnTriangulated())
+        {
+            if (mappoint->ObverserNum() <= 2)
+            {
+                mappoint->SetUnTriangulated();
+            }
+            else
+            {
+                Vector3d triangulated_point = Vector3d::Zero();
+                double triangulated_depth = -1.0;
+                if (triangulateMappointWorldPoint(point_feature, Ps, Rs, tic, window_ric,
+                                                 triangulated_point, triangulated_depth))
+                {
+                    mappoint->SetPosition(triangulated_point);
+                    mappoint->SetGood();
+                    point_feature.estimated_depth = triangulated_depth;
+                    point_feature.reliable_depth = true;
+                    point_feature.solve_flag = 1;
+                    point_feature.depth_fail_count = 0;
+                }
+                else
+                {
+                    mappoint->SetUnTriangulated();
+                }
+            }
         }
         else if (mappoint->IsGood())
         {
@@ -416,16 +422,21 @@ void PointFeatureManager::updateLocalPoints(Vector3d Ps[], Matrix3d Rs[],
                 }
             }
         }
+        else if (!mappoint->IsBad())
+        {
+            mappoint->SetUnTriangulated();
+        }
 
         const auto support_stats = windowSupportStats(point_feature.point_feature_id);
         mappoint->SetWindowSupport(support_stats.first, support_stats.second);
     }
-    pruneInactiveLocalMappoints();
+    pruneStaleLocalMappoints();
 }
 
 bool PointFeatureManager::addFeatureCheckParallax(int frame_count, const std::map<int, std::vector<std::pair<int, Eigen::Matrix<double, 7, 1>>>> &image,
                                                  double td, VisualTrackingMode tracking_mode)
 {
+    (void)tracking_mode;
     ROS_DEBUG("input pointFeature: %d", (int)image.size());
     ROS_DEBUG("num of pointFeature: %d", getFeatureCount());
     double parallax_sum = 0;
@@ -443,21 +454,17 @@ bool PointFeatureManager::addFeatureCheckParallax(int frame_count, const std::ma
         }
 
         int point_feature_id = id_pts.first;
-        auto index_it = pointFeatureIndex.find(point_feature_id);
+        auto it = find_if(pointFeature.begin(), pointFeature.end(), [point_feature_id](const PointFeatureId &point_feature)
+                          { return point_feature.point_feature_id == point_feature_id; });
 
-        if (index_it == pointFeatureIndex.end())
+        if (it == pointFeature.end())
         {
-            if (tracking_mode != TRACKING_MODE_STEREO)
-                continue;
-            pointFeature.emplace_back(point_feature_id, frame_count);
-            auto it = std::prev(pointFeature.end());
-            pointFeatureIndex.emplace(point_feature_id, it);
-            it->point_feature_frame.push_back(f_per_fra);
+            pointFeature.push_back(PointFeatureId(point_feature_id, frame_count));
+            pointFeature.back().point_feature_frame.push_back(f_per_fra);
             new_point_feature_num++;
         }
         else
         {
-            auto it = index_it->second;
             it->point_feature_frame.push_back(f_per_fra);
             last_point_feature_track_num++;
             if (it->point_feature_frame.size() >= 4)
@@ -649,7 +656,6 @@ void PointFeatureManager::removeFailures()
         it_next++;
         if (it->solve_flag == 2)
         {
-            pointFeatureIndex.erase(it->point_feature_id);
             pointFeature.erase(it);
         }
     }
@@ -738,7 +744,7 @@ void PointFeatureManager::updateMappointDescriptors(const std::vector<int> &ids,
     }
 }
 
-void PointFeatureManager::initFramePoseByPnP(int frameCnt, Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[], int active_camera_id, bool prefer_good_points)
+void PointFeatureManager::initFramePoseByPnP(int frameCnt, Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[], int active_camera_id)
 {
     if (frameCnt <= 0)
         return;
@@ -747,18 +753,11 @@ void PointFeatureManager::initFramePoseByPnP(int frameCnt, Eigen::Vector3d Ps[],
     vector<cv::Point3f> pts3D;
     for (const auto &point_feature : pointFeature)
     {
-        if (prefer_good_points)
-        {
-            const auto mappoint_it = local_mappoints.find(point_feature.point_feature_id);
-            if (mappoint_it == local_mappoints.end() || !mappoint_it->second ||
-                !mappoint_it->second->IsGood() || point_feature.estimated_depth <= 0 ||
-                !point_feature.reliable_depth)
-                continue;
-        }
-        else if (point_feature.estimated_depth <= 0)
-        {
+        const auto mappoint_it = local_mappoints.find(point_feature.point_feature_id);
+        if (mappoint_it == local_mappoints.end() || !mappoint_it->second ||
+            !mappoint_it->second->IsGood() || point_feature.estimated_depth <= 0 ||
+            !point_feature.reliable_depth)
             continue;
-        }
 
         const int obs_index = frameCnt - point_feature.start_frame;
         if (obs_index < 0 || static_cast<int>(point_feature.point_feature_frame.size()) < obs_index + 1)
@@ -779,7 +778,7 @@ void PointFeatureManager::initFramePoseByPnP(int frameCnt, Eigen::Vector3d Ps[],
         pts2D.emplace_back(point_feature.point_feature_frame[obs_index].point.x(),
                            point_feature.point_feature_frame[obs_index].point.y());
     }
-    if (prefer_good_points && pts3D.size() < 6)
+    if (pts3D.size() < 6)
         return;
 
     Eigen::Matrix3d RCam;
@@ -848,7 +847,6 @@ void PointFeatureManager::removeBackShiftDepth(Eigen::Matrix3d back_R0, Eigen::V
             it->point_feature_frame.erase(it->point_feature_frame.begin());
             if (it->point_feature_frame.size() < 2)
             {
-                pointFeatureIndex.erase(it->point_feature_id);
                 pointFeature.erase(it);
                 continue;
             }
@@ -891,7 +889,6 @@ void PointFeatureManager::removeBack()
             it->point_feature_frame.erase(it->point_feature_frame.begin());
             if (it->point_feature_frame.size() == 0)
             {
-                pointFeatureIndex.erase(it->point_feature_id);
                 pointFeature.erase(it);
             }
         }
@@ -916,7 +913,6 @@ void PointFeatureManager::removeFront(int frame_count)
             it->point_feature_frame.erase(it->point_feature_frame.begin() + j);
             if (it->point_feature_frame.size() == 0)
             {
-                pointFeatureIndex.erase(it->point_feature_id);
                 pointFeature.erase(it);
             }
         }
@@ -937,7 +933,6 @@ void PointFeatureManager::removeOutlier(std::set<int> &outlierIndex)
             auto mpt_it = local_mappoints.find(index);
             if (mpt_it != local_mappoints.end() && mpt_it->second)
                 mpt_it->second->SetBad();
-            pointFeatureIndex.erase(it->point_feature_id);
             pointFeature.erase(it);
         }
     }
@@ -954,13 +949,15 @@ std::pair<int, int> PointFeatureManager::windowSupportStats(int point_feature_id
     if (point_feature_id < 0)
         return std::make_pair(0, -1);
 
-    const auto support_it = windowSupportCount.find(point_feature_id);
-    if (support_it == windowSupportCount.end())
-        return std::make_pair(0, -1);
-
-    const auto last_frame_it = windowSupportLastFrame.find(point_feature_id);
-    const int last_support_frame_id = last_frame_it == windowSupportLastFrame.end()
-                                          ? -1
-                                          : last_frame_it->second;
-    return std::make_pair(support_it->second, last_support_frame_id);
+    int support_count = 0;
+    int last_support_frame_id = -1;
+    for (auto it = local_frames.rbegin(); it != local_frames.rend(); ++it)
+    {
+        if (!it->hasObservation(point_feature_id))
+            continue;
+        ++support_count;
+        if (last_support_frame_id < 0)
+            last_support_frame_id = it->frame_id;
+    }
+    return std::make_pair(support_count, last_support_frame_id);
 }

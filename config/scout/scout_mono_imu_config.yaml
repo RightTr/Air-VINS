@@ -39,10 +39,10 @@ feature_tracker:
   max_depth: 40.0
 
 deep_feature:
-  enabled: 1
-  matcher: 0
-  max_keypoints: 700
-  keypoint_threshold: 0.002
+  enabled: 2  # 0: KLT, 1: SuperPoint + Glue, 2: PLNet + Glue
+  matcher: 0  # LightGlue
+  max_keypoints: 600
+  keypoint_threshold: 0.0025
   remove_borders: 4
 
 estimator:

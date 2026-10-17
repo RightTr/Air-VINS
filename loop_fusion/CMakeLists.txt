@@ -41,18 +41,22 @@ find_package(Ceres REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(Eigen3 REQUIRED)
 
-find_path(TENSORRT_INCLUDE_DIR NvInfer.h PATHS /usr/include /usr/local/include
-  /usr/src/tensorrt/include /usr/include/aarch64-linux-gnu /usr/include/x86_64-linux-gnu)
+find_path(TENSORRT_INCLUDE_DIR NvInfer.h
+  HINTS $ENV{TENSORRT_ROOT}/include /usr/include /usr/include/aarch64-linux-gnu
+        /usr/local/include /usr/local/TensorRT/include /usr/src/tensorrt/include)
 include(${PROJECT_SOURCE_DIR}/../cmake/TensorRTApi.cmake)
-find_path(CUDA_INCLUDE_DIR cuda_runtime_api.h PATHS /usr/local/cuda/include /usr/include
+find_path(CUDA_INCLUDE_DIR cuda_runtime_api.h HINTS $ENV{CUDA_HOME}/include /usr/local/cuda/include /usr/include
   /usr/include/aarch64-linux-gnu /usr/include/x86_64-linux-gnu)
-find_library(NVINFER_LIBRARY nvinfer PATHS /usr/lib /usr/local/lib
-  /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu)
-find_library(NVONNXPARSER_LIBRARY nvonnxparser PATHS /usr/lib /usr/local/lib
-  /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu)
-find_library(NVINFER_PLUGIN_LIBRARY nvinfer_plugin PATHS /usr/lib /usr/local/lib
-  /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu)
-find_library(CUDART_LIBRARY cudart PATHS /usr/local/cuda/lib64 /usr/lib /usr/local/lib
+find_library(NVINFER_LIBRARY nvinfer
+  HINTS $ENV{TENSORRT_ROOT}/lib /usr/lib /usr/lib/aarch64-linux-gnu
+        /usr/local/lib /usr/local/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu)
+find_library(NVONNXPARSER_LIBRARY nvonnxparser
+  HINTS $ENV{TENSORRT_ROOT}/lib /usr/lib /usr/lib/aarch64-linux-gnu
+        /usr/local/lib /usr/local/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu)
+find_library(NVINFER_PLUGIN_LIBRARY nvinfer_plugin
+  HINTS $ENV{TENSORRT_ROOT}/lib /usr/lib /usr/lib/aarch64-linux-gnu
+        /usr/local/lib /usr/local/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu)
+find_library(CUDART_LIBRARY cudart HINTS $ENV{CUDA_HOME}/lib64 /usr/local/cuda/lib64 /usr/lib /usr/local/lib
   /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu)
 
 set(LOOP_INCLUDE_DIRS
@@ -72,6 +76,7 @@ set(LOOP_FUSION_SOURCES
   src/vprnet/vprnet.cpp ../vins_estimator/src/featureTracker/deep_feature.cpp
   ../deepFeature/src/light_glue.cpp ../deepFeature/src/point_matcher.cc
   ../deepFeature/src/super_glue.cpp ../deepFeature/src/super_point.cpp
+  ../deepFeature/src/plnet.cpp
   ../deepFeature/src/utils.cc
   ../deepFeature/3rdparty/tensorrtbuffer/src/logger.cpp
   ../deepFeature/3rdparty/tensorrtbuffer/src/sample_options.cpp

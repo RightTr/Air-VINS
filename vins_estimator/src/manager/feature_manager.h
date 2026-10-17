@@ -2,7 +2,6 @@
 #define VINS_MANAGER_FEATURE_MANAGER_H
 
 #include <opencv2/core.hpp>
-#include <unordered_map>
 
 #include "feature_types.h"
 
@@ -43,7 +42,7 @@ class PointFeatureManager
 
     // PnP
     void initFramePoseByPnP(int frameCnt, Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[], Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[],
-                            int active_camera_id, bool prefer_good_points = false);
+                            int active_camera_id);
     void updateMappointDescriptors(const std::vector<int> &ids, const Eigen::Matrix<float, 259, Eigen::Dynamic> &features);
 
     // Queries
@@ -60,15 +59,12 @@ class PointFeatureManager
 
   private:
     std::deque<LocalFrameObs> local_frames;
-    std::unordered_map<int, std::list<PointFeatureId>::iterator> pointFeatureIndex;
-    std::unordered_map<int, int> windowSupportCount;
-    std::unordered_map<int, int> windowSupportLastFrame;
     std::map<int, MappointPtr> local_mappoints;
     std::pair<int, int> windowSupportStats(int point_feature_id) const;
     void syncMappointFromPointFeature(PointFeatureId &point_feature,
                                       Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
                                       Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[]);
-    void pruneInactiveLocalMappoints();
+    void pruneStaleLocalMappoints();
     bool triangulateMappointWorldPoint(const PointFeatureId &point_feature,
                                        Eigen::Vector3d Ps[], Eigen::Matrix3d Rs[],
                                        Eigen::Vector3d tic[], Eigen::Matrix3d window_ric[],

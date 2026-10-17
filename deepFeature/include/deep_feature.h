@@ -9,6 +9,7 @@
 
 class PointMatcher;
 class SuperPoint;
+class PLNet;
 
 struct DeepFeatureOptions
 {
@@ -27,7 +28,7 @@ public:
     DeepFeature() = default;
     ~DeepFeature() = default;
 
-    // mode: 1 = SuperPoint
+    // mode: 1 = SuperPoint, 2 = PLNet
     bool init(int mode, const DeepFeatureOptions &options);
 
     bool ready() const { return ready_; }
@@ -45,5 +46,6 @@ private:
     bool ready_ = false;
 
     std::shared_ptr<SuperPoint> superpoint_;
+    std::shared_ptr<PLNet> plnet_;
     std::shared_ptr<PointMatcher> point_matcher_;
 };

@@ -577,7 +577,8 @@ map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> FeatureTracker::trackIm
         {
             vector<cv::DMatch> stereo_matches;
             if (deep_feature && deep_feature->ready())
-                deep_feature->matchPoints(matched_features, right_features, stereo_matches, false);
+                deep_feature->matchPoints(matched_features, right_features, stereo_matches,
+                                          DEEP_FEATURE_STEREO_RANSAC != 0);
 
             ids_right.clear();
             cur_right_pts.clear();

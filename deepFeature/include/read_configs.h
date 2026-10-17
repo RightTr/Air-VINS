@@ -6,6 +6,33 @@
 
 #include "utils.h"
 
+struct PLNetConfig {
+  std::string superpoint_onnx;
+  std::string superpoint_engine;
+  std::string plnet_s0_onnx;
+  std::string plnet_s0_engine;
+  std::string plnet_s1_onnx;
+  std::string plnet_s1_engine;
+  int use_superpoint = 0;
+  int max_keypoints = 400;
+  float keypoint_threshold = 0.004f;
+  int remove_borders = 4;
+  float line_threshold = 0.5f;
+  float line_length_threshold = 50.0f;
+
+  void SetModelPath(const std::string &model_dir) {
+    const std::string prefix = model_dir.empty() || model_dir.back() == '/' ? model_dir : model_dir + "/";
+    if (use_superpoint) {
+      superpoint_onnx = prefix + "superpoint_v1_sim_int32.onnx";
+      superpoint_engine = prefix + "superpoint_v1_sim_int32.engine";
+    }
+    plnet_s0_onnx = prefix + "plnet_s0.onnx";
+    plnet_s0_engine = prefix + "plnet_s0.engine";
+    plnet_s1_onnx = prefix + "plnet_s1.onnx";
+    plnet_s1_engine = prefix + "plnet_s1.engine";
+  }
+};
+
 
 struct SuperPointConfig {
   SuperPointConfig() {}
